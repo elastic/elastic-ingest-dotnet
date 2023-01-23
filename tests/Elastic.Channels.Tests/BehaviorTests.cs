@@ -9,7 +9,7 @@ using FluentAssertions;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Elastic.Ingest.Tests
+namespace Elastic.Channels.Tests
 {
 	public class BehaviorTests : IDisposable
 	{

@@ -9,7 +9,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
-namespace Elastic.Ingest
+namespace Elastic.Channels
 {
 	public interface IIngestChannel<in TEvent> : IDisposable
 	{

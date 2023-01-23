@@ -15,6 +15,8 @@
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageIcon>nuget-icon.png</PackageIcon>
+
+    <WarningsAsErrors>True</WarningsAsErrors>
     
   </PropertyGroup>
   

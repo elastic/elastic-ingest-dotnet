@@ -6,7 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace Elastic.Ingest
+namespace Elastic.Channels
 {
 	public class BufferOptions<TEvent>
 	{

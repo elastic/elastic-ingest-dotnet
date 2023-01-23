@@ -1,17 +1,17 @@
 // Licensed to Elasticsearch B.V under one or more agreements.
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
+
 using System;
 using System.Linq;
 using System.Threading;
-using Elastic.Ingest.Elasticsearch;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Transport;
 using Elastic.Transport.VirtualizedCluster;
 using Elastic.Transport.VirtualizedCluster.Components;
 using Elastic.Transport.VirtualizedCluster.Rules;
 
-namespace Elastic.Ingest.Tests.Elasticsearch
+namespace Elastic.Ingest.Elasticsearch.Tests
 {
 	public static class TestSetup
 	{

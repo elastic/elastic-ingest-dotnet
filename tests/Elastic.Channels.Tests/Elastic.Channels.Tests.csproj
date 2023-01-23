@@ -14,14 +14,11 @@
     </PackageReference>
 
 
-    <PackageReference Include="Elastic.Transport.VirtualizedCluster" Version="0.4.5" />
-
-
     <PackageReference Include="XunitContext" Version="3.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Elastic.Ingest.Elasticsearch\Elastic.Ingest.Elasticsearch.csproj" />
+    <ProjectReference Include="..\..\src\Elastic.Channels\Elastic.Channels.csproj" />
   </ItemGroup>
 
 </Project>

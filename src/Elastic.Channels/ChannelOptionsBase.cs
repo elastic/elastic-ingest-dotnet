@@ -7,7 +7,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Elastic.Ingest
+namespace Elastic.Channels
 {
 	public abstract class ChannelOptionsBase<TEvent, TBuffer>
 		where TBuffer : BufferOptions<TEvent>, new()
@@ -17,7 +17,7 @@ namespace Elastic.Ingest
 		public TBuffer BufferOptions { get; set; } = new TBuffer();
 
 		/// <summary>
-		/// If <see cref="MaxInFlightMessages"/> is reached, <see cref="TEvent"/>'s will fail to be published to the channel. You can be notified of dropped
+		/// If <see cref="BufferOptions{TEvent}.MaxInFlightMessages"/> is reached, <see cref="TEvent"/>'s will fail to be published to the channel. You can be notified of dropped
 		/// events with this callback
 		/// </summary>
 		public Action<TEvent>? PublishRejectionCallback { get; set; }
