@@ -43,12 +43,6 @@ namespace Elastic.Ingest.Apm.Model
 		public string Id { get; set; }
 
 		/// <summary>
-		/// A mark captures the timing of a significant event during the lifetime of a transaction.
-		/// Marks are organized into groups and can be set by the user or the agent.
-		/// </summary>
-		//public Marks? Marks { get; set; }
-
-		/// <summary>
 		/// Generic designation of a transaction in the scope of a single service (eg: 'GET
 		/// /users/:id')
 		/// </summary>

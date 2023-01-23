@@ -35,7 +35,8 @@ namespace Elastic.Channels.Tests
 			var written = 0;
 			for (var i = 0; i < totalEvents; i++)
 			{
-				if (await channel.WaitToWriteAsync(new NoopEvent()))
+				var e = new NoopEvent();
+				if (await channel.WaitToWriteAsync(e))
 					written++;
 			}
 			channelOptions.BufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(5));
@@ -44,7 +45,7 @@ namespace Elastic.Channels.Tests
 		}
 
 		/// <summary>
-		/// If we are feeding data slowly e.g smaller than <see cref="BufferOptions{TEvent}.MaxConsumerBufferSize"/>
+		/// If we are feeding data slowly e.g smaller than <see cref="BufferOptions.MaxConsumerBufferSize"/>
 		/// we don't want this data equally distributed over multiple calls to export the data.
 		/// Instead we want the smaller buffer to go out over a single export to the external system
 		/// </summary>
@@ -66,7 +67,8 @@ namespace Elastic.Channels.Tests
 			var written = 0;
 			for (var i = 0; i < 100; i++)
 			{
-				if (await channel.WaitToWriteAsync(new NoopEvent()))
+				var e = new NoopEvent();
+				if (await channel.WaitToWriteAsync(e))
 					written++;
 			}
 			channelOptions.BufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(1));
@@ -94,7 +96,8 @@ namespace Elastic.Channels.Tests
 			var written = 0;
 			for (var i = 0; i < totalEvents; i++)
 			{
-				if (await channel.WaitToWriteAsync(new NoopEvent()))
+				var e = new NoopEvent();
+				if (await channel.WaitToWriteAsync(e))
 					written++;
 			}
 			channelOptions.BufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(5));
@@ -114,7 +117,7 @@ namespace Elastic.Channels.Tests
 	{
 		public NoopIngestChannel(NoopChannelOptions options) : base(options) { }
 
-		private long _seenPages = 0;
+		private long _seenPages;
 		public long SeenPages => _seenPages;
 
 		protected override Task<NoopResponse> Send(IReadOnlyCollection<NoopEvent> page)
@@ -128,7 +131,7 @@ namespace Elastic.Channels.Tests
 	{
 		public DelayedNoopIngestChannel(NoopChannelOptions options) : base(options) { }
 
-		private int _currentMax = 0;
+		private int _currentMax;
 		public int MaxConcurrency { get; set; }
 
 		protected override async Task<NoopResponse> Send(IReadOnlyCollection<NoopEvent> page)

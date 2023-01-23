@@ -2,9 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
-using System;
 using System.Collections.Generic;
-using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels;
 using Elastic.Transport;
@@ -12,7 +10,7 @@ using Elastic.Transport;
 namespace Elastic.Ingest.Transport
 {
 	public abstract class TransportChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem> :
-		ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem>, IDisposable
+		ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem>
 		where TChannelOptions : TransportChannelOptionsBase<TEvent, TResponse, TBulkResponseItem>
 		where TResponse : TransportResponse, new()
 

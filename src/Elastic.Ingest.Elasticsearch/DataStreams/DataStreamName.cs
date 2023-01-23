@@ -4,7 +4,7 @@
 using System;
 using System.Linq;
 
-namespace Elastic.Ingest.Elasticsearch
+namespace Elastic.Ingest.Elasticsearch.DataStreams
 {
 	public record DataStreamName
 	{
@@ -17,8 +17,8 @@ namespace Elastic.Ingest.Elasticsearch
 		/// <summary> User-configurable arbitrary grouping</summary>
 		public string Namespace { get; init; }
 
-		private static char[] BadCharacters = { '\\', '/', '*', '?', '"', '<', '>', '|', ' ', ',', '#' };
-		private static string BadCharactersError = string.Join(", ", BadCharacters.Select(c => $"'{c}'").ToArray());
+		private static readonly char[] BadCharacters = { '\\', '/', '*', '?', '"', '<', '>', '|', ' ', ',', '#' };
+		private static readonly string BadCharactersError = string.Join(", ", BadCharacters.Select(c => $"'{c}'").ToArray());
 
 		public DataStreamName(string type, string dataSet = "generic", string @namespace = "default")
 		{

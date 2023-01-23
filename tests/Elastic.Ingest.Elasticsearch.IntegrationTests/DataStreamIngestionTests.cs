@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels;
 using Elastic.Clients.Elasticsearch.IndexManagement;
-using Elastic.Elasticsearch.Managed;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Transport;
 using FluentAssertions;
