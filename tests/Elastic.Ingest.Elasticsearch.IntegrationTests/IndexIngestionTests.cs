@@ -28,7 +28,7 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 		{
 			var indexPrefix = "catalog-data-";
 			var slim = new CountdownEvent(1);
-			var options = new IndexChannelOptions<CatalogDocument>(Client.Transport)
+			var options = new IndexResponseItemsChannelOptions<CatalogDocument>(Client.Transport)
 			{
 				IndexFormat = indexPrefix + "{0:yyyy.MM.dd}",
 				BulkOperationIdLookup = c => c.Id,

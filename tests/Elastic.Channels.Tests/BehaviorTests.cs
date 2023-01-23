@@ -111,7 +111,7 @@ namespace Elastic.Channels.Tests
 	public class NoopEventBufferOptions : BufferOptions<NoopEvent> { }
 	public class NoopChannelOptions : ChannelOptionsBase<NoopEvent, NoopEventBufferOptions, NoopResponse> {}
 
-	public class NoopIngestChannel : ChannelBase<NoopChannelOptions, NoopEventBufferOptions, NoopEvent, NoopResponse>
+	public class NoopIngestChannel : BufferedChannelBase<NoopChannelOptions, NoopEventBufferOptions, NoopEvent, NoopResponse>
 	{
 		public NoopIngestChannel(NoopChannelOptions options) : base(options) { }
 

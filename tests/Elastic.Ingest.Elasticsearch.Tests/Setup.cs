@@ -54,7 +54,7 @@ namespace Elastic.Ingest.Elasticsearch.Tests
 					MaxRetries = 3,
 					BackoffPeriod = times => TimeSpan.FromMilliseconds(1),
 				};
-				ChannelOptions = new IndexChannelOptions<TestDocument>(transport)
+				ResponseItemsChannelOptions = new IndexResponseItemsChannelOptions<TestDocument>(transport)
 				{
 					BufferOptions = BufferOptions,
 					ServerRejectionCallback = (list) => Interlocked.Increment(ref _rejections),
@@ -64,14 +64,14 @@ namespace Elastic.Ingest.Elasticsearch.Tests
 					RetryCallBack = (list) => Interlocked.Increment(ref _retries),
 					ExceptionCallback= (e) => LastException = e
 				};
-				Channel = new IndexChannel<TestDocument>(ChannelOptions);
+				Channel = new IndexChannel<TestDocument>(ResponseItemsChannelOptions);
 			}
 
 			public IndexChannel<TestDocument> Channel { get; }
 
 			public HttpTransport<TransportConfiguration> Transport { get; }
 
-			public IndexChannelOptions<TestDocument> ChannelOptions { get; }
+			public IndexResponseItemsChannelOptions<TestDocument> ResponseItemsChannelOptions { get; }
 
 			public ElasticsearchBufferOptions<TestDocument> BufferOptions { get; }
 

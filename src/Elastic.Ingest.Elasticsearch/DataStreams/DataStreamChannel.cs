@@ -6,11 +6,11 @@ using Elastic.Ingest.Elasticsearch.Serialization;
 
 namespace Elastic.Ingest.Elasticsearch.DataStreams
 {
-	public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataStreamChannelOptions<TEvent>>
+	public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataStreamResponseItemsChannelOptions<TEvent>>
 	{
 		private readonly CreateOperation _fixedHeader;
 
-		public DataStreamChannel(DataStreamChannelOptions<TEvent> options) : base(options)
+		public DataStreamChannel(DataStreamResponseItemsChannelOptions<TEvent> options) : base(options)
 		{
 			var target = Options.DataStream.ToString();
 			_fixedHeader = new CreateOperation { Index = target };

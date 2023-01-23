@@ -9,9 +9,9 @@ using Elastic.Transport;
 
 namespace Elastic.Ingest.Apm
 {
-	public class ApmChannelOptions : TransportChannelOptionsBase<IIntakeObject, EventIntakeResponse, IntakeErrorItem, ApmBufferOptions>
+	public class ApmResponseItemsChannelOptions : TransportResponseItemsChannelOptionsBase<IIntakeObject, EventIntakeResponse, IntakeErrorItem, ApmBufferOptions>
 	{
-		public ApmChannelOptions(HttpTransport transport) : base(transport) { }
+		public ApmResponseItemsChannelOptions(HttpTransport transport) : base(transport) { }
 	}
 
 

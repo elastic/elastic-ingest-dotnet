@@ -12,8 +12,8 @@ using Elastic.Transport;
 namespace Elastic.Ingest.Transport
 {
 	public abstract class TransportChannelBase<TChannelOptions, TBuffer, TEvent, TResponse, TBulkResponseItem> :
-		ChannelBase<TChannelOptions, TBuffer, TEvent, TResponse, TBulkResponseItem>, IDisposable
-		where TChannelOptions : TransportChannelOptionsBase<TEvent, TResponse, TBulkResponseItem, TBuffer>
+		ResponseItemsBufferedChannelBase<TChannelOptions, TBuffer, TEvent, TResponse, TBulkResponseItem>, IDisposable
+		where TChannelOptions : TransportResponseItemsChannelOptionsBase<TEvent, TResponse, TBulkResponseItem, TBuffer>
 		where TBuffer : BufferOptions<TEvent>, new()
 		where TResponse : TransportResponse, new()
 

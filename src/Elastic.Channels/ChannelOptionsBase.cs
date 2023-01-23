@@ -31,8 +31,6 @@ namespace Elastic.Channels
 
 		/// <summary> Subscribe to be notified of events that are retryable but did not store correctly within the number of configured <see cref="MaxRetries"/></summary>
 		public Action<IReadOnlyCollection<TEvent>>? RetryCallBack { get; set; }
-
-
 	}
 
 	public abstract class ChannelOptionsBase<TEvent, TBuffer, TResponse>
@@ -40,15 +38,8 @@ namespace Elastic.Channels
 		where TBuffer : BufferOptions<TEvent>, new()
 	{
 
-		/// <summary> A generic hook to be notified of any bulk request being initiated by <see cref="ChannelBuffer{TEvent}"/> </summary>
-		public Action<TResponse, IConsumedBufferStatistics> ResponseCallback { get; set; } = (r, b) => { };
+		/// <summary> A generic hook to be notified of any bulk request being initiated by <see cref="InboundBuffer{TEvent}"/> </summary>
+		public Action<TResponse, IWriteTrackingBuffer> ResponseCallback { get; set; } = (r, b) => { };
 	}
 
-	public abstract class ChannelOptionsBase<TEvent, TBuffer, TResponse, TBulkResponseItem>
-		: ChannelOptionsBase<TEvent, TBuffer, TResponse>
-		where TBuffer : BufferOptions<TEvent>, new()
-	{
-		/// <summary> Subscribe to be notified of events that can not be stored in Elasticsearch</summary>
-		public Action<List<(TEvent, TBulkResponseItem)>>? ServerRejectionCallback { get; set; }
-	}
 }

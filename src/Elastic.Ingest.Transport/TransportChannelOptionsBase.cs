@@ -7,11 +7,11 @@ using Elastic.Transport;
 
 namespace Elastic.Ingest.Transport
 {
-	public abstract class TransportChannelOptionsBase<TEvent, TResponse, TResponseItem, TBuffer>
-		: ChannelOptionsBase<TEvent, TBuffer, TResponse, TResponseItem>
+	public abstract class TransportResponseItemsChannelOptionsBase<TEvent, TResponse, TResponseItem, TBuffer>
+		: ResponseItemsChannelOptionsBase<TEvent, TBuffer, TResponse, TResponseItem>
 		where TBuffer : BufferOptions<TEvent>, new()
 	{
-		protected TransportChannelOptionsBase(HttpTransport transport) => Transport = transport;
+		protected TransportResponseItemsChannelOptionsBase(HttpTransport transport) => Transport = transport;
 
 		public HttpTransport Transport { get; }
 	}

@@ -27,7 +27,7 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 			// logs-* will use data streams by default in Elasticsearch.
 			var targetDataStream = new DataStreamName("logs", "dotnet");
 			var slim = new CountdownEvent(1);
-			var options = new DataStreamChannelOptions<TimeSeriesDocument>(Client.Transport)
+			var options = new DataStreamResponseItemsChannelOptions<TimeSeriesDocument>(Client.Transport)
 			{
 				DataStream = targetDataStream,
 				BufferOptions = new ElasticsearchBufferOptions<TimeSeriesDocument>

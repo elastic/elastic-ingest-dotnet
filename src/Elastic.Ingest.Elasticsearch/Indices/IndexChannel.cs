@@ -6,9 +6,9 @@ using Elastic.Ingest.Elasticsearch.Serialization;
 
 namespace Elastic.Ingest.Elasticsearch.Indices
 {
-	public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChannelOptions<TEvent>>
+	public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexResponseItemsChannelOptions<TEvent>>
 	{
-		public IndexChannel(IndexChannelOptions<TEvent> options) : base(options) { }
+		public IndexChannel(IndexResponseItemsChannelOptions<TEvent> options) : base(options) { }
 
 		protected override BulkOperationHeader CreateBulkOperationHeader(TEvent @event)
 		{

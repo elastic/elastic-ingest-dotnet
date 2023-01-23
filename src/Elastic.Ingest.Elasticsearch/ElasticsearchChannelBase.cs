@@ -16,7 +16,7 @@ namespace Elastic.Ingest.Elasticsearch
 {
 	public abstract class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		: TransportChannelBase<TChannelOptions, ElasticsearchBufferOptions<TEvent>, TEvent, BulkResponse, BulkResponseItem>
-		where TChannelOptions : TransportChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem, ElasticsearchBufferOptions<TEvent>>
+		where TChannelOptions : TransportResponseItemsChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem, ElasticsearchBufferOptions<TEvent>>
 	{
 		public ElasticsearchChannelBase(TChannelOptions options) : base(options) { }
 
