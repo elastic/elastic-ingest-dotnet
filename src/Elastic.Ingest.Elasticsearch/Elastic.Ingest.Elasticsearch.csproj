@@ -7,7 +7,7 @@
     <PackageTags>TODO</PackageTags>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
+    <IsPackable>True</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>

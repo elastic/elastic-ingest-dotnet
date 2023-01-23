@@ -7,9 +7,9 @@ module Paths
 open System
 open System.IO
 
-let ToolName = "elastic-transport-net"
+let ToolName = "elastic-ingest-dotnet"
 let Repository = sprintf "elastic/%s" ToolName
-let MainTFM = "netstandard2.0"
+let MainTFM = "netstandard2.1"
 let SignKey = "069ca2728db333c1"
 
 let ValidateAssemblyName = false
