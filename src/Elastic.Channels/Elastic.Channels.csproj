@@ -2,9 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <Title>A buffer-backed channel for indexing documents into Elasticsearch</Title>
-    <Description>Provides components to build a buffer-backed channel for indexing documents into Elasticsearch</Description>
-    <PackageTags>elastic, elasticsearch, ingest, search</PackageTags>
+    <Description>Provides components to build a buffer-backed channel that flushes batches of data in a controlled (Max N || Max Duration) manner.</Description>
+    <PackageTags>elastic, channels, buffer</PackageTags>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>True</IsPackable>
