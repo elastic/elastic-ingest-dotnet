@@ -34,7 +34,7 @@ namespace Elastic.Ingest.Apm
 		};
 	}
 
-	public class ApmChannel : TransportChannelBase<ApmChannelOptions, ApmBufferOptions, IIntakeObject, EventIntakeResponse, IntakeErrorItem>
+	public class ApmChannel : TransportChannelBase<ApmChannelOptions, IIntakeObject, EventIntakeResponse, IntakeErrorItem>
 	{
 		public ApmChannel(ApmChannelOptions options) : base(options) { }
 

@@ -9,7 +9,7 @@ using FluentAssertions;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Elastic.Ingest.Tests
+namespace Elastic.Channels.Tests
 {
 	public class BehaviorTests : IDisposable
 	{
@@ -22,7 +22,7 @@ namespace Elastic.Ingest.Tests
 			var expectedPages = totalEvents / bufferSize;
 			var channelOptions = new NoopChannelOptions
 			{
-				BufferOptions = new NoopEventBufferOptions
+				BufferOptions = new BufferOptions
 				{
 					WaitHandle = new CountdownEvent(expectedPages),
 					MaxInFlightMessages = maxInFlight,
@@ -53,7 +53,7 @@ namespace Elastic.Ingest.Tests
 			int totalEvents = 500_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
 			var channelOptions = new NoopChannelOptions
 			{
-				BufferOptions = new NoopEventBufferOptions
+				BufferOptions = new BufferOptions
 				{
 					WaitHandle = new CountdownEvent(1),
 					MaxInFlightMessages = maxInFlight,
@@ -80,7 +80,7 @@ namespace Elastic.Ingest.Tests
 			var expectedPages = totalEvents / bufferSize;
 			var channelOptions = new NoopChannelOptions
 			{
-				BufferOptions = new NoopEventBufferOptions
+				BufferOptions = new BufferOptions
 				{
 					WaitHandle = new CountdownEvent(expectedPages),
 					MaxInFlightMessages = maxInFlight,
@@ -108,10 +108,9 @@ namespace Elastic.Ingest.Tests
 	public class NoopEvent { }
 	public class NoopResponse { }
 
-	public class NoopEventBufferOptions : BufferOptions<NoopEvent> { }
-	public class NoopChannelOptions : ChannelOptionsBase<NoopEvent, NoopEventBufferOptions, NoopResponse> {}
+	public class NoopChannelOptions : ChannelOptionsBase<NoopEvent, NoopResponse> {}
 
-	public class NoopIngestChannel : ChannelBase<NoopChannelOptions, NoopEventBufferOptions, NoopEvent, NoopResponse>
+	public class NoopIngestChannel : BufferedChannelBase<NoopChannelOptions, NoopEvent, NoopResponse>
 	{
 		public NoopIngestChannel(NoopChannelOptions options) : base(options) { }
 

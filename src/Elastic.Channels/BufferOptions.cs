@@ -6,12 +6,12 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace Elastic.Ingest
+namespace Elastic.Channels
 {
-	public class BufferOptions<TEvent>
+	public class BufferOptions
 	{
 		/// <summary>
-		/// The maximum number of <see cref="TEvent"/> instances that can be queued in memory. If this threshold is reached, events will be dropped
+		/// The maximum number of in flight instances that can be queued in memory. If this threshold is reached, events will be dropped
 		/// </summary>
 		public int MaxInFlightMessages { get; set; } = 100_000;
 

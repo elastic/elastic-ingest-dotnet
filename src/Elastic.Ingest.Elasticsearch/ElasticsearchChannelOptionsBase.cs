@@ -7,7 +7,7 @@ using Elastic.Transport;
 
 namespace Elastic.Ingest.Elasticsearch
 {
-	public class ElasticsearchChannelOptionsBase<TEvent> : TransportChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem, ElasticsearchBufferOptions<TEvent>>
+	public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem>
 	{
 		protected ElasticsearchChannelOptionsBase(HttpTransport transport) : base(transport)
 		{

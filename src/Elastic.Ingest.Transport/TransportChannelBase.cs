@@ -6,14 +6,14 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Elastic.Channels;
 using Elastic.Transport;
 
 namespace Elastic.Ingest.Transport
 {
-	public abstract class TransportChannelBase<TChannelOptions, TBuffer, TEvent, TResponse, TBulkResponseItem> :
-		ChannelBase<TChannelOptions, TBuffer, TEvent, TResponse, TBulkResponseItem>, IDisposable
-		where TChannelOptions : TransportChannelOptionsBase<TEvent, TResponse, TBulkResponseItem, TBuffer>
-		where TBuffer : BufferOptions<TEvent>, new()
+	public abstract class TransportChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem> :
+		ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem>, IDisposable
+		where TChannelOptions : TransportChannelOptionsBase<TEvent, TResponse, TBulkResponseItem>
 		where TResponse : TransportResponse, new()
 
 	{
