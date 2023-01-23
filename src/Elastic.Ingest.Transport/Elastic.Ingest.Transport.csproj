@@ -2,9 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <Title>A buffer-backed channel for indexing documents into Elasticsearch</Title>
     <Description>Provides components to build a buffer-backed channel for publishing events to distributed systems over HTTP through Elastic.Transport</Description>
-    <PackageTags>elastic, elasticsearch, ingest, search</PackageTags>
+    <PackageTags>elastic, transport, ingest, search</PackageTags>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>True</IsPackable>
