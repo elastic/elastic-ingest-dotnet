@@ -12,7 +12,7 @@ namespace Elastic.Ingest.Elasticsearch.Indices
 			var indexTime = Options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
 			if (Options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(Options.IndexOffset.Value);
 
-			var index = string.Format(Options.Index, indexTime);
+			var index = string.Format(Options.IndexFormat, indexTime);
 			var id = Options.BulkOperationIdLookup?.Invoke(@event);
 			return
 				!string.IsNullOrWhiteSpace(id)

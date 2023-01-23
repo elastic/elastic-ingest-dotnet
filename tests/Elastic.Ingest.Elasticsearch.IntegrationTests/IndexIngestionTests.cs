@@ -1,0 +1,67 @@
+﻿using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Elastic.Clients.Elasticsearch;
+using Elastic.Clients.Elasticsearch.IndexManagement;
+using Elastic.Elasticsearch.Managed;
+using Elastic.Ingest.Elasticsearch.DataStreams;
+using Elastic.Ingest.Elasticsearch.Indices;
+using Elastic.Transport;
+using FluentAssertions;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests
+{
+	public class IndexIngestionTests : IntegrationTestBase
+	{
+		public IndexIngestionTests(IngestionCluster cluster, ITestOutputHelper output) : base(cluster, output)
+		{
+		}
+
+		[Fact]
+		public async Task EnsureDocumentsEndUpInIndex()
+		{
+			var indexPrefix = "catalog-data-";
+			var slim = new CountdownEvent(1);
+			var options = new IndexChannelOptions<CatalogDocument>(Client.Transport)
+			{
+				IndexFormat = indexPrefix + "{0:yyyy.MM.dd}",
+				BulkOperationIdLookup = c => c.Id,
+				TimestampLookup = c => c.Created,
+				BufferOptions = new ElasticsearchBufferOptions<CatalogDocument>
+				{
+					WaitHandle = slim, MaxConsumerBufferSize = 1,
+				}
+			};
+			var ecsChannel = new IndexChannel<CatalogDocument>(options);
+
+			var date = DateTimeOffset.Now;
+			var indexName = string.Format(options.IndexFormat, date);
+
+			var index = await Client.Indices.GetAsync(new GetIndexRequest(indexName));
+			index.Indices.Should().BeNullOrEmpty();
+
+			ecsChannel.TryWrite(new CatalogDocument { Created = date, Title = "Hello World!", Id = "hello-world" });
+			if (!slim.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
+				throw new Exception("ecs document was not persisted within 10 seconds");
+
+			var refreshResult = await Client.Indices.RefreshAsync(indexName);
+			refreshResult.IsValidResponse.Should().BeTrue("{0}", refreshResult.DebugInformation);
+			var searchResult = await Client.SearchAsync<CatalogDocument>(s => s.Indices(indexName));
+			searchResult.Total.Should().Be(1);
+
+			var storedDocument = searchResult.Documents.First();
+			storedDocument.Id.Should().Be("hello-world");
+			storedDocument.Title.Should().Be("Hello World!");
+
+			var hit = searchResult.Hits.First();
+			hit.Index.Should().Be(indexName);
+
+			index = await Client.Indices.GetAsync(new GetIndexRequest(indexName));
+			index.Indices.Should().NotBeNullOrEmpty();
+
+		}
+	}
+}

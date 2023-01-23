@@ -36,7 +36,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elastic.Ingest.Transport", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elastic.Ingest.Tests", "tests\Elastic.Ingest.Tests\Elastic.Ingest.Tests.csproj", "{F6A52569-8F07-4E1E-935E-7AE9D664EF77}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elastic.Ingest.IntegrationTests", "tests\Elastic.Ingest.IntegrationTests\Elastic.Ingest.IntegrationTests.csproj", "{E09CEEE6-DD3A-4603-890D-6364C7E4639F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elastic.Ingest.Elasticsearch.IntegrationTests", "tests\Elastic.Ingest.Elasticsearch.IntegrationTests\Elastic.Ingest.Elasticsearch.IntegrationTests.csproj", "{E09CEEE6-DD3A-4603-890D-6364C7E4639F}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "scripts", "build\scripts\scripts.fsproj", "{8AFDD165-F5B1-4555-97E3-A376B30236D3}"
 EndProject
