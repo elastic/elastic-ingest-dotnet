@@ -1,8 +1,88 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A60DDBBB-4BF4-4B3B-A13A-E0B409917433}"
+	ProjectSection(SolutionItems) = preProject
+		src\Directory.Build.props = src\Directory.Build.props
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "build", "build", "{B284B3C8-2592-4B5D-B287-207285E4B7F9}"
+	ProjectSection(SolutionItems) = preProject
+		build.bat = build.bat
+		build.sh = build.sh
+		CODE_OF_CONDUCT.md = CODE_OF_CONDUCT.md
+		contributing.md = contributing.md
+		Directory.Build.props = Directory.Build.props
+		dotnet-tools.json = dotnet-tools.json
+		global.json = global.json
+		license.txt = license.txt
+		NOTICE.txt = NOTICE.txt
+		nuget-icon.png = nuget-icon.png
+		nuget.config = nuget.config
+		README.md = README.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{8A402CB0-CB84-4F7D-9F97-EFEC23F36814}"
+	ProjectSection(SolutionItems) = preProject
+		tests\Directory.Build.props = tests\Directory.Build.props
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elastic.Ingest", "src\Elastic.Ingest\Elastic.Ingest.csproj", "{9F529525-E8E3-463D-A920-4D6E34150FC5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elastic.Ingest.Apm", "src\Elastic.Ingest.Apm\Elastic.Ingest.Apm.csproj", "{418D3648-BB35-49FC-B06C-09E4C62CC4E8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elastic.Ingest.Elasticsearch", "src\Elastic.Ingest.Elasticsearch\Elastic.Ingest.Elasticsearch.csproj", "{C3ADB8C6-60BD-47BA-B984-1F9D36BDDDD1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elastic.Ingest.Transport", "src\Elastic.Ingest.Transport\Elastic.Ingest.Transport.csproj", "{33B3D196-4CC8-408A-8364-5B3DC2EA4A73}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elastic.Ingest.Tests", "tests\Elastic.Ingest.Tests\Elastic.Ingest.Tests.csproj", "{F6A52569-8F07-4E1E-935E-7AE9D664EF77}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elastic.Ingest.IntegrationTests", "tests\Elastic.Ingest.IntegrationTests\Elastic.Ingest.IntegrationTests.csproj", "{E09CEEE6-DD3A-4603-890D-6364C7E4639F}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "scripts", "build\scripts\scripts.fsproj", "{8AFDD165-F5B1-4555-97E3-A376B30236D3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{9F529525-E8E3-463D-A920-4D6E34150FC5} = {A60DDBBB-4BF4-4B3B-A13A-E0B409917433}
+		{418D3648-BB35-49FC-B06C-09E4C62CC4E8} = {A60DDBBB-4BF4-4B3B-A13A-E0B409917433}
+		{C3ADB8C6-60BD-47BA-B984-1F9D36BDDDD1} = {A60DDBBB-4BF4-4B3B-A13A-E0B409917433}
+		{33B3D196-4CC8-408A-8364-5B3DC2EA4A73} = {A60DDBBB-4BF4-4B3B-A13A-E0B409917433}
+		{F6A52569-8F07-4E1E-935E-7AE9D664EF77} = {8A402CB0-CB84-4F7D-9F97-EFEC23F36814}
+		{E09CEEE6-DD3A-4603-890D-6364C7E4639F} = {8A402CB0-CB84-4F7D-9F97-EFEC23F36814}
+		{3F108A7B-4A70-44DA-BBFD-888123EAF2F4} = {B284B3C8-2592-4B5D-B287-207285E4B7F9}
+		{8AFDD165-F5B1-4555-97E3-A376B30236D3} = {B284B3C8-2592-4B5D-B287-207285E4B7F9}
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9F529525-E8E3-463D-A920-4D6E34150FC5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9F529525-E8E3-463D-A920-4D6E34150FC5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9F529525-E8E3-463D-A920-4D6E34150FC5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9F529525-E8E3-463D-A920-4D6E34150FC5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{418D3648-BB35-49FC-B06C-09E4C62CC4E8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{418D3648-BB35-49FC-B06C-09E4C62CC4E8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{418D3648-BB35-49FC-B06C-09E4C62CC4E8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{418D3648-BB35-49FC-B06C-09E4C62CC4E8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C3ADB8C6-60BD-47BA-B984-1F9D36BDDDD1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3ADB8C6-60BD-47BA-B984-1F9D36BDDDD1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C3ADB8C6-60BD-47BA-B984-1F9D36BDDDD1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C3ADB8C6-60BD-47BA-B984-1F9D36BDDDD1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{33B3D196-4CC8-408A-8364-5B3DC2EA4A73}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{33B3D196-4CC8-408A-8364-5B3DC2EA4A73}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{33B3D196-4CC8-408A-8364-5B3DC2EA4A73}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{33B3D196-4CC8-408A-8364-5B3DC2EA4A73}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F6A52569-8F07-4E1E-935E-7AE9D664EF77}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F6A52569-8F07-4E1E-935E-7AE9D664EF77}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F6A52569-8F07-4E1E-935E-7AE9D664EF77}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F6A52569-8F07-4E1E-935E-7AE9D664EF77}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E09CEEE6-DD3A-4603-890D-6364C7E4639F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E09CEEE6-DD3A-4603-890D-6364C7E4639F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E09CEEE6-DD3A-4603-890D-6364C7E4639F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E09CEEE6-DD3A-4603-890D-6364C7E4639F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8AFDD165-F5B1-4555-97E3-A376B30236D3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8AFDD165-F5B1-4555-97E3-A376B30236D3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8AFDD165-F5B1-4555-97E3-A376B30236D3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8AFDD165-F5B1-4555-97E3-A376B30236D3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
