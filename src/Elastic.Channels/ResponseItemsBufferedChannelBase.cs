@@ -16,7 +16,7 @@ public abstract class ResponseItemsChannelOptionsBase<TEvent, TResponse, TBulkRe
 }
 
 /// <summary>
-/// A specialized implementation of <see cref="BufferedChannelBase{TChannelOptions,TBuffer,TEvent,TResponse}"/>
+/// A specialized implementation of <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
 /// <para>This base class exist to help with cases where writing data in bulk to a receiver is capable of reporting back
 /// individual write failures.
 /// </para>
@@ -44,7 +44,7 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 
 	/// <summary>
 	/// A predicate indicating an event was fully rejected and should be reported to
-	/// <see cref="ResponseItemsChannelOptionsBase{TEvent,TBuffer,TResponse,TBulkResponseItem}.ServerRejectionCallback"/>
+	/// <see cref="ResponseItemsChannelOptionsBase{TEvent,TResponse,TBulkResponseItem}.ServerRejectionCallback"/>
 	/// </summary>
 	protected abstract bool RejectEvent((TEvent, TBulkResponseItem) @event);
 

@@ -126,6 +126,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var taskList = new List<Task>(maxConsumers);
 
 		while (await OutChannel.Reader.WaitToReadAsync().ConfigureAwait(false))
+		// ReSharper disable once RemoveRedundantBraces
 		{
 			while (OutChannel.Reader.TryRead(out var buffer))
 			{
@@ -151,11 +152,11 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		for (var i = 0; i <= maxRetries && items.Count > 0; i++)
 		{
 			Options.BulkAttemptCallback?.Invoke(i, items.Count);
-			TResponse response = null!;
+			TResponse? response;
 			try
 			{
 				response = await Send(items).ConfigureAwait(false);
-				Options.ResponseCallback(response, buffer);
+				Options.ResponseCallback?.Invoke(response, buffer);
 			}
 			catch (Exception e)
 			{
@@ -211,11 +212,17 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		{
 			_inThread.Dispose();
 		}
-		catch { }
+		catch
+		{
+			// ignored
+		}
 		try
 		{
 			_outThread.Dispose();
 		}
-		catch { }
+		catch
+		{
+			// ignored
+		}
 	}
 }

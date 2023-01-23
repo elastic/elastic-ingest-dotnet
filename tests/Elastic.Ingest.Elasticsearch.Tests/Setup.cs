@@ -53,16 +53,16 @@ namespace Elastic.Ingest.Elasticsearch.Tests
 					MaxConsumerBufferLifetime = TimeSpan.FromSeconds(10),
 					WaitHandle = WaitHandle,
 					MaxRetries = 3,
-					BackoffPeriod = times => TimeSpan.FromMilliseconds(1),
+					BackoffPeriod = _ => TimeSpan.FromMilliseconds(1),
 				};
 				ChannelOptions = new IndexChannelOptions<TestDocument>(transport)
 				{
 					BufferOptions = BufferOptions,
-					ServerRejectionCallback = (list) => Interlocked.Increment(ref _rejections),
-					BulkAttemptCallback = (c, a) => Interlocked.Increment(ref _requests),
-					ResponseCallback = (r, b) => Interlocked.Increment(ref _responses),
-					MaxRetriesExceededCallback = (list) => Interlocked.Increment(ref _maxRetriesExceeded),
-					RetryCallBack = (list) => Interlocked.Increment(ref _retries),
+					ServerRejectionCallback = (_) => Interlocked.Increment(ref _rejections),
+					BulkAttemptCallback = (_, _) => Interlocked.Increment(ref _requests),
+					ResponseCallback = (_, _) => Interlocked.Increment(ref _responses),
+					MaxRetriesExceededCallback = (_) => Interlocked.Increment(ref _maxRetriesExceeded),
+					RetryCallBack = (_) => Interlocked.Increment(ref _retries),
 					ExceptionCallback= (e) => LastException = e
 				};
 				Channel = new IndexChannel<TestDocument>(ChannelOptions);
@@ -103,7 +103,7 @@ namespace Elastic.Ingest.Elasticsearch.Tests
 
 		public static void WriteAndWait(this TestSession session, int events = 1)
 		{
-			foreach (var b in Enumerable.Range(0, events))
+			foreach (var _ in Enumerable.Range(0, events))
 				session.Channel.TryWrite(new TestDocument { Timestamp = DateTimeOffset.UtcNow });
 			session.Wait();
 		}

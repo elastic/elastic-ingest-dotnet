@@ -27,10 +27,8 @@ namespace Elastic.Ingest.Apm.Helpers
 		internal static long ToTimestamp(DateTime dateTimeToConvert)
 		{
 			if (dateTimeToConvert.Kind != DateTimeKind.Utc)
-			{
 				throw new ArgumentException($"{nameof(dateTimeToConvert)}'s Kind should be UTC but instead its Kind is {dateTimeToConvert.Kind}" +
 					$". {nameof(dateTimeToConvert)}'s value: {dateTimeToConvert}", nameof(dateTimeToConvert));
-			}
 
 			return RoundTimeValue((dateTimeToConvert - UnixEpochDateTime).TotalMilliseconds * 1000);
 		}

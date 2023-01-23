@@ -2,7 +2,6 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
-using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -52,7 +51,7 @@ namespace Elastic.Ingest.Apm
 		protected override Task<EventIntakeResponse> Send(HttpTransport transport, IReadOnlyCollection<IIntakeObject> page) =>
 			transport.RequestAsync<EventIntakeResponse>(HttpMethod.POST, "/intake/v2/events",
 				PostData.StreamHandler(page,
-					(b, stream) =>
+					(_, _) =>
 					{
 						/* NOT USED */
 					},
@@ -87,7 +86,7 @@ namespace Elastic.Ingest.Apm
 				{
 					var type = @event switch
 					{
-						Transaction t => "transaction",
+						Transaction _ => "transaction",
 						_ => "unknown"
 					};
 					var dictionary = new Dictionary<string, object>() { { type, @event } };

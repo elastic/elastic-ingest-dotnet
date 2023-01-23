@@ -42,7 +42,7 @@ namespace Elastic.Ingest.Elasticsearch
 		protected override Task<BulkResponse> Send(HttpTransport transport, IReadOnlyCollection<TEvent> page) =>
 			transport.RequestAsync<BulkResponse>(HttpMethod.POST, "/_bulk",
 				PostData.StreamHandler(page,
-					(b, stream) =>
+					(_, _) =>
 					{
 						/* NOT USED */
 					},
@@ -68,10 +68,8 @@ namespace Elastic.Ingest.Elasticsearch
 				if (Options.WriteEvent != null)
 					await Options.WriteEvent(stream, ctx, @event).ConfigureAwait(false);
 				else
-				{
 					await JsonSerializer.SerializeAsync(stream, @event, typeof(TEvent), ElasticsearchChannelStatics.SerializerOptions, ctx)
 						.ConfigureAwait(false);
-				}
 
 				if (indexHeader is UpdateOperation)
 					await stream.WriteAsync(ElasticsearchChannelStatics.DocUpdateHeaderEnd, ctx).ConfigureAwait(false);

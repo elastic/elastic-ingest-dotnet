@@ -49,13 +49,14 @@ namespace Elastic.Ingest.Elasticsearch.Serialization
 			}
 			var r = status == 200
 				? OkayBulkResponseItem
-				: new BulkResponseItem { Action = action!, Status = status, Error = error };
+				: new BulkResponseItem { Action = action, Status = status, Error = error };
 
 			return r;
 		}
 
 		public override void Write(Utf8JsonWriter writer, BulkResponseItem value, JsonSerializerOptions options)
 		{
+			// ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
 			if (value is null)
 			{
 				writer.WriteNullValue();

@@ -27,7 +27,7 @@ namespace Elastic.Ingest.Elasticsearch.Indices
 		/// <summary>
 		/// Provide a per document <c>DateTimeOffset</c> to be used as the date passed as parameter 0 to <see cref="IndexFormat"/>
 		/// </summary>
-		public Func<TEvent, DateTimeOffset?> TimestampLookup { get; set; } = null!;
+		public Func<TEvent, DateTimeOffset?>? TimestampLookup { get; set; }
 
 		/// <summary>
 		/// If the document provides an Id this allows you to set a per document `_id`.
@@ -36,6 +36,6 @@ namespace Elastic.Ingest.Elasticsearch.Indices
 		/// <para>Read more about bulk operations here:</para>
 		/// <para>https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-request-body</para>
 		/// </summary>
-		public Func<TEvent, string> BulkOperationIdLookup { get; set; } = null!;
+		public Func<TEvent, string>? BulkOperationIdLookup { get; set; }
 	}
 }
