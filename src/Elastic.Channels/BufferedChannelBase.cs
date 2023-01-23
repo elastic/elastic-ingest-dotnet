@@ -28,10 +28,14 @@ public interface IBufferedChannel<in TEvent> : IDisposable
 	}
 }
 
-public abstract class BufferedChannelBase<TChannelOptions, TBuffer, TEvent, TResponse>
+public abstract class BufferedChannelBase<TEvent, TResponse> : BufferedChannelBase<ChannelOptionsBase<TEvent, TResponse>, TEvent, TResponse>
+	where TResponse : class, new()
+{
+	protected BufferedChannelBase(ChannelOptionsBase<TEvent, TResponse> options) : base(options) { }
+}
+public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	: ChannelWriter<TEvent>, IBufferedChannel<TEvent>
-	where TChannelOptions : ChannelOptionsBase<TEvent, TBuffer, TResponse>
-	where TBuffer : BufferOptions<TEvent>, new()
+	where TChannelOptions : ChannelOptionsBase<TEvent, TResponse>
 	where TResponse : class, new()
 {
 	private readonly Task _inThread;
@@ -83,7 +87,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TBuffer, TEvent, TRes
 	public TChannelOptions Options { get; }
 	protected Channel<IConsumedBuffer<TEvent>> OutChannel { get; }
 	protected Channel<TEvent> InChannel { get; }
-	protected TBuffer BufferOptions => Options.BufferOptions;
+	protected BufferOptions BufferOptions => Options.BufferOptions;
 
 	public override ValueTask<bool> WaitToWriteAsync(CancellationToken ctx = default) => InChannel.Writer.WaitToWriteAsync(ctx);
 

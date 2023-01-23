@@ -5,6 +5,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Elastic.Channels;
 using Elastic.Clients.Elasticsearch;
 using Elastic.Clients.Elasticsearch.IndexManagement;
 using Elastic.Elasticsearch.Managed;
@@ -28,12 +29,12 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 		{
 			var indexPrefix = "catalog-data-";
 			var slim = new CountdownEvent(1);
-			var options = new IndexResponseItemsChannelOptions<CatalogDocument>(Client.Transport)
+			var options = new IndexChannelOptions<CatalogDocument>(Client.Transport)
 			{
 				IndexFormat = indexPrefix + "{0:yyyy.MM.dd}",
 				BulkOperationIdLookup = c => c.Id,
 				TimestampLookup = c => c.Created,
-				BufferOptions = new ElasticsearchBufferOptions<CatalogDocument>
+				BufferOptions = new BufferOptions
 				{
 					WaitHandle = slim, MaxConsumerBufferSize = 1,
 				}

@@ -9,15 +9,19 @@ using System.Threading.Tasks;
 
 namespace Elastic.Channels
 {
-	public abstract class ChannelOptionsBase<TEvent, TBuffer>
-		where TBuffer : BufferOptions<TEvent>, new()
+	/// <summary>
+	///
+	/// </summary>
+	/// <typeparam name="TEvent"></typeparam>
+	/// <typeparam name="TResponse"></typeparam>
+	public abstract class ChannelOptionsBase<TEvent, TResponse>
 	{
+		public BufferOptions BufferOptions { get; set; } = new ();
+
 		public Func<Stream, CancellationToken, TEvent, Task> WriteEvent { get; set; } = null!;
 
-		public TBuffer BufferOptions { get; set; } = new TBuffer();
-
 		/// <summary>
-		/// If <see cref="BufferOptions{TEvent}.MaxInFlightMessages"/> is reached, <see cref="TEvent"/>'s will fail to be published to the channel. You can be notified of dropped
+		/// If <see cref="BufferOptions.MaxInFlightMessages"/> is reached, <see cref="TEvent"/>'s will fail to be published to the channel. You can be notified of dropped
 		/// events with this callback
 		/// </summary>
 		public Action<TEvent>? PublishRejectionCallback { get; set; }
@@ -31,12 +35,6 @@ namespace Elastic.Channels
 
 		/// <summary> Subscribe to be notified of events that are retryable but did not store correctly within the number of configured <see cref="MaxRetries"/></summary>
 		public Action<IReadOnlyCollection<TEvent>>? RetryCallBack { get; set; }
-	}
-
-	public abstract class ChannelOptionsBase<TEvent, TBuffer, TResponse>
-		: ChannelOptionsBase<TEvent, TBuffer>
-		where TBuffer : BufferOptions<TEvent>, new()
-	{
 
 		/// <summary> A generic hook to be notified of any bulk request being initiated by <see cref="InboundBuffer{TEvent}"/> </summary>
 		public Action<TResponse, IWriteTrackingBuffer> ResponseCallback { get; set; } = (r, b) => { };

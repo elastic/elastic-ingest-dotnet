@@ -34,9 +34,9 @@ namespace Elastic.Ingest.Apm
 		};
 	}
 
-	public class ApmChannel : TransportChannelBase<ApmResponseItemsChannelOptions, ApmBufferOptions, IIntakeObject, EventIntakeResponse, IntakeErrorItem>
+	public class ApmChannel : TransportChannelBase<ApmChannelOptions, IIntakeObject, EventIntakeResponse, IntakeErrorItem>
 	{
-		public ApmChannel(ApmResponseItemsChannelOptions options) : base(options) { }
+		public ApmChannel(ApmChannelOptions options) : base(options) { }
 
 		//retry if APM server returns 429
 		protected override bool Retry(EventIntakeResponse response) => response.ApiCallDetails.HttpStatusCode == 429;

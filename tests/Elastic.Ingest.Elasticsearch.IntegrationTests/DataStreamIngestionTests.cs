@@ -5,6 +5,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Elastic.Channels;
 using Elastic.Clients.Elasticsearch.IndexManagement;
 using Elastic.Elasticsearch.Managed;
 using Elastic.Ingest.Elasticsearch.DataStreams;
@@ -27,13 +28,10 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 			// logs-* will use data streams by default in Elasticsearch.
 			var targetDataStream = new DataStreamName("logs", "dotnet");
 			var slim = new CountdownEvent(1);
-			var options = new DataStreamResponseItemsChannelOptions<TimeSeriesDocument>(Client.Transport)
+			var options = new DataStreamChannelOptions<TimeSeriesDocument>(Client.Transport)
 			{
 				DataStream = targetDataStream,
-				BufferOptions = new ElasticsearchBufferOptions<TimeSeriesDocument>
-				{
-					WaitHandle = slim, MaxConsumerBufferSize = 1,
-				}
+				BufferOptions = new BufferOptions { WaitHandle = slim, MaxConsumerBufferSize = 1 }
 			};
 			var ecsChannel = new DataStreamChannel<TimeSeriesDocument>(options);
 

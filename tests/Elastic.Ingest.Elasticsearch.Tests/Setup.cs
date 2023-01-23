@@ -5,6 +5,7 @@
 using System;
 using System.Linq;
 using System.Threading;
+using Elastic.Channels;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Transport;
 using Elastic.Transport.VirtualizedCluster;
@@ -45,7 +46,7 @@ namespace Elastic.Ingest.Elasticsearch.Tests
 			public TestSession(HttpTransport<TransportConfiguration> transport)
 			{
 				Transport = transport;
-				BufferOptions = new ElasticsearchBufferOptions<TestDocument>()
+				BufferOptions = new BufferOptions
 				{
 					ConcurrentConsumers = 1,
 					MaxConsumerBufferSize = 2,
@@ -54,7 +55,7 @@ namespace Elastic.Ingest.Elasticsearch.Tests
 					MaxRetries = 3,
 					BackoffPeriod = times => TimeSpan.FromMilliseconds(1),
 				};
-				ResponseItemsChannelOptions = new IndexResponseItemsChannelOptions<TestDocument>(transport)
+				ChannelOptions = new IndexChannelOptions<TestDocument>(transport)
 				{
 					BufferOptions = BufferOptions,
 					ServerRejectionCallback = (list) => Interlocked.Increment(ref _rejections),
@@ -64,16 +65,16 @@ namespace Elastic.Ingest.Elasticsearch.Tests
 					RetryCallBack = (list) => Interlocked.Increment(ref _retries),
 					ExceptionCallback= (e) => LastException = e
 				};
-				Channel = new IndexChannel<TestDocument>(ResponseItemsChannelOptions);
+				Channel = new IndexChannel<TestDocument>(ChannelOptions);
 			}
 
 			public IndexChannel<TestDocument> Channel { get; }
 
 			public HttpTransport<TransportConfiguration> Transport { get; }
 
-			public IndexResponseItemsChannelOptions<TestDocument> ResponseItemsChannelOptions { get; }
+			public IndexChannelOptions<TestDocument> ChannelOptions { get; }
 
-			public ElasticsearchBufferOptions<TestDocument> BufferOptions { get; }
+			public BufferOptions BufferOptions { get; }
 
 			public CountdownEvent WaitHandle { get; } = new CountdownEvent(1);
 

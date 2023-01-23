@@ -15,11 +15,10 @@ using Elastic.Transport;
 namespace Elastic.Ingest.Elasticsearch
 {
 	public abstract class ElasticsearchChannelBase<TEvent, TChannelOptions>
-		: TransportChannelBase<TChannelOptions, ElasticsearchBufferOptions<TEvent>, TEvent, BulkResponse, BulkResponseItem>
-		where TChannelOptions : TransportResponseItemsChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem, ElasticsearchBufferOptions<TEvent>>
+		: TransportChannelBase<TChannelOptions, TEvent, BulkResponse, BulkResponseItem>
+		where TChannelOptions : TransportChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem>
 	{
-		public ElasticsearchChannelBase(TChannelOptions options) : base(options) { }
-
+		protected ElasticsearchChannelBase(TChannelOptions options) : base(options) { }
 
 		protected override bool Retry(BulkResponse response)
 		{

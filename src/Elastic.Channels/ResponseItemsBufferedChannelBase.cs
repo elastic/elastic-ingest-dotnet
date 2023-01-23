@@ -8,9 +8,8 @@ using System.Linq;
 
 namespace Elastic.Channels;
 
-public abstract class ResponseItemsChannelOptionsBase<TEvent, TBuffer, TResponse, TBulkResponseItem>
-	: ChannelOptionsBase<TEvent, TBuffer, TResponse>
-	where TBuffer : BufferOptions<TEvent>, new()
+public abstract class ResponseItemsChannelOptionsBase<TEvent, TResponse, TBulkResponseItem>
+	: ChannelOptionsBase<TEvent, TResponse>
 {
 	/// <summary> Subscribe to be notified of events that can not be stored in Elasticsearch</summary>
 	public Action<List<(TEvent, TBulkResponseItem)>>? ServerRejectionCallback { get; set; }
@@ -22,10 +21,9 @@ public abstract class ResponseItemsChannelOptionsBase<TEvent, TBuffer, TResponse
 /// individual write failures.
 /// </para>
 /// </summary>
-public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TBuffer, TEvent, TResponse, TBulkResponseItem>
-	: BufferedChannelBase<TChannelOptions, TBuffer, TEvent, TResponse>
-	where TChannelOptions : ResponseItemsChannelOptionsBase<TEvent, TBuffer, TResponse, TBulkResponseItem>
-	where TBuffer : BufferOptions<TEvent>, new()
+public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem>
+	: BufferedChannelBase<TChannelOptions, TEvent, TResponse>
+	where TChannelOptions : ResponseItemsChannelOptionsBase<TEvent, TResponse, TBulkResponseItem>
 	where TResponse : class, new()
 {
 	protected ResponseItemsBufferedChannelBase(TChannelOptions options) : base(options) { }
