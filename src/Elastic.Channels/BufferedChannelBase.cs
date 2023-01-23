@@ -29,7 +29,7 @@ public interface IBufferedChannel<in TEvent> : IDisposable
 }
 
 public abstract class BufferedChannelBase<TChannelOptions, TBuffer, TEvent, TResponse>
-	: IBufferedChannel<TEvent>
+	: ChannelWriter<TEvent>, IBufferedChannel<TEvent>
 	where TChannelOptions : ChannelOptionsBase<TEvent, TBuffer, TResponse>
 	where TBuffer : BufferOptions<TEvent>, new()
 	where TResponse : class, new()
@@ -85,7 +85,11 @@ public abstract class BufferedChannelBase<TChannelOptions, TBuffer, TEvent, TRes
 	protected Channel<TEvent> InChannel { get; }
 	protected TBuffer BufferOptions => Options.BufferOptions;
 
-	public virtual bool TryWrite(TEvent item)
+	public override ValueTask<bool> WaitToWriteAsync(CancellationToken ctx = default) => InChannel.Writer.WaitToWriteAsync(ctx);
+
+	public override bool TryComplete(Exception? error = null) => InChannel.Writer.TryComplete(error);
+
+	public override bool TryWrite(TEvent item)
 	{
 		if (InChannel.Writer.TryWrite(item)) return true;
 
