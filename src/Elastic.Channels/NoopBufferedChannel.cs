@@ -19,9 +19,17 @@ public class NoopBufferedChannel
 {
 	public class NoopEvent { }
 	public class NoopResponse { }
-	public class NoopChannelOptions : ChannelOptionsBase<NoopEvent, NoopResponse> { }
 
-	public NoopBufferedChannel(BufferOptions options) : base(new NoopChannelOptions { BufferOptions = options }) { }
+	public class NoopChannelOptions : ChannelOptionsBase<NoopEvent, NoopResponse>
+	{
+		public bool ObserverConcurrency { get; set; }
+	}
+
+	public NoopBufferedChannel(BufferOptions options, bool observeConcurrency = false) : base(new NoopChannelOptions
+	{
+		BufferOptions = options,
+		ObserverConcurrency = observeConcurrency
+	}) { }
 
 	private long _sentBuffersCount;
 	public long SentBuffersCount => _sentBuffersCount;
@@ -32,6 +40,8 @@ public class NoopBufferedChannel
 	protected override async Task<NoopResponse> Send(IReadOnlyCollection<NoopEvent> buffer)
 	{
 		Interlocked.Increment(ref _sentBuffersCount);
+		if (!Options.ObserverConcurrency) return new NoopResponse();
+
 		var max = Interlocked.Increment(ref _currentMax);
 		await Task.Delay(TimeSpan.FromMilliseconds(1)).ConfigureAwait(false);
 		Interlocked.Decrement(ref _currentMax);

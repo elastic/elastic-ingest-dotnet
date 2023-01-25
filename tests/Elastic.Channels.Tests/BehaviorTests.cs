@@ -36,7 +36,7 @@ namespace Elastic.Channels.Tests
 				if (await channel.WaitToWriteAsync(e))
 					written++;
 			}
-			var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(20));
+			var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(5));
 			signalled.Should().BeTrue("The channel was not drained in the expected time");
 			written.Should().Be(totalEvents);
 			channel.SentBuffersCount.Should().Be(expectedSentBuffers);
@@ -84,7 +84,7 @@ namespace Elastic.Channels.Tests
 				ConcurrentConsumers = 4
 			};
 
-			var channel = new NoopBufferedChannel(bufferOptions);
+			var channel = new NoopBufferedChannel(bufferOptions, observeConcurrency: true);
 
 			var written = 0;
 			for (var i = 0; i < totalEvents; i++)
