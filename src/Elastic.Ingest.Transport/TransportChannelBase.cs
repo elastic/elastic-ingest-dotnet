@@ -23,6 +23,6 @@ namespace Elastic.Ingest.Transport
 		/// <returns><see cref="TResponse"/></returns>
 		protected abstract Task<TResponse> Send(HttpTransport transport, IReadOnlyCollection<TEvent> page);
 
-		protected override Task<TResponse> Send(IReadOnlyCollection<TEvent> page) => Send(Options.Transport, page);
+		protected override Task<TResponse> Send(IReadOnlyCollection<TEvent> buffer) => Send(Options.Transport, buffer);
 	}
 }

@@ -110,7 +110,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		return false;
 	}
 
-	protected abstract Task<TResponse> Send(IReadOnlyCollection<TEvent> page);
+	protected abstract Task<TResponse> Send(IReadOnlyCollection<TEvent> buffer);
 
 	private static readonly IReadOnlyCollection<TEvent> DefaultRetryBuffer = new TEvent[] { };
 
