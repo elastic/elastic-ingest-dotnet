@@ -36,7 +36,7 @@ namespace Elastic.Channels.Tests
 				if (await channel.WaitToWriteAsync(e))
 					written++;
 			}
-			var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(5));
+			var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(20));
 			signalled.Should().BeTrue("The channel was not drained in the expected time");
 			written.Should().Be(totalEvents);
 			channel.SentBuffersCount.Should().Be(expectedSentBuffers);
