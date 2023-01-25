@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
+using Elastic.Channels;
 
 namespace Elastic.Ingest.OpenTelemetry
 {
@@ -33,11 +34,7 @@ namespace Elastic.Ingest.OpenTelemetry
 	}
 
 
-	public class TraceBufferOptions : BufferOptions<Activity>
-	{
-	}
-
-	public class TraceChannelOptions : ChannelOptionsBase<Activity, TraceBufferOptions, TraceExportResult>
+	public class TraceChannelOptions : ChannelOptionsBase<Activity, TraceExportResult>
 	{
 		public string? ServiceName { get; set; }
 		public Uri? Endpoint { get; set; }
@@ -49,7 +46,7 @@ namespace Elastic.Ingest.OpenTelemetry
 		public ExportResult Result { get; internal set; }
 	}
 
-	public class TraceChannel : ChannelBase<TraceChannelOptions, TraceBufferOptions, Activity, TraceExportResult>
+	public class TraceChannel : BufferedChannelBase<TraceChannelOptions, Activity, TraceExportResult>
 	{
 		public TraceChannel(TraceChannelOptions options) : base(options) {
 			var o = new OtlpExporterOptions();
