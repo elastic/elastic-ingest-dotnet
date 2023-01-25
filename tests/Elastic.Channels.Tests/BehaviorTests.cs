@@ -1,8 +1,8 @@
 // Licensed to Elasticsearch B.V under one or more agreements.
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
+
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -14,34 +14,31 @@ namespace Elastic.Channels.Tests
 	public class BehaviorTests : IDisposable
 	{
 		public BehaviorTests(ITestOutputHelper testOutput) => XunitContext.Register(testOutput);
+
 		void IDisposable.Dispose() => XunitContext.Flush();
 
 		[Fact] public async Task RespectsPagination()
 		{
 			int totalEvents = 500_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
-			var expectedPages = totalEvents / bufferSize;
-			var channelOptions = new NoopChannelOptions
+			var expectedSentBuffers = totalEvents / bufferSize;
+			var bufferOptions = new BufferOptions
 			{
-				BufferOptions = new BufferOptions
-				{
-					WaitHandle = new CountdownEvent(expectedPages),
-					MaxInFlightMessages = maxInFlight,
-					MaxConsumerBufferSize = bufferSize,
-				}
+				WaitHandle = new CountdownEvent(expectedSentBuffers),
+				MaxInFlightMessages = maxInFlight,
+				MaxConsumerBufferSize = bufferSize,
 			};
-
-			var channel = new NoopIngestChannel(channelOptions);
+			var channel = new NoopBufferedChannel(bufferOptions);
 
 			var written = 0;
 			for (var i = 0; i < totalEvents; i++)
 			{
-				var e = new NoopEvent();
+				var e = new NoopBufferedChannel.NoopEvent();
 				if (await channel.WaitToWriteAsync(e))
 					written++;
 			}
-			channelOptions.BufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(5));
+			bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(5));
 			written.Should().Be(totalEvents);
-			channel.SeenPages.Should().Be(expectedPages);
+			channel.SentBuffersCount.Should().Be(expectedSentBuffers);
 		}
 
 		/// <summary>
@@ -52,96 +49,52 @@ namespace Elastic.Channels.Tests
 		[Fact] public async Task MessagesAreSequentiallyDistributedOverWorkers()
 		{
 			int totalEvents = 500_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
-			var channelOptions = new NoopChannelOptions
+			var bufferOptions = new BufferOptions
 			{
-				BufferOptions = new BufferOptions
-				{
-					WaitHandle = new CountdownEvent(1),
-					MaxInFlightMessages = maxInFlight,
-					MaxConsumerBufferSize = bufferSize,
-					MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(500)
-				}
+				WaitHandle = new CountdownEvent(1),
+				MaxInFlightMessages = maxInFlight,
+				MaxConsumerBufferSize = bufferSize,
+				MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(500)
 			};
 
-			var channel = new NoopIngestChannel(channelOptions);
+			var channel = new NoopBufferedChannel(bufferOptions);
 			var written = 0;
 			for (var i = 0; i < 100; i++)
 			{
-				var e = new NoopEvent();
+				var e = new NoopBufferedChannel.NoopEvent();
 				if (await channel.WaitToWriteAsync(e))
 					written++;
 			}
-			channelOptions.BufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(1));
+			bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(1));
 			written.Should().Be(100);
-			channel.SeenPages.Should().Be(1);
+			channel.SentBuffersCount.Should().Be(1);
 		}
 
 		[Fact] public async Task ConcurrencyIsApplied()
 		{
 			int totalEvents = 5_000, maxInFlight = 5_000, bufferSize = 500;
 			var expectedPages = totalEvents / bufferSize;
-			var channelOptions = new NoopChannelOptions
+			var bufferOptions = new BufferOptions
 			{
-				BufferOptions = new BufferOptions
-				{
-					WaitHandle = new CountdownEvent(expectedPages),
-					MaxInFlightMessages = maxInFlight,
-					MaxConsumerBufferSize = bufferSize,
-					ConcurrentConsumers = 4
-				}
+				WaitHandle = new CountdownEvent(expectedPages),
+				MaxInFlightMessages = maxInFlight,
+				MaxConsumerBufferSize = bufferSize,
+				ConcurrentConsumers = 4
 			};
 
-			var channel = new DelayedNoopIngestChannel(channelOptions);
+			var channel = new NoopBufferedChannel(bufferOptions);
 
 			var written = 0;
 			for (var i = 0; i < totalEvents; i++)
 			{
-				var e = new NoopEvent();
+				var e = new NoopBufferedChannel.NoopEvent();
 				if (await channel.WaitToWriteAsync(e))
 					written++;
 			}
-			channelOptions.BufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(5));
+			bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(5));
 			written.Should().Be(totalEvents);
-			channel.SeenPages.Should().Be(expectedPages);
-			channel.MaxConcurrency.Should().Be(4);
-		}
-
-	}
-
-	public class NoopEvent { }
-	public class NoopResponse { }
-
-	public class NoopChannelOptions : ChannelOptionsBase<NoopEvent, NoopResponse> {}
-
-	public class NoopIngestChannel : BufferedChannelBase<NoopChannelOptions, NoopEvent, NoopResponse>
-	{
-		public NoopIngestChannel(NoopChannelOptions options) : base(options) { }
-
-		private long _seenPages;
-		public long SeenPages => _seenPages;
-
-		protected override Task<NoopResponse> Send(IReadOnlyCollection<NoopEvent> page)
-		{
-			Interlocked.Increment(ref _seenPages);
-			return Task.FromResult(new NoopResponse());
-		}
-	}
-
-	public class DelayedNoopIngestChannel : NoopIngestChannel
-	{
-		public DelayedNoopIngestChannel(NoopChannelOptions options) : base(options) { }
-
-		private int _currentMax;
-		public int MaxConcurrency { get; set; }
-
-		protected override async Task<NoopResponse> Send(IReadOnlyCollection<NoopEvent> page)
-		{
-			var max = Interlocked.Increment(ref _currentMax);
-			await Task.Delay(TimeSpan.FromMilliseconds(1)).ConfigureAwait(false);
-			Interlocked.Decrement(ref _currentMax);
-			if (max > MaxConcurrency) MaxConcurrency = max;
-			return await base.Send(page);
+			channel.SentBuffersCount.Should().Be(expectedPages);
+			channel.ObservedConcurrency.Should().Be(4);
 		}
 	}
 }
-

@@ -7,12 +7,12 @@ using System.Collections.Generic;
 
 namespace Elastic.Channels;
 
-public interface IConsumedBuffer<out TEvent> : IWriteTrackingBuffer
+public interface IOutboundBuffer<out TEvent> : IWriteTrackingBuffer
 {
 	public IReadOnlyCollection<TEvent> Items { get; }
 }
 
-internal class OutboundBuffer<TEvent> : IConsumedBuffer<TEvent>
+internal class OutboundBuffer<TEvent> : IOutboundBuffer<TEvent>
 {
 	public IReadOnlyCollection<TEvent> Items { get; }
 

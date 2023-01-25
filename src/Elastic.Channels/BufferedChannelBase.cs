@@ -57,7 +57,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			// DropWrite will make `TryWrite` always return true, which is not what we want.
 			FullMode = BoundedChannelFullMode.Wait
 		});
-		OutChannel = Channel.CreateBounded<IConsumedBuffer<TEvent>>(
+		OutChannel = Channel.CreateBounded<IOutboundBuffer<TEvent>>(
 			new BoundedChannelOptions(BufferOptions.MaxInFlightMessages / BufferOptions.MaxConsumerBufferSize)
 			{
 				SingleReader = false,
@@ -85,7 +85,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	}
 
 	public TChannelOptions Options { get; }
-	protected Channel<IConsumedBuffer<TEvent>> OutChannel { get; }
+	protected Channel<IOutboundBuffer<TEvent>> OutChannel { get; }
 	protected Channel<TEvent> InChannel { get; }
 	protected BufferOptions BufferOptions => Options.BufferOptions;
 
@@ -110,7 +110,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		return false;
 	}
 
-	protected abstract Task<TResponse> Send(IReadOnlyCollection<TEvent> page);
+	protected abstract Task<TResponse> Send(IReadOnlyCollection<TEvent> buffer);
 
 	private static readonly IReadOnlyCollection<TEvent> DefaultRetryBuffer = new TEvent[] { };
 
