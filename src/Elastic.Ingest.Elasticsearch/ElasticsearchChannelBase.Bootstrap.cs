@@ -21,7 +21,7 @@ namespace Elastic.Ingest.Elasticsearch
 		protected abstract (string, string) GetDefaultIndexTemplate(string name, string match, string mappingsName, string settingsName);
 
 
-		public async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, string? ilmPolicy = null, CancellationToken ctx = default)
+		public virtual async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, string? ilmPolicy = null, CancellationToken ctx = default)
 		{
 			if (bootstrapMethod == BootstrapMethod.None) return true;
 
@@ -44,7 +44,7 @@ namespace Elastic.Ingest.Elasticsearch
 			return true;
 		}
 
-		public bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod, string? ilmPolicy = null)
+		public virtual bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod, string? ilmPolicy = null)
 		{
 			if (bootstrapMethod == BootstrapMethod.None) return true;
 
