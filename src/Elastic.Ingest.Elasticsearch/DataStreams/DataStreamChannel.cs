@@ -46,7 +46,7 @@ namespace Elastic.Ingest.Elasticsearch.DataStreams
 			return (name, indexTemplateBody);
 		}
 
-		protected string[] GetInferredComponentTemplates()
+		protected List<string> GetInferredComponentTemplates()
 		{
 			var additionalComponents = new List<string> { "data-streams-mappings" };
 			// if we know the type of data is logs or metrics apply certain defaults that Elasticsearch ships with.
@@ -54,7 +54,7 @@ namespace Elastic.Ingest.Elasticsearch.DataStreams
 				additionalComponents.AddRange(new[] { "logs-settings", "logs-mappings" });
 			else if (Options.DataStream.Type.ToLowerInvariant() == "metrics")
 				additionalComponents.AddRange(new[] { "metrics-settings", "metrics-mappings" });
-			return additionalComponents.ToArray();
+			return additionalComponents;
 		}
 	}
 }
