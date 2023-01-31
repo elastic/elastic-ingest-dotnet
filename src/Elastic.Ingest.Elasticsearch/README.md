@@ -45,7 +45,21 @@ var doc = new TimeSeriesDocument
 channel.TryWrite(doc);
 ```
 
-# `IndexChannel<TEvent>`
+### Bootstrap target data stream
+
+Optionally the target data stream can be bootstrapped using the following.
+
+```csharp
+await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default"); 
+```
+
+This will try and set up the target data stream with the `7-days-default` ILM policy.
+Throwing exceptions if it fails to do so because `BootstrapMethod.Failure` was provided
+
+An index template with accompanying component templates will be created based on the type and dataset portion
+of the target datastream.
+
+## `IndexChannel<TEvent>`
 
 A channel that specializes in writing catalog data to Elastic indices. 
 Catalog data is typically data that has an id of sorts.
@@ -95,3 +109,16 @@ This will push data to `catalog-data-2023.01.1` because `TimestampLookup` yields
 `IndexFormat` can also simply be a fixed string to write to an Elasticsearch alias/index.
 
 `BulkOperationIdLookup` determines if the document should be pushed to Elasticsearch using a `create` or `index` operation.
+
+### Bootstrap target index 
+
+Optionally the target index can be bootstrapped using the following.
+
+```csharp
+await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default"); 
+```
+
+This will try and set up the target data stream with the `7-days-default` ILM policy.
+Throwing exceptions if it fails to do so because `BootstrapMethod.Failure` was provided
+
+An index template with accompanying component templates will be created based named using `IndexFormat`.
