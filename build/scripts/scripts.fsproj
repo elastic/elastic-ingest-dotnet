@@ -17,6 +17,9 @@
     <Compile Include="CommandLine.fs" />
     <Compile Include="Targets.fs" />
     <Compile Include="Program.fs" />
+    <Content Include="..\..\.github\workflows\ci.yml">
+      <Link>ci.yml</Link>
+    </Content>
   </ItemGroup>
 
 </Project>
