@@ -34,8 +34,10 @@ jobs:
       env:
           NUGET_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
     - run: build.bat build -s true
+      shell: cmd
       name: Build
     - run: build.bat test -s true
+      shell: cmd
       name: Test
 
   build:
