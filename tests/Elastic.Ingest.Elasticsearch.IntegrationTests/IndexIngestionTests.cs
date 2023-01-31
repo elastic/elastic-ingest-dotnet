@@ -35,7 +35,9 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 					WaitHandle = slim, MaxConsumerBufferSize = 1,
 				}
 			};
-			var ecsChannel = new IndexChannel<CatalogDocument>(options);
+			var channel = new IndexChannel<CatalogDocument>(options);
+			var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
+			bootstrapped.Should().BeTrue("Expected to be able to bootstrap index channel");
 
 			var date = DateTimeOffset.Now;
 			var indexName = string.Format(options.IndexFormat, date);
@@ -43,7 +45,7 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 			var index = await Client.Indices.GetAsync(new GetIndexRequest(indexName));
 			index.Indices.Should().BeNullOrEmpty();
 
-			ecsChannel.TryWrite(new CatalogDocument { Created = date, Title = "Hello World!", Id = "hello-world" });
+			channel.TryWrite(new CatalogDocument { Created = date, Title = "Hello World!", Id = "hello-world" });
 			if (!slim.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
 				throw new Exception("ecs document was not persisted within 10 seconds");
 
@@ -61,6 +63,20 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 
 			index = await Client.Indices.GetAsync(new GetIndexRequest(indexName));
 			index.Indices.Should().NotBeNullOrEmpty();
+
+			index.Indices[indexName].Settings?.Index?.Lifecycle?.Name?.Should().NotBeNull().And.Be("7-days-default");
+
+			// Bug in client, for now assume template was applied because the ILM policy is set on the index.
+			/*
+			 // The JSON value could not be converted to Elastic.Clients.Elasticsearch.Names. Path: $.index_templates[0].index_template.index_patterns | LineNumber: 5 | BytePositionInLine: 28.
+
+			var templateName = string.Format(options.IndexFormat, "template");
+			var template = await Client.Indices.GetIndexTemplateAsync(new GetIndexTemplateRequest(templateName));
+			template.IsValidResponse.Should().BeTrue("{0}", template.DebugInformation);
+			template.IndexTemplates.First().Should().NotBeNull();
+			template.IndexTemplates.First().Name.Should().Be(templateName);
+			//template.IndexTemplates.First().IndexTemplate.Template..Should().Be(templateName);
+			*/
 
 		}
 	}

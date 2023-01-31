@@ -37,7 +37,8 @@ namespace Elastic.Ingest.Elasticsearch.DataStreams
 			Namespace = @namespace.ToLowerInvariant();
 		}
 
-		public string GetTemplatePrefix() => $"{Type}.{DataSet}.*";
+		public string GetTemplateName() => $"{Type}-{DataSet}";
+		public string GetNamespaceWildcard() => $"{Type}-{DataSet}-*";
 
 		private string? _stringValue;
 		public override string ToString()
