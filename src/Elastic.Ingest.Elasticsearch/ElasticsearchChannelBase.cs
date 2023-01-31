@@ -14,7 +14,7 @@ using Elastic.Transport;
 
 namespace Elastic.Ingest.Elasticsearch
 {
-	public abstract class ElasticsearchChannelBase<TEvent, TChannelOptions>
+	public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		: TransportChannelBase<TChannelOptions, TEvent, BulkResponse, BulkResponseItem>
 		where TChannelOptions : TransportChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem>
 	{
@@ -77,5 +77,14 @@ namespace Elastic.Ingest.Elasticsearch
 				await stream.WriteAsync(ElasticsearchChannelStatics.LineFeed, 0, 1, ctx).ConfigureAwait(false);
 			}
 		}
+
+		protected class HeadIndexTemplateResponse : TransportResponse { }
+
+		protected class PutIndexTemplateResponse : TransportResponse { }
+
+		protected class PutComponentTemplateResponse : TransportResponse { }
+
+
+
 	}
 }

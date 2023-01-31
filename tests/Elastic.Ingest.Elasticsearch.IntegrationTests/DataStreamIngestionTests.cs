@@ -24,23 +24,25 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 		[Fact]
 		public async Task EnsureDocumentsEndUpInDataStream()
 		{
-			// logs-* will use data streams by default in Elasticsearch.
-			var targetDataStream = new DataStreamName("logs", "dotnet");
+			var targetDataStream = new DataStreamName("timeseriesdocs", "dotnet");
 			var slim = new CountdownEvent(1);
 			var options = new DataStreamChannelOptions<TimeSeriesDocument>(Client.Transport)
 			{
 				DataStream = targetDataStream,
 				BufferOptions = new BufferOptions { WaitHandle = slim, MaxConsumerBufferSize = 1 }
 			};
-			var ecsChannel = new DataStreamChannel<TimeSeriesDocument>(options);
+			var channel = new DataStreamChannel<TimeSeriesDocument>(options);
+
+			var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
+			bootstrapped.Should().BeTrue("Expected to be able to bootstrap data stream channel");
 
 			var dataStream =
 				await Client.Indices.GetDataStreamAsync(new GetDataStreamRequest(targetDataStream.ToString()));
 			dataStream.DataStreams.Should().BeNullOrEmpty();
 
-			ecsChannel.TryWrite(new TimeSeriesDocument { Timestamp = DateTimeOffset.Now, Message = "hello-world" });
+			channel.TryWrite(new TimeSeriesDocument { Timestamp = DateTimeOffset.Now, Message = "hello-world" });
 			if (!slim.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
-				throw new Exception("ecs document was not persisted within 10 seconds");
+				throw new Exception("document was not persisted within 10 seconds");
 
 			var refreshResult = await Client.Indices.RefreshAsync(targetDataStream.ToString());
 			refreshResult.IsValidResponse.Should().BeTrue("{0}", refreshResult.DebugInformation);
@@ -62,6 +64,13 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 			getDataStream.ApiCallDetails.HttpStatusCode.Should()
 				.Be(200, "{0}", getDataStream.ApiCallDetails.DebugInformation);
 
+			//this ensures the data stream was setup using the expected bootstrapped template
+			getDataStream.ApiCallDetails.DebugInformation.Should()
+				.Contain(@$"""template"" : ""{targetDataStream.GetTemplateName()}""");
+
+			//this ensures the data stream is managed by the expected ilm_policy
+			getDataStream.ApiCallDetails.DebugInformation.Should()
+				.Contain(@"""ilm_policy"" : ""7-days-default""");
 		}
 	}
 }
