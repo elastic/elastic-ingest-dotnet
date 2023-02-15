@@ -101,7 +101,7 @@ namespace Elastic.Channels.Tests
 
 		[Fact] public void ManyChannelsContinueToDoWork()
 		{
-			int totalEvents = 500_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
+			int totalEvents = 50_000_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
 			for (var c = 0; c < 10; c++)
 			{
 				var expectedSentBuffers = totalEvents / bufferSize;
