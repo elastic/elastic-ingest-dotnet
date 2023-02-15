@@ -45,6 +45,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	protected BufferedChannelBase(TChannelOptions options)
 	{
+		TokenSource = new CancellationTokenSource();
 		Options = options;
 		var maxConsumers = Math.Max(1, BufferOptions.ConcurrentConsumers);
 		_throttleTasks = new SemaphoreSlim(maxConsumers, maxConsumers);
@@ -90,6 +91,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	}
 
 	public TChannelOptions Options { get; }
+
+	private CancellationTokenSource TokenSource { get; }
 	protected Channel<IOutboundBuffer<TEvent>> OutChannel { get; }
 	protected Channel<TEvent> InChannel { get; }
 	protected BufferOptions BufferOptions => Options.BufferOptions;
@@ -108,14 +111,15 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	public virtual async Task<bool> WaitToWriteAsync(TEvent item, CancellationToken ctx = default)
 	{
-		if ((await InChannel.Writer.WaitToWriteAsync(ctx).ConfigureAwait(false)) &&
+		ctx = ctx == default ? TokenSource.Token : ctx;
+		if (await InChannel.Writer.WaitToWriteAsync(ctx).ConfigureAwait(false) &&
 		    InChannel.Writer.TryWrite(item)) return true;
 
 		Options.PublishRejectionCallback?.Invoke(item);
 		return false;
 	}
 
-	protected abstract Task<TResponse> Send(IReadOnlyCollection<TEvent> buffer);
+	protected abstract Task<TResponse> Send(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx = default);
 
 	private static readonly IReadOnlyCollection<TEvent> DefaultRetryBuffer = new TEvent[] { };
 
@@ -133,6 +137,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		while (await OutChannel.Reader.WaitToReadAsync().ConfigureAwait(false))
 			// ReSharper disable once RemoveRedundantBraces
 		{
+			if (TokenSource.Token.IsCancellationRequested) break;
+
 			while (OutChannel.Reader.TryRead(out var buffer))
 			{
 				var items = buffer.Items;
@@ -156,11 +162,13 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var maxRetries = Options.BufferOptions.MaxRetries;
 		for (var i = 0; i <= maxRetries && items.Count > 0; i++)
 		{
+			if (TokenSource.Token.IsCancellationRequested) break;
+
 			Options.BulkAttemptCallback?.Invoke(i, items.Count);
 			TResponse? response;
 			try
 			{
-				response = await Send(items).ConfigureAwait(false);
+				response = await Send(items, TokenSource.Token).ConfigureAwait(false);
 				Options.ResponseCallback?.Invoke(response, buffer);
 			}
 			catch (Exception e)
@@ -175,7 +183,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			var atEndOfRetries = i == maxRetries;
 			if (items.Count > 0 && !atEndOfRetries)
 			{
-				await Task.Delay(Options.BufferOptions.BackoffPeriod(i)).ConfigureAwait(false);
+				await Task.Delay(Options.BufferOptions.BackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
 				Options.RetryCallBack?.Invoke(items);
 			}
 			// otherwise if retryable items still exist and the user wants to be notified notify the user
@@ -192,6 +200,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 		while (await inboundBuffer.WaitToReadAsync(InChannel.Reader).ConfigureAwait(false))
 		{
+			if (TokenSource.Token.IsCancellationRequested) break;
+
 			while (inboundBuffer.Count < maxQueuedMessages && InChannel.Reader.TryRead(out var item))
 			{
 				if (inboundBuffer.DurationSinceFirstWrite > maxInterval)
@@ -235,6 +245,16 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	public virtual void Dispose()
 	{
+		try
+		{
+			TokenSource.Cancel();
+			InChannel.Writer.TryComplete();
+			OutChannel.Writer.TryComplete();
+		}
+		catch
+		{
+			// ignored
+		}
 		try
 		{
 			_inThread.Dispose();

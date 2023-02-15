@@ -37,13 +37,13 @@ public class NoopBufferedChannel
 	private int _currentMax;
 	public int ObservedConcurrency { get; private set; }
 
-	protected override async Task<NoopResponse> Send(IReadOnlyCollection<NoopEvent> buffer)
+	protected override async Task<NoopResponse> Send(IReadOnlyCollection<NoopEvent> buffer, CancellationToken ctx = default)
 	{
 		Interlocked.Increment(ref _sentBuffersCount);
 		if (!Options.ObserverConcurrency) return new NoopResponse();
 
 		var max = Interlocked.Increment(ref _currentMax);
-		await Task.Delay(TimeSpan.FromMilliseconds(1)).ConfigureAwait(false);
+		await Task.Delay(TimeSpan.FromMilliseconds(1), ctx).ConfigureAwait(false);
 		Interlocked.Decrement(ref _currentMax);
 		if (max > ObservedConcurrency) ObservedConcurrency = max;
 		return new NoopResponse();

@@ -24,9 +24,7 @@ namespace Elastic.Channels.Tests
 			var expectedSentBuffers = totalEvents / bufferSize;
 			var bufferOptions = new BufferOptions
 			{
-				WaitHandle = new CountdownEvent(expectedSentBuffers),
-				MaxInFlightMessages = maxInFlight,
-				MaxConsumerBufferSize = bufferSize,
+				WaitHandle = new CountdownEvent(expectedSentBuffers), MaxInFlightMessages = maxInFlight, MaxConsumerBufferSize = bufferSize,
 			};
 			var channel = new NoopBufferedChannel(bufferOptions);
 
@@ -99,6 +97,37 @@ namespace Elastic.Channels.Tests
 			written.Should().Be(totalEvents);
 			channel.SentBuffersCount.Should().Be(expectedPages);
 			channel.ObservedConcurrency.Should().Be(4);
+		}
+
+		[Fact] public void ManyChannelsContinueToDoWork()
+		{
+			int totalEvents = 500_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
+			for (var c = 0; c < 10; c++)
+			{
+				var expectedSentBuffers = totalEvents / bufferSize;
+				var bufferOptions = new BufferOptions
+				{
+					WaitHandle = new CountdownEvent(expectedSentBuffers),
+					MaxInFlightMessages = maxInFlight,
+					MaxConsumerBufferSize = bufferSize,
+					MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(20)
+				};
+				using var channel = new NoopBufferedChannel(bufferOptions);
+				var written = 0;
+				var _ = Task.Factory.StartNew(async () =>
+				{
+					for (var i = 0; i < totalEvents && !channel.Options.BufferOptions.WaitHandle.IsSet; i++)
+					{
+						var e = new NoopBufferedChannel.NoopEvent();
+						if (await channel.WaitToWriteAsync(e))
+							written++;
+					}
+				});
+				// wait for some work to have progressed
+				bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(50));
+				channel.SentBuffersCount.Should().BeGreaterThan(0);
+				written.Should().BeLessThan(totalEvents);
+			}
 		}
 	}
 }

@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
@@ -71,7 +72,7 @@ namespace Elastic.Ingest.OpenTelemetry
 			{
 				var buffer = bufferTypeConstructor.Invoke(new object[] {options.BufferOptions.MaxConsumerBufferSize });
 				bufferAddMethod.Invoke(buffer, new[] { page });
-				var batch = (Batch<Activity>)batchConstructor.Invoke(new object[] {buffer, options.BufferOptions.MaxConsumerBufferSize });
+				var batch = (Batch<Activity>)batchConstructor.Invoke(new[] {buffer, options.BufferOptions.MaxConsumerBufferSize });
 				return batch;
 			};
 
@@ -83,7 +84,7 @@ namespace Elastic.Ingest.OpenTelemetry
 
 		public CustomActivityProcessor Processor { get; }
 
-		protected override Task<TraceExportResult> Send(IReadOnlyCollection<Activity> page)
+		protected override Task<TraceExportResult> Send(IReadOnlyCollection<Activity> page, CancellationToken ctx = default)
 		{
 			var batch = BatchCreator(page);
 			var result = TraceExporter.Export(batch);
