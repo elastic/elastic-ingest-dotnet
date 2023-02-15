@@ -9,7 +9,7 @@ using Elastic.Channels.Example;
 
 var totalEvents = args.Length > 0 && int.TryParse(args[0].Replace("_", ""), out var t) ? t : 70_000_000;
 var concurrency = args.Length > 1 && int.TryParse(args[1], out var c) ? c : 5;
-var maxInFlight = Math.Max(1_000_000, (totalEvents / concurrency) / 10);
+var maxInFlight = Math.Max(10_000_000, (totalEvents / concurrency) / 10);
 var bufferSize = Math.Min(10_000, maxInFlight / 10);
 
 Console.WriteLine($"Total Events: {totalEvents:N0} events");
@@ -29,6 +29,7 @@ Console.WriteLine();
 
 Console.WriteLine("--- Elastic.Channel write/read to completion---");
 var expectedSentBuffers = Math.Max(1, totalEvents / bufferSize);
+Console.WriteLine($"Max concurrency: {concurrency:N0}");
 Console.WriteLine($"Max outbound buffer: {bufferSize:N0}");
 Console.WriteLine($"Expected outbound buffers: {expectedSentBuffers:N0}");
 sw.Reset();
@@ -37,6 +38,9 @@ var (writtenElastic, channel) = await Drain.ElasticChannel(totalEvents, maxInFli
 sw.Stop();
 messagePerSec = totalEvents / sw.Elapsed.TotalSeconds;
 
+Console.WriteLine();
+// channel is a DiagnosticBufferedChannel that pretty prints a lot of useful information
+Console.WriteLine(channel);
 Console.WriteLine();
 
 Console.WriteLine($"Written buffers: {channel.SentBuffersCount:N0}");

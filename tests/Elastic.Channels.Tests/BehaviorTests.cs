@@ -5,6 +5,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Elastic.Channels.Diagnostics;
 using FluentAssertions;
 using Xunit;
 using Xunit.Abstractions;

@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System.Threading.Channels;
+using Elastic.Channels.Diagnostics;
 
 namespace Elastic.Channels.Example;
 
@@ -38,7 +39,7 @@ public static class Drain
 		return (written, read);
 	}
 
-	public static async Task<(int, NoopBufferedChannel)> ElasticChannel(
+	public static async Task<(int, DiagnosticsBufferedChannel)> ElasticChannel(
 		int totalEvents, int maxInFlight, int bufferSize, int concurrency, int expectedSentBuffers)
 	{
 		var written = 0;
@@ -48,9 +49,11 @@ public static class Drain
 			WaitHandle = new CountdownEvent(expectedSentBuffers),
 			MaxInFlightMessages = maxInFlight,
 			MaxConsumerBufferSize = bufferSize,
-			ConcurrentConsumers = concurrency
+			ConcurrentConsumers = concurrency,
+			MaxConsumerBufferLifetime = TimeSpan.FromSeconds(20)
+
 		};
-		var channel = new NoopBufferedChannel(bufferOptions);
+		var channel = new DiagnosticsBufferedChannel(bufferOptions, observeConcurrency: false);
 
 		for (var i = 0; i < totalEvents; i++)
 		{
