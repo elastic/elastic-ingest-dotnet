@@ -33,6 +33,7 @@ public abstract class BufferedChannelBase<TEvent, TResponse> : BufferedChannelBa
 {
 	protected BufferedChannelBase(ChannelOptionsBase<TEvent, TResponse> options) : base(options) { }
 }
+
 public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	: ChannelWriter<TEvent>, IBufferedChannel<TEvent>
 	where TChannelOptions : ChannelOptionsBase<TEvent, TResponse>
@@ -47,9 +48,11 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		Options = options;
 		var maxConsumers = Math.Max(1, BufferOptions.ConcurrentConsumers);
 		_throttleTasks = new SemaphoreSlim(maxConsumers, maxConsumers);
-		InChannel = Channel.CreateBounded<TEvent>(new BoundedChannelOptions(BufferOptions.MaxInFlightMessages)
+		var maxIn = Math.Max(1, BufferOptions.MaxInFlightMessages);
+		InChannel = Channel.CreateBounded<TEvent>(new BoundedChannelOptions(maxIn)
 		{
 			SingleReader = false,
+			SingleWriter = false,
 			// Stephen Toub comment: https://github.com/dotnet/runtime/issues/26338#issuecomment-393720727
 			// AFAICT this is fine since we run in a dedicated long running task.
 			AllowSynchronousContinuations = true,
@@ -57,8 +60,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			// DropWrite will make `TryWrite` always return true, which is not what we want.
 			FullMode = BoundedChannelFullMode.Wait
 		});
+		// The minimum out buffer the max of (1 or MaxConsumerBufferSize) as long as it does not exceed MaxInFlightMessages
+		var maxOut = Math.Min(BufferOptions.MaxInFlightMessages, Math.Max(1, BufferOptions.MaxConsumerBufferSize));
 		OutChannel = Channel.CreateBounded<IOutboundBuffer<TEvent>>(
-			new BoundedChannelOptions(BufferOptions.MaxInFlightMessages / BufferOptions.MaxConsumerBufferSize)
+			new BoundedChannelOptions(maxOut)
 			{
 				SingleReader = false,
 				SingleWriter = true,
@@ -72,7 +77,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 		var waitHandle = BufferOptions.WaitHandle;
 		_inThread = Task.Factory.StartNew(async () =>
-				await ConsumeInboundEvents(BufferOptions.MaxConsumerBufferSize, BufferOptions.MaxConsumerBufferLifetime)
+				await ConsumeInboundEvents(maxOut, BufferOptions.MaxConsumerBufferLifetime)
 					.ConfigureAwait(false)
 			, TaskCreationOptions.LongRunning
 		);
@@ -126,7 +131,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var taskList = new List<Task>(maxConsumers);
 
 		while (await OutChannel.Reader.WaitToReadAsync().ConfigureAwait(false))
-		// ReSharper disable once RemoveRedundantBraces
+			// ReSharper disable once RemoveRedundantBraces
 		{
 			while (OutChannel.Reader.TryRead(out var buffer))
 			{
@@ -189,7 +194,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		{
 			while (inboundBuffer.Count < maxQueuedMessages && InChannel.Reader.TryRead(out var item))
 			{
-				if (inboundBuffer.DurationSinceFirstWrite > maxInterval) break;
+				if (inboundBuffer.DurationSinceFirstWrite > maxInterval)
+					break;
 
 				inboundBuffer.Add(item);
 			}
@@ -198,12 +204,33 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 			var outboundBuffer = new OutboundBuffer<TEvent>(inboundBuffer);
 			inboundBuffer.Reset();
-			if (OutChannel.Writer.TryWrite(outboundBuffer))
+
+			if (await PublishAsync(outboundBuffer).ConfigureAwait(false))
 				continue;
 
 			foreach (var e in inboundBuffer.Buffer)
 				Options.PublishRejectionCallback?.Invoke(e);
 		}
+	}
+
+	private ValueTask<bool> PublishAsync(IOutboundBuffer<TEvent> buffer)
+	{
+		async Task<bool> AsyncSlowPath(IOutboundBuffer<TEvent> b)
+		{
+			var maxRetries = Options.BufferOptions.MaxRetries;
+			for (var i = 0; i <= maxRetries; i++)
+				while (await OutChannel.Writer.WaitToWriteAsync().ConfigureAwait(false))
+				{
+					Options.OutboundChannelRetryCallback?.Invoke(i);
+					if (OutChannel.Writer.TryWrite(b))
+						return true;
+				}
+			return false;
+		}
+
+		return OutChannel.Writer.TryWrite(buffer)
+			? new ValueTask<bool>(true)
+			: new ValueTask<bool>(AsyncSlowPath(buffer));
 	}
 
 	public virtual void Dispose()

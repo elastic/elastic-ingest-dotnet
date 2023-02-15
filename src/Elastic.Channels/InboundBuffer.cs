@@ -28,7 +28,8 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 
 	public int Count => Buffer.Count;
 	public TimeSpan? DurationSinceFirstWrite => DateTimeOffset.UtcNow - TimeOfFirstWrite;
-	public bool NoThresholdsHit => Count == 0 || (Count < _maxBufferSize && DurationSinceFirstWrite <= _forceFlushAfter);
+	public bool NoThresholdsHit => Count == 0
+		|| (Count < _maxBufferSize && DurationSinceFirstWrite <= _forceFlushAfter);
 
 	public InboundBuffer(int maxBufferSize, TimeSpan forceFlushAfter)
 	{
@@ -71,7 +72,7 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 	/// <summary>
 	/// Call <see cref="ChannelReader{T}.WaitToReadAsync"/> with a timeout to force a flush to happen every
 	/// <see cref="_forceFlushAfter"/>. This tries to avoid allocation too many <see cref="CancellationTokenSource"/>'s
-	/// needlessly and reuses them if possible. If we know the buffer is empty we can wait indefinitely as well.
+	/// needlessly and reuses them if possible.
 	/// </summary>
 	public async Task<bool> WaitToReadAsync(ChannelReader<TEvent> reader)
 	{
@@ -83,11 +84,10 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 
 		try
 		{
-			//if we have nothing in the buffer wait indefinitely for messages
-			var w = Count == 0 ? TimeSpan.FromMilliseconds(-1) : Wait;
+			var w = Count == 0 ? _forceFlushAfter : Wait;
 			_breaker.CancelAfter(w);
 			var _ = await reader.WaitToReadAsync(_breaker.Token).ConfigureAwait(false);
-			_breaker.CancelAfter(_forceFlushAfter);
+			_breaker.CancelAfter(-1);
 			return true;
 		}
 		catch (Exception) when (_breaker.IsCancellationRequested)
@@ -98,7 +98,7 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 		}
 		catch (Exception)
 		{
-			_breaker.CancelAfter(_forceFlushAfter);
+			_breaker.CancelAfter(-1);
 			return true;
 		}
 	}

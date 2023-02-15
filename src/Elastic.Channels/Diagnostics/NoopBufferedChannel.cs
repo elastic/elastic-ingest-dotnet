@@ -7,7 +7,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Elastic.Channels;
+namespace Elastic.Channels.Diagnostics;
 
 /// <summary>
 /// A NOOP implementation of <see cref="BufferedChannelBase{TEvent,TResponse}"/> that:

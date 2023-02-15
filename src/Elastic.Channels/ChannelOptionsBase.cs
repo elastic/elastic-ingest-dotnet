@@ -38,6 +38,12 @@ namespace Elastic.Channels
 
 		/// <summary> A generic hook to be notified of any bulk request being initiated by <see cref="InboundBuffer{TEvent}"/> </summary>
 		public Action<TResponse, IWriteTrackingBuffer>? ResponseCallback { get; set; }
+
+		/// <summary>
+		/// Called everytime a publish to the outbound channel failed to write and will be retried.
+		/// Pushes to the outbound channel follow the same exponential backoff as <see cref="Elastic.Channels.BufferOptions.BackoffPeriod"/>
+		/// </summary>
+		public Action<int>? OutboundChannelRetryCallback { get; set; }
 	}
 
 }
