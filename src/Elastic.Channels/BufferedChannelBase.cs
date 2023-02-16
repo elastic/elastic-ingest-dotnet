@@ -42,6 +42,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	private readonly Task _inThread;
 	private readonly Task _outThread;
 	private readonly SemaphoreSlim _throttleTasks;
+	private readonly CountdownEvent? _signal;
 
 	protected BufferedChannelBase(TChannelOptions options)
 	{
@@ -49,6 +50,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		Options = options;
 		var maxConsumers = Math.Max(1, BufferOptions.ConcurrentConsumers);
 		_throttleTasks = new SemaphoreSlim(maxConsumers, maxConsumers);
+		_signal = options.BufferOptions.WaitHandle;
 		var maxIn = Math.Max(1, BufferOptions.MaxInFlightMessages);
 		InChannel = Channel.CreateBounded<TEvent>(new BoundedChannelOptions(maxIn)
 		{
@@ -83,11 +85,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			, TaskCreationOptions.LongRunning
 		);
 
-		_outThread = Task.Factory.StartNew(async () =>
-				await ConsumeOutboundEvents(waitHandle)
-					.ConfigureAwait(false)
-			, TaskCreationOptions.LongRunning
-		);
+		_outThread = Task.Factory.StartNew(async () => await ConsumeOutboundEvents().ConfigureAwait(false), TaskCreationOptions.LongRunning);
 	}
 
 	public TChannelOptions Options { get; }
@@ -129,7 +127,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		IWriteTrackingBuffer statistics
 	) => DefaultRetryBuffer;
 
-	private async Task ConsumeOutboundEvents(CountdownEvent? countdown)
+	private async Task ConsumeOutboundEvents()
 	{
 		var maxConsumers = Options.BufferOptions.ConcurrentConsumers;
 		var taskList = new List<Task>(maxConsumers);
@@ -138,12 +136,13 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			// ReSharper disable once RemoveRedundantBraces
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
+			if (_signal is { IsSet: true }) break;
 
 			while (OutChannel.Reader.TryRead(out var buffer))
 			{
 				var items = buffer.Items;
 				await _throttleTasks.WaitAsync().ConfigureAwait(false);
-				var t = ExportBuffer(countdown, items, buffer);
+				var t = ExportBuffer(items, buffer);
 				taskList.Add(t);
 
 				if (taskList.Count >= maxConsumers)
@@ -157,12 +156,13 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		await Task.WhenAll(taskList).ConfigureAwait(false);
 	}
 
-	private async Task ExportBuffer(CountdownEvent? countdown, IReadOnlyCollection<TEvent> items, IWriteTrackingBuffer buffer)
+	private async Task ExportBuffer(IReadOnlyCollection<TEvent> items, IWriteTrackingBuffer buffer)
 	{
 		var maxRetries = Options.BufferOptions.MaxRetries;
 		for (var i = 0; i <= maxRetries && items.Count > 0; i++)
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
+			if (_signal is { IsSet: true }) break;
 
 			Options.BulkAttemptCallback?.Invoke(i, items.Count);
 			TResponse? response;
@@ -191,7 +191,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 				Options.MaxRetriesExceededCallback?.Invoke(items);
 		}
 		Options.BufferOptions.BufferFlushCallback?.Invoke();
-		countdown?.Signal();
+		if (_signal is { IsSet: false })
+			_signal.Signal();
 	}
 
 	private async Task ConsumeInboundEvents(int maxQueuedMessages, TimeSpan maxInterval)
@@ -201,12 +202,13 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		while (await inboundBuffer.WaitToReadAsync(InChannel.Reader).ConfigureAwait(false))
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
+			if (_signal is { IsSet: true }) break;
 
 			while (inboundBuffer.Count < maxQueuedMessages && InChannel.Reader.TryRead(out var item))
 			{
 				inboundBuffer.Add(item);
 
-				if (inboundBuffer.DurationSinceReset >= maxInterval)
+				if (inboundBuffer.DurationSinceFirstWaitToRead >= maxInterval)
 					break;
 			}
 

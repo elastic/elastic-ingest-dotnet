@@ -17,9 +17,14 @@ namespace Elastic.Channels.Diagnostics;
 /// </summary>
 public class DiagnosticsBufferedChannel : NoopBufferedChannel
 {
-	public DiagnosticsBufferedChannel(BufferOptions options, bool observeConcurrency = false)
-		: base(options, observeConcurrency) =>
-		Listener = new ChannelListener<NoopEvent, NoopResponse>().Register(Options);
+	private readonly string? _name;
+
+	public DiagnosticsBufferedChannel(BufferOptions options, bool observeConcurrency = false, string? name = null)
+		: base(options, observeConcurrency)
+	{
+		_name = name;
+		Listener = new ChannelListener<NoopEvent, NoopResponse>(_name).Register(Options);
+	}
 
 	public ChannelListener<NoopEvent, NoopResponse> Listener { get; }
 

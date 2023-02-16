@@ -9,11 +9,14 @@ namespace Elastic.Channels.Diagnostics;
 
 public class ChannelListener<TEvent, TResponse>
 {
+	private readonly string? _name;
 	private int _bufferFlushCallback;
 
 	public Exception? ObservedException { get; private set; }
 
 	public virtual bool PublishSuccess => ObservedException == null && _bufferFlushCallback > 0 && _maxRetriesExceeded == 0 && _items > 0;
+
+	public ChannelListener(string? name = null) => _name = name;
 
 	private int _responses;
 	private int _rejections;
@@ -43,7 +46,7 @@ public class ChannelListener<TEvent, TResponse>
 
 	protected virtual string AdditionalData => string.Empty;
 
-	public override string ToString() => $@"{(!PublishSuccess ? "Failed" : "Successful")} publish over channel.
+	public override string ToString() => $@"{(!PublishSuccess ? "Failed" : "Successful")} publish over channel: {_name ?? nameof(ChannelListener<TEvent, TResponse>)}.
 Consumed on outbound: {_items:N0}
 Flushes: {_bufferFlushCallback:N0}
 Responses: {_responses:N0}

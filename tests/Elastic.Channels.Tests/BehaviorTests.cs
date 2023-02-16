@@ -110,10 +110,10 @@ namespace Elastic.Channels.Tests
 				{
 					WaitHandle = new CountdownEvent(expectedSentBuffers),
 					MaxInFlightMessages = maxInFlight,
-					MaxConsumerBufferSize = bufferSize,
-					MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(50)
+					MaxConsumerBufferSize = 10_000,
+					MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(200)
 				};
-				using var channel = new NoopBufferedChannel(bufferOptions);
+				using var channel = new DiagnosticsBufferedChannel(bufferOptions, name: $"Thread {c}");
 				var written = 0;
 				var _ = Task.Factory.StartNew(async () =>
 				{
@@ -123,15 +123,48 @@ namespace Elastic.Channels.Tests
 						if (await channel.WaitToWriteAsync(e))
 							written++;
 					}
-				});
+				}, TaskCreationOptions.LongRunning);
 				// wait for some work to have progressed
 				bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(500));
-				channel.SentBuffersCount.Should().BeGreaterThan(0, "Parallel invocation: {0}", c);
+				channel.SentBuffersCount.Should().BeGreaterThan(0, "Parallel invocation: {0} channel: {1}", c, channel);
 				written.Should().BeGreaterThan(0).And.BeLessThan(totalEvents);
-				closedThread++;
+				Interlocked.Increment(ref closedThread);
 			});
 
 			closedThread.Should().BeGreaterThan(0).And.Be(maxFor);
+		}
+
+		[Fact] public async Task SlowlyPushEvents()
+		{
+			int totalEvents = 50_000_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
+			var expectedSentBuffers = totalEvents / bufferSize;
+			var bufferOptions = new BufferOptions
+			{
+				WaitHandle = new CountdownEvent(expectedSentBuffers),
+				MaxInFlightMessages = maxInFlight,
+				MaxConsumerBufferSize = 10_000,
+				MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(100)
+			};
+			using var channel = new DiagnosticsBufferedChannel(bufferOptions, name: $"Slow push channel");
+			await Task.Delay(TimeSpan.FromMilliseconds(200));
+			var written = 0;
+			var _ = Task.Factory.StartNew(async () =>
+			{
+				for (var i = 0; i < totalEvents && !channel.Options.BufferOptions.WaitHandle.IsSet; i++)
+				{
+					var e = new NoopBufferedChannel.NoopEvent();
+					if (await channel.WaitToWriteAsync(e).ConfigureAwait(false))
+						written++;
+					await Task.Delay(TimeSpan.FromMilliseconds(40)).ConfigureAwait(false);
+				}
+			}, TaskCreationOptions.LongRunning);
+			// wait for some work to have progressed
+			bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(500));
+			//Ensure we written to the channel but not enough to satisfy MaxConsumerBufferSize
+			written.Should().BeGreaterThan(0).And.BeLessThan(10_000);
+			//even though MaxConsumerBufferSize was not hit we should still observe an invocation to Send()
+			//because MaxConsumerBufferLifeTime was hit
+			channel.SentBuffersCount.Should().BeGreaterThan(0, "{0}", channel);
 		}
 	}
 }
