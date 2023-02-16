@@ -29,7 +29,7 @@ InboundBuffer Count: {InboundBuffer.Count:N0}
 InboundBuffer Duration Since First Wait: {InboundBuffer.DurationSinceFirstWaitToRead}
 InboundBuffer Duration Since First Write: {InboundBuffer.DurationSinceFirstWrite}
 InboundBuffer No Thresholds hit: {InboundBuffer.NoThresholdsHit}
-Send Invocations: {SentBuffersCount:N0}
+Exported Buffers: {ExportedBuffers:N0}
 Observed Concurrency: {ObservedConcurrency:N0}
 ------------------------------------------";
 }

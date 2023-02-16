@@ -39,7 +39,7 @@ namespace Elastic.Channels.Tests
 			var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(5));
 			signalled.Should().BeTrue("The channel was not drained in the expected time");
 			written.Should().Be(totalEvents);
-			channel.SentBuffersCount.Should().Be(expectedSentBuffers);
+			channel.ExportedBuffers.Should().Be(expectedSentBuffers);
 		}
 
 		/// <summary>
@@ -69,7 +69,7 @@ namespace Elastic.Channels.Tests
 			var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(1));
 			signalled.Should().BeTrue("The channel was not drained in the expected time");
 			written.Should().Be(100);
-			channel.SentBuffersCount.Should().Be(1);
+			channel.ExportedBuffers.Should().Be(1);
 		}
 
 		[Fact] public async Task ConcurrencyIsApplied()
@@ -96,7 +96,7 @@ namespace Elastic.Channels.Tests
 			var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(5));
 			signalled.Should().BeTrue("The channel was not drained in the expected time");
 			written.Should().Be(totalEvents);
-			channel.SentBuffersCount.Should().Be(expectedPages);
+			channel.ExportedBuffers.Should().Be(expectedPages);
 			channel.ObservedConcurrency.Should().Be(4);
 		}
 
@@ -130,7 +130,7 @@ namespace Elastic.Channels.Tests
 				bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(500));
 
 				written.Should().BeGreaterThan(0).And.BeLessThan(totalEvents);
-				channel.SentBuffersCount.Should().BeGreaterThan(0, "Parallel invocation: {0} channel: {1}", taskNumber, channel);
+				channel.ExportedBuffers.Should().BeGreaterThan(0, "Parallel invocation: {0} channel: {1}", taskNumber, channel);
 				Interlocked.Increment(ref closedThread);
 				return t;
 			}
@@ -170,9 +170,9 @@ namespace Elastic.Channels.Tests
 			bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(500));
 			//Ensure we written to the channel but not enough to satisfy MaxConsumerBufferSize
 			written.Should().BeGreaterThan(0).And.BeLessThan(10_000);
-			//even though MaxConsumerBufferSize was not hit we should still observe an invocation to Send()
+			//even though MaxConsumerBufferSize was not hit we should still observe an invocation to Export()
 			//because MaxConsumerBufferLifeTime was hit
-			channel.SentBuffersCount.Should().BeGreaterThan(0, "{0}", channel);
+			channel.ExportedBuffers.Should().BeGreaterThan(0, "{0}", channel);
 		}
 	}
 }

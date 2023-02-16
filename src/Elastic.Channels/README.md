@@ -10,7 +10,7 @@ This allows data of various rates to pushed in the same manner while different i
 This package serves mainly as a core library with abstract classes 
 and does not ship any useful implementations.
 
-It ships with a `NoopBufferedChannel` implementation that does nothing in its `Send` implementation for unit test and benchmark purposes.
+It ships with a `NoopBufferedChannel` implementation that does nothing in its `ExporExport implementation for unit test and benchmark purposes.
 
 
 ## BufferedChannelBase<>
@@ -18,7 +18,7 @@ It ships with a `NoopBufferedChannel` implementation that does nothing in its `S
 An abstract class that requires implementers to implement:
 
 ```csharp
-protected abstract Task<TResponse> Send(IReadOnlyCollection<TEvent> buffer);
+protected abstract Task<TResponse> Export(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx);
 ```
 
 Any implementation allows data to pushed to it through:
@@ -51,7 +51,7 @@ public class NoopBufferedChannel
   public NoopBufferedChannel(NoopChannelOptions options) 
     : base(options) { }
 
-  protected override Task<Response> Send(IReadOnlyCollection<NoopEvent> buffer)
+  protected override Task<Response> Export(IReadOnlyCollection<NoopEvent> buffer, CancellationToken ctx)
   {
     return Task.FromResult(new Response());
   }
@@ -66,6 +66,10 @@ if (await noopChannel.WaitToWriteAsync(e))
 	written++;
 ```
 
+Both `NoopBufferedChannel` and a more specialized `DiagnosticsBufferedChannel` exist for test or debugging purposes.
+
+`DiagnosticsBufferedChannel.ToString()` uncovers a lot of insights into the state machinery. 
+
 
 ## BufferOptions
 
@@ -76,9 +80,9 @@ Each `ChannelOptionsBase<>` implementation takes and exposes a `BufferOptions` i
 |-----------------------------|------------------------------------------------------------------------------------------------------------------------------|
 | `MaxInFlightMessages`       | The maximum number of in flight instances that can be queued in memory. If this threshold is reached, events will be dropped |
 | `MaxConsumerBufferSize`     | The number of events a local buffer should reach before sending the events in a single call to Elasticsearch.                |
-| `MaxRetries`                | The maximum number of retries over `Send`                                                                                    |
+| `MaxRetries`                | The maximum number of retries over `Export`                                                                                  |
 | `MaxConsumerBufferLifetime` | The maximum age of buffer before its flushed                                                                                 |
-| `ConcurrentConsumers`       | Controls how many concurrent `Send` operations may occur                                                                     |
+| `ConcurrentConsumers`       | Controls how many concurrent `Export` operations may occur                                                                   |
 | `BackOfPeriod`              | Func that calculates an appropriate backoff time for a retry                                                                 |
 | `BufferFlushCallback`       | Called `once` whenever a buffer is flushed, excluding retries                                                                |
 | `WaitHandle`                | Inject a waithandle that will be signalled after each flush, excluding retries.                                              |

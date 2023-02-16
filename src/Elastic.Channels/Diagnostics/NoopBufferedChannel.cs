@@ -11,7 +11,7 @@ namespace Elastic.Channels.Diagnostics;
 
 /// <summary>
 /// A NOOP implementation of <see cref="BufferedChannelBase{TEvent,TResponse}"/> that:
-/// <para> -tracks the number of times <see cref="Export"/> is invoked under <see cref="SentBuffersCount"/> </para>
+/// <para> -tracks the number of times <see cref="Export"/> is invoked under <see cref="ExportedBuffers"/> </para>
 /// <para> -observes the maximum concurrent calls to <see cref="Export"/> under <see cref="ObservedConcurrency"/> </para>
 /// </summary>
 public class NoopBufferedChannel
@@ -31,15 +31,15 @@ public class NoopBufferedChannel
 		ObserverConcurrency = observeConcurrency
 	}) { }
 
-	private long _sentBuffersCount;
-	public long SentBuffersCount => _sentBuffersCount;
+	private long _exportedBuffers;
+	public long ExportedBuffers => _exportedBuffers;
 
 	private int _currentMax;
 	public int ObservedConcurrency { get; private set; }
 
 	protected override async Task<NoopResponse> Export(IReadOnlyCollection<NoopEvent> buffer, CancellationToken ctx = default)
 	{
-		Interlocked.Increment(ref _sentBuffersCount);
+		Interlocked.Increment(ref _exportedBuffers);
 		if (!Options.ObserverConcurrency) return new NoopResponse();
 
 		var max = Interlocked.Increment(ref _currentMax);

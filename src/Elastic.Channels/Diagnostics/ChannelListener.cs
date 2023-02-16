@@ -69,8 +69,8 @@ Outbound Buffer Read Loop Started: {_outboundChannelStarted}
 Outbound Buffer Read Loop Exited: {_outboundChannelExited}
 Outbound Buffer Publishes: {_outboundPublishes:N0}
 Outbound Buffer Publish Failures: {_outboundPublishes:N0}
-Send() Retries: {_retries:N0}
-Send() Exhausts: {_maxRetriesExceeded:N0}{AdditionalData}
+Export() Retries: {_retries:N0}
+Export() Exhausts: {_maxRetriesExceeded:N0}{AdditionalData}
 Exception: {ObservedException}
 ";
 }
