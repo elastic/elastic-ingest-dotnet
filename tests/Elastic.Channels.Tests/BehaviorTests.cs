@@ -110,8 +110,8 @@ namespace Elastic.Channels.Tests
 				{
 					WaitHandle = new CountdownEvent(expectedSentBuffers),
 					MaxInFlightMessages = maxInFlight,
-					MaxConsumerBufferSize = 1000,
-					MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(20)
+					MaxConsumerBufferSize = bufferSize,
+					MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(50)
 				};
 				using var channel = new NoopBufferedChannel(bufferOptions);
 				var written = 0;

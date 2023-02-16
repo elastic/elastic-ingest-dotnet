@@ -204,10 +204,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 			while (inboundBuffer.Count < maxQueuedMessages && InChannel.Reader.TryRead(out var item))
 			{
-				if (inboundBuffer.DurationSinceFirstWrite > maxInterval)
-					break;
-
 				inboundBuffer.Add(item);
+
+				if (inboundBuffer.DurationSinceReset >= maxInterval)
+					break;
 			}
 
 			if (inboundBuffer.NoThresholdsHit) continue;
