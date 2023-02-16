@@ -22,8 +22,14 @@ public class DiagnosticsBufferedChannel : NoopBufferedChannel
 
 	public ChannelListener<NoopEvent, NoopResponse> Listener { get; }
 
-	public override string ToString() => $@"{Listener}
+	public override string ToString() => $@"------------------------------------------
+{Listener}
+
+InboundBuffer Count: {InboundBuffer.Count:N0}
+InboundBuffer Duration Since First Wait: {InboundBuffer.DurationSinceFirstWaitToRead}
+InboundBuffer Duration Since First Write: {InboundBuffer.DurationSinceFirstWrite}
+InboundBuffer No Thresholds hit: {InboundBuffer.NoThresholdsHit}
 Send Invocations: {SentBuffersCount:N0}
 Observed Concurrency: {ObservedConcurrency:N0}
-";
+------------------------------------------";
 }

@@ -78,6 +78,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 				FullMode = BoundedChannelFullMode.Wait
 			});
 
+		_outThread = Task.Factory.StartNew(async () => await ConsumeOutboundEvents().ConfigureAwait(false), TaskCreationOptions.LongRunning);
+
 		var waitHandle = BufferOptions.WaitHandle;
 		_inThread = Task.Factory.StartNew(async () =>
 				await ConsumeInboundEvents(maxOut, BufferOptions.MaxConsumerBufferLifetime)
@@ -85,8 +87,9 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			, TaskCreationOptions.LongRunning
 		);
 
-		_outThread = Task.Factory.StartNew(async () => await ConsumeOutboundEvents().ConfigureAwait(false), TaskCreationOptions.LongRunning);
+		InboundBuffer = new InboundBuffer<TEvent>(maxOut, BufferOptions.MaxConsumerBufferLifetime);
 	}
+
 
 	public TChannelOptions Options { get; }
 
@@ -94,6 +97,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	protected Channel<IOutboundBuffer<TEvent>> OutChannel { get; }
 	protected Channel<TEvent> InChannel { get; }
 	protected BufferOptions BufferOptions => Options.BufferOptions;
+	internal InboundBuffer<TEvent> InboundBuffer { get; }
 
 	public override ValueTask<bool> WaitToWriteAsync(CancellationToken ctx = default) => InChannel.Writer.WaitToWriteAsync(ctx);
 
@@ -111,7 +115,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		ctx = ctx == default ? TokenSource.Token : ctx;
 		if (await InChannel.Writer.WaitToWriteAsync(ctx).ConfigureAwait(false) &&
-		    InChannel.Writer.TryWrite(item)) return true;
+		    InChannel.Writer.TryWrite(item))
+		{
+			Options.PublishToInboundChannel?.Invoke();
+			return true;
+		}
+		Options.PublishToInboundChannelFailure?.Invoke();
 
 		Options.PublishRejectionCallback?.Invoke(item);
 		return false;
@@ -197,31 +206,33 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	private async Task ConsumeInboundEvents(int maxQueuedMessages, TimeSpan maxInterval)
 	{
-		using var inboundBuffer = new InboundBuffer<TEvent>(maxQueuedMessages, maxInterval);
-
-		while (await inboundBuffer.WaitToReadAsync(InChannel.Reader).ConfigureAwait(false))
+		Options.OutboundChannelStarted?.Invoke();
+		while (await InboundBuffer.WaitToReadAsync(InChannel.Reader).ConfigureAwait(false))
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
 			if (_signal is { IsSet: true }) break;
 
-			while (inboundBuffer.Count < maxQueuedMessages && InChannel.Reader.TryRead(out var item))
+			while (InboundBuffer.Count < maxQueuedMessages && InChannel.Reader.TryRead(out var item))
 			{
-				inboundBuffer.Add(item);
+				InboundBuffer.Add(item);
 
-				if (inboundBuffer.DurationSinceFirstWaitToRead >= maxInterval)
+				if (InboundBuffer.DurationSinceFirstWaitToRead >= maxInterval)
 					break;
 			}
 
-			if (inboundBuffer.NoThresholdsHit) continue;
-
-			var outboundBuffer = new OutboundBuffer<TEvent>(inboundBuffer);
-			inboundBuffer.Reset();
-
 			Options.PublishToOutboundChannel?.Invoke();
+			if (InboundBuffer.NoThresholdsHit) continue;
+
+			//:w
+			//Options.PublishToOutboundChannel?.Invoke();
+
+			var outboundBuffer = new OutboundBuffer<TEvent>(InboundBuffer);
+			InboundBuffer.Reset();
+
 			if (await PublishAsync(outboundBuffer).ConfigureAwait(false))
 				continue;
 
-			foreach (var e in inboundBuffer.Buffer)
+			foreach (var e in InboundBuffer.Buffer)
 				Options.PublishRejectionCallback?.Invoke(e);
 		}
 	}
@@ -248,6 +259,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	public virtual void Dispose()
 	{
+		InboundBuffer.Dispose();
 		try
 		{
 			TokenSource.Cancel();

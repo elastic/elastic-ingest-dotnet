@@ -88,7 +88,6 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 
 		try
 		{
-			//var w = Count == 0 ? _forceFlushAfter : Wait;
 			_breaker.CancelAfter(Wait);
 			var _ = await reader.WaitToReadAsync(_breaker.Token).ConfigureAwait(false);
 			_breaker.CancelAfter(-1);
@@ -102,7 +101,7 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 		}
 		catch (Exception)
 		{
-			_breaker.CancelAfter(-1);
+			_breaker.CancelAfter(Wait);
 			return true;
 		}
 	}

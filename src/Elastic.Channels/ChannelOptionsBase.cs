@@ -39,8 +39,16 @@ namespace Elastic.Channels
 		/// <summary> A generic hook to be notified of any bulk request being initiated by <see cref="InboundBuffer{TEvent}"/> </summary>
 		public Action<TResponse, IWriteTrackingBuffer>? ExportResponseCallback { get; set; }
 
+		/// <summary>Called everytime an event is written to the inbound channel </summary>
+		public Action? PublishToInboundChannel { get; set; }
+
+		/// <summary>Called everytime an event is not written to the inbound channel </summary>
+		public Action? PublishToInboundChannelFailure { get; set; }
+
 		/// <summary>Called everytime the inbound channel publishes to the outbound channel. </summary>
 		public Action? PublishToOutboundChannel { get; set; }
+
+		public Action? OutboundChannelStarted { get; set; }
 
 		/// <summary>Called everytime the inbound channel fails to publish to the outbound channel. </summary>
 		public Action? PublishToOutboundChannelFailure { get; set; }

@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels.Diagnostics;
@@ -99,25 +100,26 @@ namespace Elastic.Channels.Tests
 			channel.ObservedConcurrency.Should().Be(4);
 		}
 
-		[Fact] public void ManyChannelsContinueToDoWork()
+		[Fact] public async Task ManyChannelsContinueToDoWork()
 		{
 			int totalEvents = 50_000_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
-			int closedThread = 0, maxFor = 10;
-			Parallel.For(0, maxFor, c =>
+			int closedThread = 0, maxFor = Environment.ProcessorCount;
+			var expectedSentBuffers = totalEvents / bufferSize;
+
+			Task StartChannel(int taskNumber)
 			{
-				var expectedSentBuffers = totalEvents / bufferSize;
 				var bufferOptions = new BufferOptions
 				{
 					WaitHandle = new CountdownEvent(expectedSentBuffers),
 					MaxInFlightMessages = maxInFlight,
-					MaxConsumerBufferSize = 10_000,
-					MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(200)
+					MaxConsumerBufferSize = 1000,
+					MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(20)
 				};
-				using var channel = new DiagnosticsBufferedChannel(bufferOptions, name: $"Thread {c}");
+				using var channel = new DiagnosticsBufferedChannel(bufferOptions, name: $"Task {taskNumber}");
 				var written = 0;
-				var _ = Task.Factory.StartNew(async () =>
+				var t = Task.Factory.StartNew(async () =>
 				{
-					for (var i = 0; i < totalEvents && !channel.Options.BufferOptions.WaitHandle.IsSet; i++)
+					for (var i = 0; i < totalEvents; i++)
 					{
 						var e = new NoopBufferedChannel.NoopEvent();
 						if (await channel.WaitToWriteAsync(e))
@@ -125,11 +127,19 @@ namespace Elastic.Channels.Tests
 					}
 				}, TaskCreationOptions.LongRunning);
 				// wait for some work to have progressed
+				t.Status.Should().NotBe(TaskStatus.WaitingForActivation);
+				t.Status.Should().NotBe(TaskStatus.WaitingToRun);
 				bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(500));
-				channel.SentBuffersCount.Should().BeGreaterThan(0, "Parallel invocation: {0} channel: {1}", c, channel);
+
 				written.Should().BeGreaterThan(0).And.BeLessThan(totalEvents);
+				channel.SentBuffersCount.Should().BeGreaterThan(0, "Parallel invocation: {0} channel: {1}", taskNumber, channel);
 				Interlocked.Increment(ref closedThread);
-			});
+				return t;
+			}
+
+			var tasks = Enumerable.Range(0, maxFor).Select(i => Task.Factory.StartNew(() => StartChannel(i), TaskCreationOptions.LongRunning)).ToArray();
+
+			await Task.WhenAll(tasks);
 
 			closedThread.Should().BeGreaterThan(0).And.Be(maxFor);
 		}

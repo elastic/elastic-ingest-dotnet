@@ -18,13 +18,16 @@ public class ChannelListener<TEvent, TResponse>
 
 	public ChannelListener(string? name = null) => _name = name;
 
-	private int _responses;
-	private int _rejections;
-	private int _retries;
-	private int _items;
-	private int _maxRetriesExceeded;
-	private int _outboundPublishes;
-	private int _outboundPublishFailures;
+	private long _responses;
+	private long _rejections;
+	private long _retries;
+	private long _items;
+	private long _maxRetriesExceeded;
+	private long _outboundPublishes;
+	private long _outboundPublishFailures;
+	private long _inboundPublishes;
+	private long _inboundPublishFailures;
+	private bool _outboundChannelStarted;
 
 	// ReSharper disable once MemberCanBeProtected.Global
 	public ChannelListener<TEvent, TResponse> Register(ChannelOptionsBase<TEvent, TResponse> options)
@@ -38,8 +41,11 @@ public class ChannelListener<TEvent, TResponse>
 		options.ExportRetryCallback = _ => Interlocked.Increment(ref _retries);
 		options.ExportResponseCallback = (_, _) => Interlocked.Increment(ref _responses);
 		options.ExportMaxRetriesCallback = _ => Interlocked.Increment(ref _maxRetriesExceeded);
+		options.PublishToInboundChannel = () => Interlocked.Increment(ref _inboundPublishes);
+		options.PublishToInboundChannelFailure = () => Interlocked.Increment(ref _inboundPublishFailures);
 		options.PublishToOutboundChannel = () => Interlocked.Increment(ref _outboundPublishes);
 		options.PublishToOutboundChannelFailure = () => Interlocked.Increment(ref _outboundPublishFailures);
+		options.OutboundChannelStarted = () => _outboundChannelStarted = true;
 
 		if (options.ExceptionCallback == null) options.ExceptionCallback = e => ObservedException ??= e;
 		else options.ExceptionCallback += e => ObservedException ??= e;
@@ -52,7 +58,9 @@ public class ChannelListener<TEvent, TResponse>
 Total Exported Buffers: {_exportedBuffers:N0}
 Total Exported Items: {_items:N0}
 Responses: {_responses:N0}
-Inbound Buffer TryWrite failures: {_rejections:N0}
+Inbound Buffer Publishes: {_inboundPublishes:N0}
+Inbound Buffer Publish Failures: {_inboundPublishFailures:N0}
+Outbound Buffer Read Loop Started: {_outboundChannelStarted}
 Outbound Buffer Publishes: {_outboundPublishes:N0}
 Outbound Buffer Publish Failures: {_outboundPublishes:N0}
 Send() Retries: {_retries:N0}
