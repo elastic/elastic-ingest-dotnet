@@ -102,14 +102,15 @@ namespace Elastic.Channels.Tests
 		[Fact] public void ManyChannelsContinueToDoWork()
 		{
 			int totalEvents = 50_000_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
-			for (var c = 0; c < 10; c++)
+			int closedThread = 0, maxFor = 10;
+			Parallel.For(0, maxFor, c =>
 			{
 				var expectedSentBuffers = totalEvents / bufferSize;
 				var bufferOptions = new BufferOptions
 				{
 					WaitHandle = new CountdownEvent(expectedSentBuffers),
 					MaxInFlightMessages = maxInFlight,
-					MaxConsumerBufferSize = bufferSize,
+					MaxConsumerBufferSize = 1000,
 					MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(20)
 				};
 				using var channel = new NoopBufferedChannel(bufferOptions);
@@ -124,10 +125,13 @@ namespace Elastic.Channels.Tests
 					}
 				});
 				// wait for some work to have progressed
-				bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(50));
-				channel.SentBuffersCount.Should().BeGreaterThan(0);
-				written.Should().BeLessThan(totalEvents);
-			}
+				bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(500));
+				channel.SentBuffersCount.Should().BeGreaterThan(0, "Parallel invocation: {0}", c);
+				written.Should().BeGreaterThan(0).And.BeLessThan(totalEvents);
+				closedThread++;
+			});
+
+			closedThread.Should().BeGreaterThan(0).And.Be(maxFor);
 		}
 	}
 }
