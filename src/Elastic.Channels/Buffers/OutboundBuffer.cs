@@ -5,7 +5,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Elastic.Channels;
+namespace Elastic.Channels.Buffers;
 
 public interface IOutboundBuffer<out TEvent> : IWriteTrackingBuffer
 {
