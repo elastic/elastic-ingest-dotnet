@@ -49,6 +49,8 @@ namespace Elastic.Channels
 		public Action? PublishToOutboundChannel { get; set; }
 
 		public Action? OutboundChannelStarted { get; set; }
+		public Action? OutboundChannelExited { get; set; }
+		public Action? InboundChannelStarted { get; set; }
 
 		/// <summary>Called everytime the inbound channel fails to publish to the outbound channel. </summary>
 		public Action? PublishToOutboundChannelFailure { get; set; }

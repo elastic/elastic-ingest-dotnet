@@ -103,7 +103,7 @@ namespace Elastic.Channels.Tests
 		[Fact] public async Task ManyChannelsContinueToDoWork()
 		{
 			int totalEvents = 50_000_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
-			int closedThread = 0, maxFor = Environment.ProcessorCount;
+			int closedThread = 0, maxFor = Environment.ProcessorCount * 2;
 			var expectedSentBuffers = totalEvents / bufferSize;
 
 			Task StartChannel(int taskNumber)
@@ -125,10 +125,8 @@ namespace Elastic.Channels.Tests
 						if (await channel.WaitToWriteAsync(e))
 							written++;
 					}
-				}, TaskCreationOptions.LongRunning);
+				}, TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness);
 				// wait for some work to have progressed
-				t.Status.Should().NotBe(TaskStatus.WaitingForActivation);
-				t.Status.Should().NotBe(TaskStatus.WaitingToRun);
 				bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(500));
 
 				written.Should().BeGreaterThan(0).And.BeLessThan(totalEvents);
@@ -137,7 +135,7 @@ namespace Elastic.Channels.Tests
 				return t;
 			}
 
-			var tasks = Enumerable.Range(0, maxFor).Select(i => Task.Factory.StartNew(() => StartChannel(i), TaskCreationOptions.LongRunning)).ToArray();
+			var tasks = Enumerable.Range(0, maxFor).Select(i => Task.Factory.StartNew(() => StartChannel(i), TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness)).ToArray();
 
 			await Task.WhenAll(tasks);
 

@@ -28,6 +28,8 @@ public class ChannelListener<TEvent, TResponse>
 	private long _inboundPublishes;
 	private long _inboundPublishFailures;
 	private bool _outboundChannelStarted;
+	private bool _inboundChannelStarted;
+	private bool _outboundChannelExited;
 
 	// ReSharper disable once MemberCanBeProtected.Global
 	public ChannelListener<TEvent, TResponse> Register(ChannelOptionsBase<TEvent, TResponse> options)
@@ -45,7 +47,9 @@ public class ChannelListener<TEvent, TResponse>
 		options.PublishToInboundChannelFailure = () => Interlocked.Increment(ref _inboundPublishFailures);
 		options.PublishToOutboundChannel = () => Interlocked.Increment(ref _outboundPublishes);
 		options.PublishToOutboundChannelFailure = () => Interlocked.Increment(ref _outboundPublishFailures);
+		options.InboundChannelStarted = () => _inboundChannelStarted = true;
 		options.OutboundChannelStarted = () => _outboundChannelStarted = true;
+		options.OutboundChannelExited = () => _outboundChannelExited = true;
 
 		if (options.ExceptionCallback == null) options.ExceptionCallback = e => ObservedException ??= e;
 		else options.ExceptionCallback += e => ObservedException ??= e;
@@ -58,9 +62,11 @@ public class ChannelListener<TEvent, TResponse>
 Total Exported Buffers: {_exportedBuffers:N0}
 Total Exported Items: {_items:N0}
 Responses: {_responses:N0}
+Inbound Buffer Read Loop Started: {_inboundChannelStarted}
 Inbound Buffer Publishes: {_inboundPublishes:N0}
 Inbound Buffer Publish Failures: {_inboundPublishFailures:N0}
 Outbound Buffer Read Loop Started: {_outboundChannelStarted}
+Outbound Buffer Read Loop Exited: {_outboundChannelExited}
 Outbound Buffer Publishes: {_outboundPublishes:N0}
 Outbound Buffer Publish Failures: {_outboundPublishes:N0}
 Send() Retries: {_retries:N0}

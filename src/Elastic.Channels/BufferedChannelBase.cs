@@ -78,16 +78,16 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 				FullMode = BoundedChannelFullMode.Wait
 			});
 
-		_outThread = Task.Factory.StartNew(async () => await ConsumeOutboundEvents().ConfigureAwait(false), TaskCreationOptions.LongRunning);
+		InboundBuffer = new InboundBuffer<TEvent>(maxOut, BufferOptions.MaxConsumerBufferLifetime);
 
-		var waitHandle = BufferOptions.WaitHandle;
+		_outThread = Task.Factory.StartNew(async () => await ConsumeOutboundEvents().ConfigureAwait(false),
+			TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness);
 		_inThread = Task.Factory.StartNew(async () =>
 				await ConsumeInboundEvents(maxOut, BufferOptions.MaxConsumerBufferLifetime)
 					.ConfigureAwait(false)
-			, TaskCreationOptions.LongRunning
+			, TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness
 		);
 
-		InboundBuffer = new InboundBuffer<TEvent>(maxOut, BufferOptions.MaxConsumerBufferLifetime);
 	}
 
 
@@ -138,6 +138,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	private async Task ConsumeOutboundEvents()
 	{
+		Options.OutboundChannelStarted?.Invoke();
+
 		var maxConsumers = Options.BufferOptions.ConcurrentConsumers;
 		var taskList = new List<Task>(maxConsumers);
 
@@ -163,6 +165,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			}
 		}
 		await Task.WhenAll(taskList).ConfigureAwait(false);
+		Options.OutboundChannelExited?.Invoke();
 	}
 
 	private async Task ExportBuffer(IReadOnlyCollection<TEvent> items, IWriteTrackingBuffer buffer)
@@ -206,7 +209,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	private async Task ConsumeInboundEvents(int maxQueuedMessages, TimeSpan maxInterval)
 	{
-		Options.OutboundChannelStarted?.Invoke();
+		Options.InboundChannelStarted?.Invoke();
 		while (await InboundBuffer.WaitToReadAsync(InChannel.Reader).ConfigureAwait(false))
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
