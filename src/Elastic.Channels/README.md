@@ -78,11 +78,11 @@ Each `ChannelOptionsBase<>` implementation takes and exposes a `BufferOptions` i
 
 | Option                      | Description                                                                                                                  |
 |-----------------------------|------------------------------------------------------------------------------------------------------------------------------|
-| `MaxInFlightMessages`       | The maximum number of in flight instances that can be queued in memory. If this threshold is reached, events will be dropped |
-| `MaxConsumerBufferSize`     | The number of events a local buffer should reach before sending the events in a single call to Elasticsearch.                |
-| `MaxRetries`                | The maximum number of retries over `Export`                                                                                  |
-| `MaxConsumerBufferLifetime` | The maximum age of buffer before its flushed                                                                                 |
-| `ConcurrentConsumers`       | Controls how many concurrent `Export` operations may occur                                                                   |
-| `BackOfPeriod`              | Func that calculates an appropriate backoff time for a retry                                                                 |
-| `BufferFlushCallback`       | Called `once` whenever a buffer is flushed, excluding retries                                                                |
+| `InboundBufferMaxSize`      | The maximum number of in flight instances that can be queued in memory. If this threshold is reached, events will be dropped |
+| `OutboundBufferMaxSize`     | The number of events a local buffer should reach before sending the events in a single call to Elasticsearch.                |
+| `OutboundBufferMaxLifetime` | The maximum age of buffer before its flushed                                                                                 |
+| `ExportMaxConcurrency`      | Controls how many concurrent `Export` operations may occur                                                                   |
+| `ExportMaxRetries`          | The maximum number of retries over `Export`                                                                                  |
+| `ExportBackOfPeriod`        | Func that calculates an appropriate backoff time for a retry                                                                 |
+| `ExportBufferCallback`      | Called `once` whenever a buffer is flushed, excluding retries                                                                |
 | `WaitHandle`                | Inject a waithandle that will be signalled after each flush, excluding retries.                                              |

@@ -34,7 +34,7 @@ public class ChannelListener<TEvent, TResponse>
 	// ReSharper disable once MemberCanBeProtected.Global
 	public ChannelListener<TEvent, TResponse> Register(ChannelOptionsBase<TEvent, TResponse> options)
 	{
-		options.BufferOptions.BufferExportedCallback = () => Interlocked.Increment(ref _exportedBuffers);
+		options.BufferOptions.ExportBufferCallback = () => Interlocked.Increment(ref _exportedBuffers);
 		options.PublishRejectionCallback = _ => Interlocked.Increment(ref _rejections);
 		options.ExportItemsAttemptCallback = (retries, count) =>
 		{

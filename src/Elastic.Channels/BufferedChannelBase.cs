@@ -48,10 +48,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		TokenSource = new CancellationTokenSource();
 		Options = options;
-		var maxConsumers = Math.Max(1, BufferOptions.ConcurrentConsumers);
+		var maxConsumers = Math.Max(1, BufferOptions.ExportMaxConcurrency);
 		_throttleTasks = new SemaphoreSlim(maxConsumers, maxConsumers);
 		_signal = options.BufferOptions.WaitHandle;
-		var maxIn = Math.Max(1, BufferOptions.MaxInFlightMessages);
+		var maxIn = Math.Max(1, BufferOptions.InboundBufferMaxSize);
 		InChannel = Channel.CreateBounded<TEvent>(new BoundedChannelOptions(maxIn)
 		{
 			SingleReader = false,
@@ -63,8 +63,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			// DropWrite will make `TryWrite` always return true, which is not what we want.
 			FullMode = BoundedChannelFullMode.Wait
 		});
-		// The minimum out buffer the max of (1 or MaxConsumerBufferSize) as long as it does not exceed MaxInFlightMessages
-		var maxOut = Math.Min(BufferOptions.MaxInFlightMessages, Math.Max(1, BufferOptions.MaxConsumerBufferSize));
+		// The minimum out buffer the max of (1 or OutboundBufferMaxSize) as long as it does not exceed InboundBufferMaxSize
+		var maxOut = Math.Min(BufferOptions.InboundBufferMaxSize, Math.Max(1, BufferOptions.OutboundBufferMaxSize));
 		OutChannel = Channel.CreateBounded<IOutboundBuffer<TEvent>>(
 			new BoundedChannelOptions(maxOut)
 			{
@@ -78,12 +78,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 				FullMode = BoundedChannelFullMode.Wait
 			});
 
-		InboundBuffer = new InboundBuffer<TEvent>(maxOut, BufferOptions.MaxConsumerBufferLifetime);
+		InboundBuffer = new InboundBuffer<TEvent>(maxOut, BufferOptions.OutboundBufferMaxLifetime);
 
 		_outThread = Task.Factory.StartNew(async () => await ConsumeOutboundEvents().ConfigureAwait(false),
 			TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness);
 		_inThread = Task.Factory.StartNew(async () =>
-				await ConsumeInboundEvents(maxOut, BufferOptions.MaxConsumerBufferLifetime)
+				await ConsumeInboundEvents(maxOut, BufferOptions.OutboundBufferMaxLifetime)
 					.ConfigureAwait(false)
 			, TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness
 		);
@@ -140,7 +140,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		Options.OutboundChannelStarted?.Invoke();
 
-		var maxConsumers = Options.BufferOptions.ConcurrentConsumers;
+		var maxConsumers = Options.BufferOptions.ExportMaxConcurrency;
 		var taskList = new List<Task>(maxConsumers);
 
 		while (await OutChannel.Reader.WaitToReadAsync().ConfigureAwait(false))
@@ -170,7 +170,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	private async Task ExportBuffer(IReadOnlyCollection<TEvent> items, IWriteTrackingBuffer buffer)
 	{
-		var maxRetries = Options.BufferOptions.MaxRetries;
+		var maxRetries = Options.BufferOptions.ExportMaxRetries;
 		for (var i = 0; i <= maxRetries && items.Count > 0; i++)
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
@@ -195,14 +195,14 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			var atEndOfRetries = i == maxRetries;
 			if (items.Count > 0 && !atEndOfRetries)
 			{
-				await Task.Delay(Options.BufferOptions.BackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
+				await Task.Delay(Options.BufferOptions.ExportBackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
 				Options.ExportRetryCallback?.Invoke(items);
 			}
 			// otherwise if retryable items still exist and the user wants to be notified notify the user
 			else if (items.Count > 0 && atEndOfRetries)
 				Options.ExportMaxRetriesCallback?.Invoke(items);
 		}
-		Options.BufferOptions.BufferExportedCallback?.Invoke();
+		Options.BufferOptions.ExportBufferCallback?.Invoke();
 		if (_signal is { IsSet: false })
 			_signal.Signal();
 	}
@@ -244,7 +244,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		async Task<bool> AsyncSlowPath(IOutboundBuffer<TEvent> b)
 		{
-			var maxRetries = Options.BufferOptions.MaxRetries;
+			var maxRetries = Options.BufferOptions.ExportMaxRetries;
 			for (var i = 0; i <= maxRetries; i++)
 				while (await OutChannel.Writer.WaitToWriteAsync().ConfigureAwait(false))
 				{

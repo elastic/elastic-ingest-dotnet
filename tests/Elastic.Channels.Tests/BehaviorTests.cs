@@ -25,7 +25,7 @@ namespace Elastic.Channels.Tests
 			var expectedSentBuffers = totalEvents / bufferSize;
 			var bufferOptions = new BufferOptions
 			{
-				WaitHandle = new CountdownEvent(expectedSentBuffers), MaxInFlightMessages = maxInFlight, MaxConsumerBufferSize = bufferSize,
+				WaitHandle = new CountdownEvent(expectedSentBuffers), InboundBufferMaxSize = maxInFlight, OutboundBufferMaxSize = bufferSize,
 			};
 			var channel = new NoopBufferedChannel(bufferOptions);
 
@@ -43,7 +43,7 @@ namespace Elastic.Channels.Tests
 		}
 
 		/// <summary>
-		/// If we are feeding data slowly e.g smaller than <see cref="BufferOptions.MaxConsumerBufferSize"/>
+		/// If we are feeding data slowly e.g smaller than <see cref="BufferOptions.OutboundBufferMaxSize"/>
 		/// we don't want this data equally distributed over multiple calls to export the data.
 		/// Instead we want the smaller buffer to go out over a single export to the external system
 		/// </summary>
@@ -53,9 +53,9 @@ namespace Elastic.Channels.Tests
 			var bufferOptions = new BufferOptions
 			{
 				WaitHandle = new CountdownEvent(1),
-				MaxInFlightMessages = maxInFlight,
-				MaxConsumerBufferSize = bufferSize,
-				MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(500)
+				InboundBufferMaxSize = maxInFlight,
+				OutboundBufferMaxSize = bufferSize,
+				OutboundBufferMaxLifetime = TimeSpan.FromMilliseconds(500)
 			};
 
 			var channel = new NoopBufferedChannel(bufferOptions);
@@ -79,9 +79,9 @@ namespace Elastic.Channels.Tests
 			var bufferOptions = new BufferOptions
 			{
 				WaitHandle = new CountdownEvent(expectedPages),
-				MaxInFlightMessages = maxInFlight,
-				MaxConsumerBufferSize = bufferSize,
-				ConcurrentConsumers = 4
+				InboundBufferMaxSize = maxInFlight,
+				OutboundBufferMaxSize = bufferSize,
+				ExportMaxConcurrency = 4
 			};
 
 			var channel = new NoopBufferedChannel(bufferOptions, observeConcurrency: true);
@@ -111,9 +111,9 @@ namespace Elastic.Channels.Tests
 				var bufferOptions = new BufferOptions
 				{
 					WaitHandle = new CountdownEvent(expectedSentBuffers),
-					MaxInFlightMessages = maxInFlight,
-					MaxConsumerBufferSize = 1000,
-					MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(20)
+					InboundBufferMaxSize = maxInFlight,
+					OutboundBufferMaxSize = 1000,
+					OutboundBufferMaxLifetime = TimeSpan.FromMilliseconds(20)
 				};
 				using var channel = new DiagnosticsBufferedChannel(bufferOptions, name: $"Task {taskNumber}");
 				var written = 0;
@@ -149,9 +149,9 @@ namespace Elastic.Channels.Tests
 			var bufferOptions = new BufferOptions
 			{
 				WaitHandle = new CountdownEvent(expectedSentBuffers),
-				MaxInFlightMessages = maxInFlight,
-				MaxConsumerBufferSize = 10_000,
-				MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(100)
+				InboundBufferMaxSize = maxInFlight,
+				OutboundBufferMaxSize = 10_000,
+				OutboundBufferMaxLifetime = TimeSpan.FromMilliseconds(100)
 			};
 			using var channel = new DiagnosticsBufferedChannel(bufferOptions, name: $"Slow push channel");
 			await Task.Delay(TimeSpan.FromMilliseconds(200));
@@ -168,10 +168,10 @@ namespace Elastic.Channels.Tests
 			}, TaskCreationOptions.LongRunning);
 			// wait for some work to have progressed
 			bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(500));
-			//Ensure we written to the channel but not enough to satisfy MaxConsumerBufferSize
+			//Ensure we written to the channel but not enough to satisfy OutboundBufferMaxSize
 			written.Should().BeGreaterThan(0).And.BeLessThan(10_000);
-			//even though MaxConsumerBufferSize was not hit we should still observe an invocation to Export()
-			//because MaxConsumerBufferLifeTime was hit
+			//even though OutboundBufferMaxSize was not hit we should still observe an invocation to Export()
+			//because OutboundBufferMaxLifetime was hit
 			channel.ExportedBuffers.Should().BeGreaterThan(0, "{0}", channel);
 		}
 	}

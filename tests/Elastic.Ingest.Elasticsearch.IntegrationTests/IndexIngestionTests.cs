@@ -32,7 +32,7 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 				TimestampLookup = c => c.Created,
 				BufferOptions = new BufferOptions
 				{
-					WaitHandle = slim, MaxConsumerBufferSize = 1,
+					WaitHandle = slim, OutboundBufferMaxSize = 1,
 				}
 			};
 			var channel = new IndexChannel<CatalogDocument>(options);

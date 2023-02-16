@@ -55,10 +55,10 @@ namespace Elastic.Ingest.OpenTelemetry
             o.Headers = $"Authorization=Bearer {options.SecretToken}";
             TraceExporter = new CustomOtlpTraceExporter(o, options);
             Processor = new CustomActivityProcessor(TraceExporter,
-				maxExportBatchSize: options.BufferOptions.MaxConsumerBufferSize,
-				maxQueueSize: options.BufferOptions.MaxInFlightMessages,
-				scheduledDelayMilliseconds: (int)options.BufferOptions.MaxConsumerBufferLifetime.TotalMilliseconds,
-				exporterTimeoutMilliseconds: (int)options.BufferOptions.MaxConsumerBufferLifetime.TotalMilliseconds
+				maxExportBatchSize: options.BufferOptions.OutboundBufferMaxSize,
+				maxQueueSize: options.BufferOptions.InboundBufferMaxSize,
+				scheduledDelayMilliseconds: (int)options.BufferOptions.OutboundBufferMaxLifetime.TotalMilliseconds,
+				exporterTimeoutMilliseconds: (int)options.BufferOptions.OutboundBufferMaxLifetime.TotalMilliseconds
 			);
 			var bufferType = typeof(BaseExporter<>).Assembly.GetTypes().First(t=>t.Name == "CircularBuffer`1");
 			var activityBuffer = bufferType.GetGenericTypeDefinition().MakeGenericType(typeof(Activity));
@@ -70,9 +70,9 @@ namespace Elastic.Ingest.OpenTelemetry
 
 			BatchCreator = (page) =>
 			{
-				var buffer = bufferTypeConstructor.Invoke(new object[] {options.BufferOptions.MaxConsumerBufferSize });
+				var buffer = bufferTypeConstructor.Invoke(new object[] {options.BufferOptions.OutboundBufferMaxSize });
 				bufferAddMethod.Invoke(buffer, new[] { page });
-				var batch = (Batch<Activity>)batchConstructor.Invoke(new[] {buffer, options.BufferOptions.MaxConsumerBufferSize });
+				var batch = (Batch<Activity>)batchConstructor.Invoke(new[] {buffer, options.BufferOptions.OutboundBufferMaxSize });
 				return batch;
 			};
 

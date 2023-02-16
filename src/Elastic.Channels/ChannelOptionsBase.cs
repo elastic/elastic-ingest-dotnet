@@ -21,7 +21,7 @@ namespace Elastic.Channels
 		public Func<Stream, CancellationToken, TEvent, Task> WriteEvent { get; set; } = null!;
 
 		/// <summary>
-		/// If <see cref="Elastic.Channels.BufferOptions.MaxInFlightMessages"/> is reached, <see cref="TEvent"/>'s will fail to be published to the channel. You can be notified of dropped
+		/// If <see cref="Channels.BufferOptions.InboundBufferMaxSize"/> is reached, <see cref="TEvent"/>'s will fail to be published to the channel. You can be notified of dropped
 		/// events with this callback
 		/// </summary>
 		public Action<TEvent>? PublishRejectionCallback { get; set; }
@@ -30,10 +30,10 @@ namespace Elastic.Channels
 
 		public Action<int, int>? ExportItemsAttemptCallback { get; set; }
 
-		/// <summary> Subscribe to be notified of events that are retryable but did not store correctly withing the boundaries of <see cref="Elastic.Channels.BufferOptions.MaxRetries"/></summary>
+		/// <summary> Subscribe to be notified of events that are retryable but did not store correctly withing the boundaries of <see cref="Channels.BufferOptions.ExportMaxRetries"/></summary>
 		public Action<IReadOnlyCollection<TEvent>>? ExportMaxRetriesCallback { get; set; }
 
-		/// <summary> Subscribe to be notified of events that are retryable but did not store correctly within the number of configured <see cref="Elastic.Channels.BufferOptions.MaxRetries"/></summary>
+		/// <summary> Subscribe to be notified of events that are retryable but did not store correctly within the number of configured <see cref="Channels.BufferOptions.ExportMaxRetries"/></summary>
 		public Action<IReadOnlyCollection<TEvent>>? ExportRetryCallback { get; set; }
 
 		/// <summary> A generic hook to be notified of any bulk request being initiated by <see cref="InboundBuffer{TEvent}"/> </summary>

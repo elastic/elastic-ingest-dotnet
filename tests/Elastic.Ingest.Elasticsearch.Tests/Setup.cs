@@ -48,12 +48,12 @@ namespace Elastic.Ingest.Elasticsearch.Tests
 				Transport = transport;
 				BufferOptions = new BufferOptions
 				{
-					ConcurrentConsumers = 1,
-					MaxConsumerBufferSize = 2,
-					MaxConsumerBufferLifetime = TimeSpan.FromSeconds(10),
+					ExportMaxConcurrency = 1,
+					OutboundBufferMaxSize = 2,
+					OutboundBufferMaxLifetime = TimeSpan.FromSeconds(10),
 					WaitHandle = WaitHandle,
-					MaxRetries = 3,
-					BackoffPeriod = _ => TimeSpan.FromMilliseconds(1),
+					ExportMaxRetries = 3,
+					ExportBackoffPeriod = _ => TimeSpan.FromMilliseconds(1),
 				};
 				ChannelOptions = new IndexChannelOptions<TestDocument>(transport)
 				{
