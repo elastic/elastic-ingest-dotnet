@@ -29,7 +29,7 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 			var options = new DataStreamChannelOptions<TimeSeriesDocument>(Client.Transport)
 			{
 				DataStream = targetDataStream,
-				BufferOptions = new BufferOptions { WaitHandle = slim, MaxConsumerBufferSize = 1 }
+				BufferOptions = new BufferOptions { WaitHandle = slim, OutboundBufferMaxSize = 1 }
 			};
 			var channel = new DataStreamChannel<TimeSeriesDocument>(options);
 

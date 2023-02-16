@@ -48,12 +48,12 @@ namespace Elastic.Ingest.Elasticsearch.Tests
 				Transport = transport;
 				BufferOptions = new BufferOptions
 				{
-					ConcurrentConsumers = 1,
-					MaxConsumerBufferSize = 2,
-					MaxConsumerBufferLifetime = TimeSpan.FromSeconds(10),
+					ExportMaxConcurrency = 1,
+					OutboundBufferMaxSize = 2,
+					OutboundBufferMaxLifetime = TimeSpan.FromSeconds(10),
 					WaitHandle = WaitHandle,
-					MaxRetries = 3,
-					BackoffPeriod = _ => TimeSpan.FromMilliseconds(1),
+					ExportMaxRetries = 3,
+					ExportBackoffPeriod = _ => TimeSpan.FromMilliseconds(1),
 				};
 				ChannelOptions = new IndexChannelOptions<TestDocument>(transport)
 				{
@@ -63,7 +63,7 @@ namespace Elastic.Ingest.Elasticsearch.Tests
 					ExportResponseCallback = (_, _) => Interlocked.Increment(ref _responses),
 					ExportMaxRetriesCallback = (_) => Interlocked.Increment(ref _maxRetriesExceeded),
 					ExportRetryCallback = (_) => Interlocked.Increment(ref _retries),
-					ExceptionCallback= (e) => LastException = e
+					ExportExceptionCallback= (e) => LastException = e
 				};
 				Channel = new IndexChannel<TestDocument>(ChannelOptions);
 			}

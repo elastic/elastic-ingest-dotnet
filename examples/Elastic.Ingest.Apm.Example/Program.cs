@@ -41,13 +41,13 @@ namespace Elastic.Ingest.Apm.Example
 			var options =
 				new BufferOptions
 				{
-					ConcurrentConsumers = 1,
-					MaxConsumerBufferSize = 200,
-					MaxConsumerBufferLifetime = TimeSpan.FromSeconds(10),
+					ExportMaxConcurrency = 1,
+					OutboundBufferMaxSize = 200,
+					OutboundBufferMaxLifetime = TimeSpan.FromSeconds(10),
 					WaitHandle = handle,
-					MaxRetries = 3,
-					BackoffPeriod = times => TimeSpan.FromMilliseconds(1),
-					BufferExportedCallback = () => Console.WriteLine("Flushed"),
+					ExportMaxRetries = 3,
+					ExportBackoffPeriod = times => TimeSpan.FromMilliseconds(1),
+					ExportBufferCallback = () => Console.WriteLine("Flushed"),
 				};
 			var channelOptions = new ApmChannelOptions(transport)
 			{
@@ -61,7 +61,7 @@ namespace Elastic.Ingest.Apm.Example
 				},
 				ExportMaxRetriesCallback = (list) => Interlocked.Increment(ref _maxRetriesExceeded),
 				ExportRetryCallback = (list) => Interlocked.Increment(ref _retries),
-				ExceptionCallback = (e) => _exception = e
+				ExportExceptionCallback = (e) => _exception = e
 			};
 			var channel = new ApmChannel(channelOptions);
 

@@ -4,7 +4,7 @@
 
 using System;
 
-namespace Elastic.Channels;
+namespace Elastic.Channels.Buffers;
 
 /// <summary>
 /// Represents a buffer that tracks the <see cref="DurationSinceFirstWrite"/> and it's current <see cref="Count"/>

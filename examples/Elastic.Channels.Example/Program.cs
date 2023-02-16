@@ -43,7 +43,7 @@ Console.WriteLine();
 Console.WriteLine(channel);
 Console.WriteLine();
 
-Console.WriteLine($"Written buffers: {channel.SentBuffersCount:N0}");
+Console.WriteLine($"Written buffers: {channel.ExportedBuffers:N0}");
 Console.WriteLine($"Written events: {writtenElastic:N0} events");
 Console.WriteLine($"ObservedConcurrency: {channel.ObservedConcurrency:N0}");
 Console.WriteLine($"Duration: {sw.Elapsed:g}");

@@ -11,44 +11,51 @@ namespace Elastic.Channels
 	{
 		/// <summary>
 		/// The maximum number of in flight instances that can be queued in memory. If this threshold is reached, events will be dropped
+		/// <para>Defaults to <c>100_000</c></para>
 		/// </summary>
-		public int MaxInFlightMessages { get; set; } = 100_000;
+		public int InboundBufferMaxSize { get; set; } = 100_000;
 
 		/// <summary>
-		/// The number of events a local buffer should reach before sending the events in a single call to Elasticsearch.
+		/// The maximum size to export to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/> at once.
+		/// <para>Defaults to <c>1_000</c></para>
 		/// </summary>
-		public int MaxConsumerBufferSize { get; set; } = 1_000;
+		public int OutboundBufferMaxSize { get; set; } = 1_000;
 
 		/// <summary>
-		/// The maximum number of times that an item that returns with a retryable status code is retried to be stored in Elasticsearch.
-		/// <see cref="BackoffPeriod"/> to implement a backoff period of your choosing. MaxRetries default to 3.
+		/// The maximum lifetime of a buffer to export to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>.
+		/// If a buffer is older then the configured <see cref="OutboundBufferMaxLifetime"/> it will be flushed to
+		/// <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/> regardless of it's current size
+		/// <para>Defaults to <c>5 seconds</c></para>
 		/// </summary>
-		public int MaxRetries { get; set; } = 3;
+		public TimeSpan OutboundBufferMaxLifetime { get; set; } = TimeSpan.FromSeconds(5);
 
 		/// <summary>
-		/// A consumer builds up a local buffer until <see cref="MaxConsumerBufferSize"/> is reached. If events come in too slow, these
-		/// events could end up taking forever to be sent to Elasticsearch. This controls how long a buffer may exist before a flush is triggered.
+		/// The maximum number of consumers allowed to poll for new events on the channel.
+		/// <para>Defaults to <c>1</c>, increase to introduce concurrency.</para>
 		/// </summary>
-		public TimeSpan MaxConsumerBufferLifetime { get; set; } = TimeSpan.FromSeconds(5);
+		public int ExportMaxConcurrency { get; set; } = 1;
 
 		/// <summary>
-		/// The maximum number of consumers allowed to poll for new events on the channel. Defaults to 1, increase to introduce concurrency.
+		/// The times to retry an export if <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.RetryBuffer"/> yields items to retry.
+		/// <para>Whether or not items are selected for retrying depends on the actual channel implementation</para>
+		/// <see cref="ExportBackoffPeriod"/> to implement a backoff period of your choosing.
+		/// <para>Defaults to <c>3</c>, when <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.RetryBuffer"/> yields any items</para>
 		/// </summary>
-		public int ConcurrentConsumers { get; set; } = 1;
+		public int ExportMaxRetries { get; set; } = 3;
 
 
 		/// <summary>
 		/// A function to calculate the backoff period, gets passed the number of retries attempted starting at 0.
 		/// By default backs off in increments of 2 seconds.
 		/// </summary>
-		public Func<int, TimeSpan> BackoffPeriod { get; set; } = (i) => TimeSpan.FromSeconds(2 * (i + 1));
+		public Func<int, TimeSpan> ExportBackoffPeriod { get; set; } = (i) => TimeSpan.FromSeconds(2 * (i + 1));
 
 		/// <summary>
 		/// Called once after a buffer has been flushed, if the buffer is retried this callback is only called once
-		/// all retries have been exhausted. Its called regardless of whether the call to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Send"/>
+		/// all retries have been exhausted. Its called regardless of whether the call to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
 		/// succeeded.
 		/// </summary>
-		public Action? BufferExportedCallback { get; set; }
+		public Action? ExportBufferCallback { get; set; }
 
 		/// <summary>
 		/// Allows you to inject a <see cref="CountdownEvent"/> to wait for N number of buffers to flush.

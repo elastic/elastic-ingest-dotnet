@@ -47,10 +47,10 @@ public static class Drain
 		var bufferOptions = new BufferOptions
 		{
 			WaitHandle = new CountdownEvent(expectedSentBuffers),
-			MaxInFlightMessages = maxInFlight,
-			MaxConsumerBufferSize = bufferSize,
-			ConcurrentConsumers = concurrency,
-			MaxConsumerBufferLifetime = TimeSpan.FromSeconds(20)
+			InboundBufferMaxSize = maxInFlight,
+			OutboundBufferMaxSize = bufferSize,
+			ExportMaxConcurrency = concurrency,
+			OutboundBufferMaxLifetime = TimeSpan.FromSeconds(20)
 
 		};
 		var channel = new DiagnosticsBufferedChannel(bufferOptions, observeConcurrency: false);

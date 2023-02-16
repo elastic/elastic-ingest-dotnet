@@ -24,7 +24,7 @@ namespace Elastic.Ingest.Elasticsearch
 		{
 			var details = response.ApiCallDetails;
 			if (!details.HasSuccessfulStatusCode)
-				Options.ExceptionCallback?.Invoke(new Exception(details.ToString(), details.OriginalException));
+				Options.ExportExceptionCallback?.Invoke(new Exception(details.ToString(), details.OriginalException));
 			return details.HasSuccessfulStatusCode;
 		}
 
@@ -39,7 +39,7 @@ namespace Elastic.Ingest.Elasticsearch
 		protected override bool RejectEvent((TEvent, BulkResponseItem) @event) =>
 			@event.Item2.Status < 200 || @event.Item2.Status > 300;
 
-		protected override Task<BulkResponse> Send(HttpTransport transport, IReadOnlyCollection<TEvent> page, CancellationToken ctx = default) =>
+		protected override Task<BulkResponse> Export(HttpTransport transport, IReadOnlyCollection<TEvent> page, CancellationToken ctx = default) =>
 			transport.RequestAsync<BulkResponse>(HttpMethod.POST, "/_bulk",
 				PostData.StreamHandler(page,
 					(_, _) =>

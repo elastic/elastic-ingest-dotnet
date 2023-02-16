@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using Elastic.Channels.Buffers;
 
 namespace Elastic.Channels;
 
@@ -48,10 +49,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		TokenSource = new CancellationTokenSource();
 		Options = options;
-		var maxConsumers = Math.Max(1, BufferOptions.ConcurrentConsumers);
+		var maxConsumers = Math.Max(1, BufferOptions.ExportMaxConcurrency);
 		_throttleTasks = new SemaphoreSlim(maxConsumers, maxConsumers);
 		_signal = options.BufferOptions.WaitHandle;
-		var maxIn = Math.Max(1, BufferOptions.MaxInFlightMessages);
+		var maxIn = Math.Max(1, BufferOptions.InboundBufferMaxSize);
 		InChannel = Channel.CreateBounded<TEvent>(new BoundedChannelOptions(maxIn)
 		{
 			SingleReader = false,
@@ -63,8 +64,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			// DropWrite will make `TryWrite` always return true, which is not what we want.
 			FullMode = BoundedChannelFullMode.Wait
 		});
-		// The minimum out buffer the max of (1 or MaxConsumerBufferSize) as long as it does not exceed MaxInFlightMessages
-		var maxOut = Math.Min(BufferOptions.MaxInFlightMessages, Math.Max(1, BufferOptions.MaxConsumerBufferSize));
+		// The minimum out buffer the max of (1 or OutboundBufferMaxSize) as long as it does not exceed InboundBufferMaxSize
+		var maxOut = Math.Min(BufferOptions.InboundBufferMaxSize, Math.Max(1, BufferOptions.OutboundBufferMaxSize));
 		OutChannel = Channel.CreateBounded<IOutboundBuffer<TEvent>>(
 			new BoundedChannelOptions(maxOut)
 			{
@@ -78,12 +79,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 				FullMode = BoundedChannelFullMode.Wait
 			});
 
-		InboundBuffer = new InboundBuffer<TEvent>(maxOut, BufferOptions.MaxConsumerBufferLifetime);
+		InboundBuffer = new InboundBuffer<TEvent>(maxOut, BufferOptions.OutboundBufferMaxLifetime);
 
 		_outThread = Task.Factory.StartNew(async () => await ConsumeOutboundEvents().ConfigureAwait(false),
 			TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness);
 		_inThread = Task.Factory.StartNew(async () =>
-				await ConsumeInboundEvents(maxOut, BufferOptions.MaxConsumerBufferLifetime)
+				await ConsumeInboundEvents(maxOut, BufferOptions.OutboundBufferMaxLifetime)
 					.ConfigureAwait(false)
 			, TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness
 		);
@@ -105,9 +106,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	public override bool TryWrite(TEvent item)
 	{
-		if (InChannel.Writer.TryWrite(item)) return true;
-
-		Options.PublishRejectionCallback?.Invoke(item);
+		if (InChannel.Writer.TryWrite(item))
+		{
+			Options.PublishToInboundChannelCallback?.Invoke();
+			return true;
+		}
+		Options.PublishToInboundChannelFailureCallback?.Invoke();
 		return false;
 	}
 
@@ -117,16 +121,14 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		if (await InChannel.Writer.WaitToWriteAsync(ctx).ConfigureAwait(false) &&
 		    InChannel.Writer.TryWrite(item))
 		{
-			Options.PublishToInboundChannel?.Invoke();
+			Options.PublishToInboundChannelCallback?.Invoke();
 			return true;
 		}
-		Options.PublishToInboundChannelFailure?.Invoke();
-
-		Options.PublishRejectionCallback?.Invoke(item);
+		Options.PublishToInboundChannelFailureCallback?.Invoke();
 		return false;
 	}
 
-	protected abstract Task<TResponse> Send(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx = default);
+	protected abstract Task<TResponse> Export(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx = default);
 
 	private static readonly IReadOnlyCollection<TEvent> DefaultRetryBuffer = new TEvent[] { };
 
@@ -138,9 +140,9 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	private async Task ConsumeOutboundEvents()
 	{
-		Options.OutboundChannelStarted?.Invoke();
+		Options.OutboundChannelStartedCallback?.Invoke();
 
-		var maxConsumers = Options.BufferOptions.ConcurrentConsumers;
+		var maxConsumers = Options.BufferOptions.ExportMaxConcurrency;
 		var taskList = new List<Task>(maxConsumers);
 
 		while (await OutChannel.Reader.WaitToReadAsync().ConfigureAwait(false))
@@ -165,12 +167,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			}
 		}
 		await Task.WhenAll(taskList).ConfigureAwait(false);
-		Options.OutboundChannelExited?.Invoke();
+		Options.OutboundChannelExitedCallback?.Invoke();
 	}
 
 	private async Task ExportBuffer(IReadOnlyCollection<TEvent> items, IWriteTrackingBuffer buffer)
 	{
-		var maxRetries = Options.BufferOptions.MaxRetries;
+		var maxRetries = Options.BufferOptions.ExportMaxRetries;
 		for (var i = 0; i <= maxRetries && items.Count > 0; i++)
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
@@ -180,12 +182,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			TResponse? response;
 			try
 			{
-				response = await Send(items, TokenSource.Token).ConfigureAwait(false);
+				response = await Export(items, TokenSource.Token).ConfigureAwait(false);
 				Options.ExportResponseCallback?.Invoke(response, buffer);
 			}
 			catch (Exception e)
 			{
-				Options.ExceptionCallback?.Invoke(e);
+				Options.ExportExceptionCallback?.Invoke(e);
 				break;
 			}
 
@@ -195,21 +197,21 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			var atEndOfRetries = i == maxRetries;
 			if (items.Count > 0 && !atEndOfRetries)
 			{
-				await Task.Delay(Options.BufferOptions.BackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
+				await Task.Delay(Options.BufferOptions.ExportBackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
 				Options.ExportRetryCallback?.Invoke(items);
 			}
 			// otherwise if retryable items still exist and the user wants to be notified notify the user
 			else if (items.Count > 0 && atEndOfRetries)
 				Options.ExportMaxRetriesCallback?.Invoke(items);
 		}
-		Options.BufferOptions.BufferExportedCallback?.Invoke();
+		Options.BufferOptions.ExportBufferCallback?.Invoke();
 		if (_signal is { IsSet: false })
 			_signal.Signal();
 	}
 
 	private async Task ConsumeInboundEvents(int maxQueuedMessages, TimeSpan maxInterval)
 	{
-		Options.InboundChannelStarted?.Invoke();
+		Options.InboundChannelStartedCallback?.Invoke();
 		while (await InboundBuffer.WaitToReadAsync(InChannel.Reader).ConfigureAwait(false))
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
@@ -223,7 +225,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 					break;
 			}
 
-			Options.PublishToOutboundChannel?.Invoke();
+			Options.PublishToOutboundChannelCallback?.Invoke();
 			if (InboundBuffer.NoThresholdsHit) continue;
 
 			//:w
@@ -234,9 +236,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 			if (await PublishAsync(outboundBuffer).ConfigureAwait(false))
 				continue;
-
-			foreach (var e in InboundBuffer.Buffer)
-				Options.PublishRejectionCallback?.Invoke(e);
+			Options.PublishToOutboundChannelFailureCallback?.Invoke();
 		}
 	}
 
@@ -244,14 +244,13 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		async Task<bool> AsyncSlowPath(IOutboundBuffer<TEvent> b)
 		{
-			var maxRetries = Options.BufferOptions.MaxRetries;
+			var maxRetries = Options.BufferOptions.ExportMaxRetries;
 			for (var i = 0; i <= maxRetries; i++)
 				while (await OutChannel.Writer.WaitToWriteAsync().ConfigureAwait(false))
 				{
 					if (OutChannel.Writer.TryWrite(b))
 						return true;
 				}
-			Options.PublishToOutboundChannelFailure?.Invoke();
 			return false;
 		}
 
