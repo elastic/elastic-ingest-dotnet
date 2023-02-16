@@ -22,8 +22,8 @@ namespace Elastic.Ingest.Transport
 		/// <param name="transport"></param>
 		/// <param name="page">Active page of the buffer that needs to be send to the output</param>
 		/// <returns><see cref="TResponse"/></returns>
-		protected abstract Task<TResponse> Send(HttpTransport transport, IReadOnlyCollection<TEvent> page, CancellationToken ctx = default);
+		protected abstract Task<TResponse> Export(HttpTransport transport, IReadOnlyCollection<TEvent> page, CancellationToken ctx = default);
 
-		protected override Task<TResponse> Send(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx = default) => Send(Options.Transport, buffer, ctx);
+		protected override Task<TResponse> Export(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx = default) => Export(Options.Transport, buffer, ctx);
 	}
 }

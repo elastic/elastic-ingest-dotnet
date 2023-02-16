@@ -48,7 +48,7 @@ namespace Elastic.Ingest.Apm
 		protected override bool RetryEvent((IIntakeObject, IntakeErrorItem) @event) => false;
 		protected override bool RejectEvent((IIntakeObject, IntakeErrorItem) @event) => false;
 
-		protected override Task<EventIntakeResponse> Send(HttpTransport transport, IReadOnlyCollection<IIntakeObject> page, CancellationToken ctx = default) =>
+		protected override Task<EventIntakeResponse> Export(HttpTransport transport, IReadOnlyCollection<IIntakeObject> page, CancellationToken ctx = default) =>
 			transport.RequestAsync<EventIntakeResponse>(HttpMethod.POST, "/intake/v2/events",
 				PostData.StreamHandler(page,
 					(_, _) =>

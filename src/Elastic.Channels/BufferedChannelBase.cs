@@ -126,7 +126,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		return false;
 	}
 
-	protected abstract Task<TResponse> Send(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx = default);
+	protected abstract Task<TResponse> Export(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx = default);
 
 	private static readonly IReadOnlyCollection<TEvent> DefaultRetryBuffer = new TEvent[] { };
 
@@ -180,7 +180,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			TResponse? response;
 			try
 			{
-				response = await Send(items, TokenSource.Token).ConfigureAwait(false);
+				response = await Export(items, TokenSource.Token).ConfigureAwait(false);
 				Options.ExportResponseCallback?.Invoke(response, buffer);
 			}
 			catch (Exception e)
