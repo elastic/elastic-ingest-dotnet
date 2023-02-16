@@ -164,12 +164,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			if (TokenSource.Token.IsCancellationRequested) break;
 			if (_signal is { IsSet: true }) break;
 
-			Options.BulkAttemptCallback?.Invoke(i, items.Count);
+			Options.ExportItemsAttemptCallback?.Invoke(i, items.Count);
 			TResponse? response;
 			try
 			{
 				response = await Send(items, TokenSource.Token).ConfigureAwait(false);
-				Options.ResponseCallback?.Invoke(response, buffer);
+				Options.ExportResponseCallback?.Invoke(response, buffer);
 			}
 			catch (Exception e)
 			{
@@ -184,13 +184,13 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			if (items.Count > 0 && !atEndOfRetries)
 			{
 				await Task.Delay(Options.BufferOptions.BackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
-				Options.RetryCallBack?.Invoke(items);
+				Options.ExportRetryCallback?.Invoke(items);
 			}
 			// otherwise if retryable items still exist and the user wants to be notified notify the user
 			else if (items.Count > 0 && atEndOfRetries)
-				Options.MaxRetriesExceededCallback?.Invoke(items);
+				Options.ExportMaxRetriesCallback?.Invoke(items);
 		}
-		Options.BufferOptions.BufferFlushCallback?.Invoke();
+		Options.BufferOptions.BufferExportedCallback?.Invoke();
 		if (_signal is { IsSet: false })
 			_signal.Signal();
 	}
@@ -217,6 +217,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			var outboundBuffer = new OutboundBuffer<TEvent>(inboundBuffer);
 			inboundBuffer.Reset();
 
+			Options.PublishToOutboundChannel?.Invoke();
 			if (await PublishAsync(outboundBuffer).ConfigureAwait(false))
 				continue;
 
@@ -233,10 +234,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			for (var i = 0; i <= maxRetries; i++)
 				while (await OutChannel.Writer.WaitToWriteAsync().ConfigureAwait(false))
 				{
-					Options.OutboundChannelRetryCallback?.Invoke(i);
 					if (OutChannel.Writer.TryWrite(b))
 						return true;
 				}
+			Options.PublishToOutboundChannelFailure?.Invoke();
 			return false;
 		}
 

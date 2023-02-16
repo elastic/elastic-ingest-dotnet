@@ -47,20 +47,20 @@ namespace Elastic.Ingest.Apm.Example
 					WaitHandle = handle,
 					MaxRetries = 3,
 					BackoffPeriod = times => TimeSpan.FromMilliseconds(1),
-					BufferFlushCallback = () => Console.WriteLine("Flushed"),
+					BufferExportedCallback = () => Console.WriteLine("Flushed"),
 				};
 			var channelOptions = new ApmChannelOptions(transport)
 			{
 				BufferOptions = options,
 				ServerRejectionCallback = (list) => Interlocked.Increment(ref _rejections),
-				BulkAttemptCallback = (c, a) => Interlocked.Increment(ref _requests),
-				ResponseCallback = (r, b) =>
+				ExportItemsAttemptCallback = (c, a) => Interlocked.Increment(ref _requests),
+				ExportResponseCallback = (r, b) =>
 				{
 					Interlocked.Increment(ref _responses);
 					Console.WriteLine(r.ApiCallDetails.DebugInformation);
 				},
-				MaxRetriesExceededCallback = (list) => Interlocked.Increment(ref _maxRetriesExceeded),
-				RetryCallBack = (list) => Interlocked.Increment(ref _retries),
+				ExportMaxRetriesCallback = (list) => Interlocked.Increment(ref _maxRetriesExceeded),
+				ExportRetryCallback = (list) => Interlocked.Increment(ref _retries),
 				ExceptionCallback = (e) => _exception = e
 			};
 			var channel = new ApmChannel(channelOptions);
