@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels;
 using Elastic.Transport;
@@ -21,8 +22,8 @@ namespace Elastic.Ingest.Transport
 		/// <param name="transport"></param>
 		/// <param name="page">Active page of the buffer that needs to be send to the output</param>
 		/// <returns><see cref="TResponse"/></returns>
-		protected abstract Task<TResponse> Send(HttpTransport transport, IReadOnlyCollection<TEvent> page);
+		protected abstract Task<TResponse> Send(HttpTransport transport, IReadOnlyCollection<TEvent> page, CancellationToken ctx = default);
 
-		protected override Task<TResponse> Send(IReadOnlyCollection<TEvent> buffer) => Send(Options.Transport, buffer);
+		protected override Task<TResponse> Send(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx = default) => Send(Options.Transport, buffer, ctx);
 	}
 }

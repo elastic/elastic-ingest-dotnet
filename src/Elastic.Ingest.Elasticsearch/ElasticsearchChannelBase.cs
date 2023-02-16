@@ -39,7 +39,7 @@ namespace Elastic.Ingest.Elasticsearch
 		protected override bool RejectEvent((TEvent, BulkResponseItem) @event) =>
 			@event.Item2.Status < 200 || @event.Item2.Status > 300;
 
-		protected override Task<BulkResponse> Send(HttpTransport transport, IReadOnlyCollection<TEvent> page) =>
+		protected override Task<BulkResponse> Send(HttpTransport transport, IReadOnlyCollection<TEvent> page, CancellationToken ctx = default) =>
 			transport.RequestAsync<BulkResponse>(HttpMethod.POST, "/_bulk",
 				PostData.StreamHandler(page,
 					(_, _) =>
@@ -47,7 +47,7 @@ namespace Elastic.Ingest.Elasticsearch
 						/* NOT USED */
 					},
 					async (b, stream, ctx) => { await WriteBufferToStreamAsync(b, stream, ctx).ConfigureAwait(false); })
-				, ElasticsearchChannelStatics.RequestParams);
+				, ElasticsearchChannelStatics.RequestParams, ctx);
 
 		protected abstract BulkOperationHeader CreateBulkOperationHeader(TEvent @event);
 

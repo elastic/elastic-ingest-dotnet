@@ -59,10 +59,10 @@ namespace Elastic.Ingest.Elasticsearch.Tests
 				{
 					BufferOptions = BufferOptions,
 					ServerRejectionCallback = (_) => Interlocked.Increment(ref _rejections),
-					BulkAttemptCallback = (_, _) => Interlocked.Increment(ref _requests),
-					ResponseCallback = (_, _) => Interlocked.Increment(ref _responses),
-					MaxRetriesExceededCallback = (_) => Interlocked.Increment(ref _maxRetriesExceeded),
-					RetryCallBack = (_) => Interlocked.Increment(ref _retries),
+					ExportItemsAttemptCallback = (_, _) => Interlocked.Increment(ref _requests),
+					ExportResponseCallback = (_, _) => Interlocked.Increment(ref _responses),
+					ExportMaxRetriesCallback = (_) => Interlocked.Increment(ref _maxRetriesExceeded),
+					ExportRetryCallback = (_) => Interlocked.Increment(ref _retries),
 					ExceptionCallback= (e) => LastException = e
 				};
 				Channel = new IndexChannel<TestDocument>(ChannelOptions);

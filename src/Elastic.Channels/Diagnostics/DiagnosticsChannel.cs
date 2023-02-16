@@ -2,12 +2,6 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using static Elastic.Channels.Diagnostics.DiagnosticsBufferedChannel;
-
 namespace Elastic.Channels.Diagnostics;
 
 /// <summary>
@@ -17,14 +11,25 @@ namespace Elastic.Channels.Diagnostics;
 /// </summary>
 public class DiagnosticsBufferedChannel : NoopBufferedChannel
 {
-	public DiagnosticsBufferedChannel(BufferOptions options, bool observeConcurrency = false)
-		: base(options, observeConcurrency) =>
-		Listener = new ChannelListener<NoopEvent, NoopResponse>().Register(Options);
+	private readonly string? _name;
+
+	public DiagnosticsBufferedChannel(BufferOptions options, bool observeConcurrency = false, string? name = null)
+		: base(options, observeConcurrency)
+	{
+		_name = name;
+		Listener = new ChannelListener<NoopEvent, NoopResponse>(_name).Register(Options);
+	}
 
 	public ChannelListener<NoopEvent, NoopResponse> Listener { get; }
 
-	public override string ToString() => $@"{Listener}
+	public override string ToString() => $@"------------------------------------------
+{Listener}
+
+InboundBuffer Count: {InboundBuffer.Count:N0}
+InboundBuffer Duration Since First Wait: {InboundBuffer.DurationSinceFirstWaitToRead}
+InboundBuffer Duration Since First Write: {InboundBuffer.DurationSinceFirstWrite}
+InboundBuffer No Thresholds hit: {InboundBuffer.NoThresholdsHit}
 Send Invocations: {SentBuffersCount:N0}
 Observed Concurrency: {ObservedConcurrency:N0}
-";
+------------------------------------------";
 }

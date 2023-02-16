@@ -28,22 +28,32 @@ namespace Elastic.Channels
 
 		public Action<Exception>? ExceptionCallback { get; set; }
 
-		public Action<int, int>? BulkAttemptCallback { get; set; }
+		public Action<int, int>? ExportItemsAttemptCallback { get; set; }
 
 		/// <summary> Subscribe to be notified of events that are retryable but did not store correctly withing the boundaries of <see cref="Elastic.Channels.BufferOptions.MaxRetries"/></summary>
-		public Action<IReadOnlyCollection<TEvent>>? MaxRetriesExceededCallback { get; set; }
+		public Action<IReadOnlyCollection<TEvent>>? ExportMaxRetriesCallback { get; set; }
 
 		/// <summary> Subscribe to be notified of events that are retryable but did not store correctly within the number of configured <see cref="Elastic.Channels.BufferOptions.MaxRetries"/></summary>
-		public Action<IReadOnlyCollection<TEvent>>? RetryCallBack { get; set; }
+		public Action<IReadOnlyCollection<TEvent>>? ExportRetryCallback { get; set; }
 
 		/// <summary> A generic hook to be notified of any bulk request being initiated by <see cref="InboundBuffer{TEvent}"/> </summary>
-		public Action<TResponse, IWriteTrackingBuffer>? ResponseCallback { get; set; }
+		public Action<TResponse, IWriteTrackingBuffer>? ExportResponseCallback { get; set; }
 
-		/// <summary>
-		/// Called everytime a publish to the outbound channel failed to write and will be retried.
-		/// Pushes to the outbound channel follow the same exponential backoff as <see cref="Elastic.Channels.BufferOptions.BackoffPeriod"/>
-		/// </summary>
-		public Action<int>? OutboundChannelRetryCallback { get; set; }
+		/// <summary>Called everytime an event is written to the inbound channel </summary>
+		public Action? PublishToInboundChannel { get; set; }
+
+		/// <summary>Called everytime an event is not written to the inbound channel </summary>
+		public Action? PublishToInboundChannelFailure { get; set; }
+
+		/// <summary>Called everytime the inbound channel publishes to the outbound channel. </summary>
+		public Action? PublishToOutboundChannel { get; set; }
+
+		public Action? OutboundChannelStarted { get; set; }
+		public Action? OutboundChannelExited { get; set; }
+		public Action? InboundChannelStarted { get; set; }
+
+		/// <summary>Called everytime the inbound channel fails to publish to the outbound channel. </summary>
+		public Action? PublishToOutboundChannelFailure { get; set; }
 	}
 
 }

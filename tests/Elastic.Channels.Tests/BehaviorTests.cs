@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels.Diagnostics;
@@ -24,9 +25,7 @@ namespace Elastic.Channels.Tests
 			var expectedSentBuffers = totalEvents / bufferSize;
 			var bufferOptions = new BufferOptions
 			{
-				WaitHandle = new CountdownEvent(expectedSentBuffers),
-				MaxInFlightMessages = maxInFlight,
-				MaxConsumerBufferSize = bufferSize,
+				WaitHandle = new CountdownEvent(expectedSentBuffers), MaxInFlightMessages = maxInFlight, MaxConsumerBufferSize = bufferSize,
 			};
 			var channel = new NoopBufferedChannel(bufferOptions);
 
@@ -99,6 +98,81 @@ namespace Elastic.Channels.Tests
 			written.Should().Be(totalEvents);
 			channel.SentBuffersCount.Should().Be(expectedPages);
 			channel.ObservedConcurrency.Should().Be(4);
+		}
+
+		[Fact] public async Task ManyChannelsContinueToDoWork()
+		{
+			int totalEvents = 50_000_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
+			int closedThread = 0, maxFor = Environment.ProcessorCount * 2;
+			var expectedSentBuffers = totalEvents / bufferSize;
+
+			Task StartChannel(int taskNumber)
+			{
+				var bufferOptions = new BufferOptions
+				{
+					WaitHandle = new CountdownEvent(expectedSentBuffers),
+					MaxInFlightMessages = maxInFlight,
+					MaxConsumerBufferSize = 1000,
+					MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(20)
+				};
+				using var channel = new DiagnosticsBufferedChannel(bufferOptions, name: $"Task {taskNumber}");
+				var written = 0;
+				var t = Task.Factory.StartNew(async () =>
+				{
+					for (var i = 0; i < totalEvents; i++)
+					{
+						var e = new NoopBufferedChannel.NoopEvent();
+						if (await channel.WaitToWriteAsync(e))
+							written++;
+					}
+				}, TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness);
+				// wait for some work to have progressed
+				bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(500));
+
+				written.Should().BeGreaterThan(0).And.BeLessThan(totalEvents);
+				channel.SentBuffersCount.Should().BeGreaterThan(0, "Parallel invocation: {0} channel: {1}", taskNumber, channel);
+				Interlocked.Increment(ref closedThread);
+				return t;
+			}
+
+			var tasks = Enumerable.Range(0, maxFor).Select(i => Task.Factory.StartNew(() => StartChannel(i), TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness)).ToArray();
+
+			await Task.WhenAll(tasks);
+
+			closedThread.Should().BeGreaterThan(0).And.Be(maxFor);
+		}
+
+		[Fact] public async Task SlowlyPushEvents()
+		{
+			int totalEvents = 50_000_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
+			var expectedSentBuffers = totalEvents / bufferSize;
+			var bufferOptions = new BufferOptions
+			{
+				WaitHandle = new CountdownEvent(expectedSentBuffers),
+				MaxInFlightMessages = maxInFlight,
+				MaxConsumerBufferSize = 10_000,
+				MaxConsumerBufferLifetime = TimeSpan.FromMilliseconds(100)
+			};
+			using var channel = new DiagnosticsBufferedChannel(bufferOptions, name: $"Slow push channel");
+			await Task.Delay(TimeSpan.FromMilliseconds(200));
+			var written = 0;
+			var _ = Task.Factory.StartNew(async () =>
+			{
+				for (var i = 0; i < totalEvents && !channel.Options.BufferOptions.WaitHandle.IsSet; i++)
+				{
+					var e = new NoopBufferedChannel.NoopEvent();
+					if (await channel.WaitToWriteAsync(e).ConfigureAwait(false))
+						written++;
+					await Task.Delay(TimeSpan.FromMilliseconds(40)).ConfigureAwait(false);
+				}
+			}, TaskCreationOptions.LongRunning);
+			// wait for some work to have progressed
+			bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(500));
+			//Ensure we written to the channel but not enough to satisfy MaxConsumerBufferSize
+			written.Should().BeGreaterThan(0).And.BeLessThan(10_000);
+			//even though MaxConsumerBufferSize was not hit we should still observe an invocation to Send()
+			//because MaxConsumerBufferLifeTime was hit
+			channel.SentBuffersCount.Should().BeGreaterThan(0, "{0}", channel);
 		}
 	}
 }

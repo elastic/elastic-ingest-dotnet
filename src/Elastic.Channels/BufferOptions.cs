@@ -45,9 +45,10 @@ namespace Elastic.Channels
 
 		/// <summary>
 		/// Called once after a buffer has been flushed, if the buffer is retried this callback is only called once
-		/// all retries have been exhausted
+		/// all retries have been exhausted. Its called regardless of whether the call to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Send"/>
+		/// succeeded.
 		/// </summary>
-		public Action? BufferFlushCallback { get; set; }
+		public Action? BufferExportedCallback { get; set; }
 
 		/// <summary>
 		/// Allows you to inject a <see cref="CountdownEvent"/> to wait for N number of buffers to flush.

@@ -25,11 +25,13 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 
 	/// <summary>The time that the first event is read from the channel and added to the buffer, from first read or after the buffer is reset.</summary>
 	private DateTimeOffset? TimeOfFirstWrite { get; set; }
+	private DateTimeOffset? TimeOfFirstWaitToRead { get; set; }
 
 	public int Count => Buffer.Count;
 	public TimeSpan? DurationSinceFirstWrite => DateTimeOffset.UtcNow - TimeOfFirstWrite;
+	public TimeSpan? DurationSinceFirstWaitToRead => DateTimeOffset.UtcNow - TimeOfFirstWaitToRead;
 	public bool NoThresholdsHit => Count == 0
-		|| (Count < _maxBufferSize && DurationSinceFirstWrite <= _forceFlushAfter);
+		|| (Count < _maxBufferSize && DurationSinceFirstWaitToRead <= _forceFlushAfter);
 
 	public InboundBuffer(int maxBufferSize, TimeSpan forceFlushAfter)
 	{
@@ -49,6 +51,7 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 	{
 		Buffer.Clear();
 		TimeOfFirstWrite = null;
+		TimeOfFirstWaitToRead = null;
 	}
 
 	public TEvent[] Copy()
@@ -62,9 +65,9 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 	{
 		get
 		{
-			if (!DurationSinceFirstWrite.HasValue) return _forceFlushAfter;
+			if (!DurationSinceFirstWaitToRead.HasValue) return _forceFlushAfter;
 
-			var d = DurationSinceFirstWrite.Value;
+			var d = DurationSinceFirstWaitToRead.Value;
 			return d < _forceFlushAfter ? _forceFlushAfter - d : _forceFlushAfter;
 		}
 	}
@@ -76,6 +79,7 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 	/// </summary>
 	public async Task<bool> WaitToReadAsync(ChannelReader<TEvent> reader)
 	{
+		TimeOfFirstWaitToRead ??= DateTimeOffset.UtcNow;
 		if (_breaker.IsCancellationRequested)
 		{
 			_breaker.Dispose();
@@ -84,8 +88,7 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 
 		try
 		{
-			var w = Count == 0 ? _forceFlushAfter : Wait;
-			_breaker.CancelAfter(w);
+			_breaker.CancelAfter(Wait);
 			var _ = await reader.WaitToReadAsync(_breaker.Token).ConfigureAwait(false);
 			_breaker.CancelAfter(-1);
 			return true;
@@ -98,7 +101,7 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 		}
 		catch (Exception)
 		{
-			_breaker.CancelAfter(-1);
+			_breaker.CancelAfter(Wait);
 			return true;
 		}
 	}
