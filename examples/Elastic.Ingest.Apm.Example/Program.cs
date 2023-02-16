@@ -61,7 +61,7 @@ namespace Elastic.Ingest.Apm.Example
 				},
 				ExportMaxRetriesCallback = (list) => Interlocked.Increment(ref _maxRetriesExceeded),
 				ExportRetryCallback = (list) => Interlocked.Increment(ref _retries),
-				ExceptionCallback = (e) => _exception = e
+				ExportExceptionCallback = (e) => _exception = e
 			};
 			var channel = new ApmChannel(channelOptions);
 

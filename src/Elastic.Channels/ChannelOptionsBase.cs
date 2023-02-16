@@ -20,14 +20,10 @@ namespace Elastic.Channels
 
 		public Func<Stream, CancellationToken, TEvent, Task> WriteEvent { get; set; } = null!;
 
-		/// <summary>
-		/// If <see cref="Channels.BufferOptions.InboundBufferMaxSize"/> is reached, <see cref="TEvent"/>'s will fail to be published to the channel. You can be notified of dropped
-		/// events with this callback
-		/// </summary>
-		public Action<TEvent>? PublishRejectionCallback { get; set; }
+		/// <summary> Called if the call to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/> throws. </summary>
+		public Action<Exception>? ExportExceptionCallback { get; set; }
 
-		public Action<Exception>? ExceptionCallback { get; set; }
-
+		/// <summary> Called with (number of retries) (number of items to be exported) </summary>
 		public Action<int, int>? ExportItemsAttemptCallback { get; set; }
 
 		/// <summary> Subscribe to be notified of events that are retryable but did not store correctly withing the boundaries of <see cref="Channels.BufferOptions.ExportMaxRetries"/></summary>
@@ -40,20 +36,24 @@ namespace Elastic.Channels
 		public Action<TResponse, IWriteTrackingBuffer>? ExportResponseCallback { get; set; }
 
 		/// <summary>Called everytime an event is written to the inbound channel </summary>
-		public Action? PublishToInboundChannel { get; set; }
+		public Action? PublishToInboundChannelCallback { get; set; }
 
 		/// <summary>Called everytime an event is not written to the inbound channel </summary>
-		public Action? PublishToInboundChannelFailure { get; set; }
+		public Action? PublishToInboundChannelFailureCallback { get; set; }
 
 		/// <summary>Called everytime the inbound channel publishes to the outbound channel. </summary>
-		public Action? PublishToOutboundChannel { get; set; }
+		public Action? PublishToOutboundChannelCallback { get; set; }
 
-		public Action? OutboundChannelStarted { get; set; }
-		public Action? OutboundChannelExited { get; set; }
-		public Action? InboundChannelStarted { get; set; }
+		/// <summary> Called when the thread to read the outbound channel is started </summary>
+		public Action? OutboundChannelStartedCallback { get; set; }
+		/// <summary> Called when the thread to read the outbound channel has exited</summary>
+		public Action? OutboundChannelExitedCallback { get; set; }
+
+		/// <summary> Called when the thread to read the inbound channel has started</summary>
+		public Action? InboundChannelStartedCallback { get; set; }
 
 		/// <summary>Called everytime the inbound channel fails to publish to the outbound channel. </summary>
-		public Action? PublishToOutboundChannelFailure { get; set; }
+		public Action? PublishToOutboundChannelFailureCallback { get; set; }
 	}
 
 }

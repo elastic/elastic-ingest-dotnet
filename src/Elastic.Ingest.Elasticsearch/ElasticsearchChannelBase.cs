@@ -24,7 +24,7 @@ namespace Elastic.Ingest.Elasticsearch
 		{
 			var details = response.ApiCallDetails;
 			if (!details.HasSuccessfulStatusCode)
-				Options.ExceptionCallback?.Invoke(new Exception(details.ToString(), details.OriginalException));
+				Options.ExportExceptionCallback?.Invoke(new Exception(details.ToString(), details.OriginalException));
 			return details.HasSuccessfulStatusCode;
 		}
 
