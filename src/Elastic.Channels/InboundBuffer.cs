@@ -31,7 +31,7 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 	public TimeSpan? DurationSinceFirstWrite => DateTimeOffset.UtcNow - TimeOfFirstWrite;
 	public TimeSpan? DurationSinceFirstWaitToRead => DateTimeOffset.UtcNow - TimeOfFirstWaitToRead;
 	public bool NoThresholdsHit => Count == 0
-		|| (Count < _maxBufferSize && DurationSinceFirstWrite <= _forceFlushAfter);
+		|| (Count < _maxBufferSize && DurationSinceFirstWaitToRead <= _forceFlushAfter);
 
 	public InboundBuffer(int maxBufferSize, TimeSpan forceFlushAfter)
 	{
