@@ -47,7 +47,7 @@ public interface IBufferedChannel<in TEvent> : IDisposable
 	/// <summary>
 	/// Tries to write many <paramref name="events"/> to the channel returning true if ALL messages were written succesfully
 	/// </summary>
-	public bool TryWriteMany(IEnumerable<TEvent> events) =>
+	bool TryWriteMany(IEnumerable<TEvent> events) =>
 		events.Select(e => TryWrite(e)).All(b => b);
 }
 
