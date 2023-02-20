@@ -15,8 +15,10 @@ using Elastic.Channels;
 
 namespace Elastic.Ingest.OpenTelemetry
 {
+	/// <summary> </summary>
 	public class CustomOtlpTraceExporter : OtlpTraceExporter
 	{
+		/// <summary> </summary>
 		public CustomOtlpTraceExporter(OtlpExporterOptions options, TraceChannelOptions channelOptions) : base(options)
 		{
 			var type = GetType();
@@ -35,20 +37,28 @@ namespace Elastic.Ingest.OpenTelemetry
 	}
 
 
+	/// <summary> </summary>
 	public class TraceChannelOptions : ChannelOptionsBase<Activity, TraceExportResult>
 	{
+		/// <summary> </summary>
 		public string? ServiceName { get; set; }
+		/// <summary> </summary>
 		public Uri? Endpoint { get; set; }
+		/// <summary> </summary>
 		public string? SecretToken { get; set; }
 	}
 
+	/// <summary> </summary>
 	public class TraceExportResult
 	{
+		/// <summary> </summary>
 		public ExportResult Result { get; internal set; }
 	}
 
+	/// <summary> </summary>
 	public class TraceChannel : BufferedChannelBase<TraceChannelOptions, Activity, TraceExportResult>
 	{
+		/// <summary> </summary>
 		public TraceChannel(TraceChannelOptions options) : base(options) {
 			var o = new OtlpExporterOptions();
 			o.Endpoint = options.Endpoint;
@@ -80,10 +90,13 @@ namespace Elastic.Ingest.OpenTelemetry
 
 		private Func<IReadOnlyCollection<Activity>, Batch<Activity>> BatchCreator { get; }
 
+		/// <summary> </summary>
 		public CustomOtlpTraceExporter TraceExporter { get; }
 
+		/// <summary> </summary>
 		public CustomActivityProcessor Processor { get; }
 
+		/// <summary> </summary>
 		protected override Task<TraceExportResult> Export(IReadOnlyCollection<Activity> page, CancellationToken ctx = default)
 		{
 			var batch = BatchCreator(page);
@@ -91,6 +104,7 @@ namespace Elastic.Ingest.OpenTelemetry
 			return Task.FromResult(new TraceExportResult { Result = result });
 		}
 
+		/// <summary> </summary>
 		public override void Dispose()
 		{
 			base.Dispose();

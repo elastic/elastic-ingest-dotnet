@@ -8,8 +8,12 @@ using Elastic.Transport;
 
 namespace Elastic.Ingest.Apm
 {
+	/// <summary>
+	/// Channel options for <see cref="ApmChannel"/>
+	/// </summary>
 	public class ApmChannelOptions : TransportChannelOptionsBase<IIntakeObject, EventIntakeResponse, IntakeErrorItem>
 	{
+		/// <inheritdoc cref="ApmChannelOptions"/>
 		public ApmChannelOptions(HttpTransport transport) : base(transport) { }
 	}
 }

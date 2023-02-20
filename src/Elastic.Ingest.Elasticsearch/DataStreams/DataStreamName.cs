@@ -6,6 +6,9 @@ using System.Linq;
 
 namespace Elastic.Ingest.Elasticsearch.DataStreams
 {
+	/// <summary>
+	/// Strongly types a reference to a data stream using Elastic's data stream naming scheme
+	/// </summary>
 	public record DataStreamName
 	{
 		/// <summary> Generic type describing the data</summary>
@@ -20,6 +23,7 @@ namespace Elastic.Ingest.Elasticsearch.DataStreams
 		private static readonly char[] BadCharacters = { '\\', '/', '*', '?', '"', '<', '>', '|', ' ', ',', '#' };
 		private static readonly string BadCharactersError = string.Join(", ", BadCharacters.Select(c => $"'{c}'").ToArray());
 
+		/// <inheritdoc cref="DataStreamName"/>
 		public DataStreamName(string type, string dataSet = "generic", string @namespace = "default")
 		{
 			if (string.IsNullOrEmpty(type)) throw new ArgumentException($"{nameof(type)} can not be null or empty", nameof(type));
@@ -37,10 +41,13 @@ namespace Elastic.Ingest.Elasticsearch.DataStreams
 			Namespace = @namespace.ToLowerInvariant();
 		}
 
+		/// <summary> Returns a good index template name for this data stream</summary>
 		public string GetTemplateName() => $"{Type}-{DataSet}";
+		/// <summary> Returns a good index template wildcard match for this data stream</summary>
 		public string GetNamespaceWildcard() => $"{Type}-{DataSet}-*";
 
 		private string? _stringValue;
+		/// <inheritdoc cref="object.ToString"/>>
 		public override string ToString()
 		{
 			if (_stringValue != null) return _stringValue;

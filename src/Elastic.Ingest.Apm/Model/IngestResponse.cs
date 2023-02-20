@@ -7,21 +7,27 @@ using Elastic.Transport;
 
 namespace Elastic.Ingest.Apm.Model
 {
+	/// <summary> </summary>
 	public class EventIntakeResponse : TransportResponse
 	{
+		/// <summary> </summary>
 		[JsonPropertyName("accepted")]
 		public long Accepted { get; set; }
 
+		/// <summary> </summary>
 		[JsonPropertyName("errors")]
 		//[JsonConverter(typeof(ResponseItemsConverter))]
 		public IReadOnlyCollection<IntakeErrorItem> Errors { get; set; } = null!;
 	}
 
+	/// <summary> </summary>
 	public class IntakeErrorItem
 	{
+		/// <summary> </summary>
 		[JsonPropertyName("message")]
 		public string Message { get; set; } = null!;
 
+		/// <summary> </summary>
 		[JsonPropertyName("document")]
 		public string Document { get; set; } = null!;
 	}

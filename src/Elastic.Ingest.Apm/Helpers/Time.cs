@@ -5,6 +5,7 @@ using System;
 
 namespace Elastic.Ingest.Apm.Helpers
 {
+	/// <summary> </summary>
 	public static class Epoch
 	{
 		/// <summary>
@@ -13,7 +14,9 @@ namespace Elastic.Ingest.Apm.Helpers
 		/// </summary>
 		internal static readonly DateTime UnixEpochDateTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
+		/// <summary> </summary>
 		public static long ToEpoch(this DateTime d) => ToTimestamp(d);
+		/// <summary> </summary>
 		public static long UtcNow => DateTime.UtcNow.ToEpoch();
 
 		/// <summary>

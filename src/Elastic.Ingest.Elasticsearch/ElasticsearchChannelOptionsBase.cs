@@ -7,10 +7,12 @@ using Elastic.Transport;
 
 namespace Elastic.Ingest.Elasticsearch
 {
+	/// <summary>
+	/// Base options implementation for <see cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/> implementations
+	/// </summary>
 	public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem>
 	{
-		protected ElasticsearchChannelOptionsBase(HttpTransport transport) : base(transport)
-		{
-		}
+		/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/>
+		protected ElasticsearchChannelOptionsBase(HttpTransport transport) : base(transport) { }
 	}
 }

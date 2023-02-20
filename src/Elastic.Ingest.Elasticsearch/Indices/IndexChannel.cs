@@ -2,19 +2,25 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 using System;
+using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
 
 namespace Elastic.Ingest.Elasticsearch.Indices
 {
+	/// <summary> A channel to push messages to an Elasticsearch index
+	/// <para>If unsure prefer to use <see cref="DataStreamChannel{TEvent}"/></para>
+	/// </summary>
 	public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChannelOptions<TEvent>>
 	{
+		/// <inheritdoc cref="IndexChannel{TEvent}"/>
 		public IndexChannel(IndexChannelOptions<TEvent> options) : base(options)
 		{
 			TemplateName = string.Format(Options.IndexFormat, "template");
 			TemplateWildcard = string.Format(Options.IndexFormat, "*");
 		}
 
+		/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
 		protected override BulkOperationHeader CreateBulkOperationHeader(TEvent @event)
 		{
 			var indexTime = Options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
@@ -28,7 +34,9 @@ namespace Elastic.Ingest.Elasticsearch.Indices
 					: new CreateOperation { Index = index };
 		}
 
+		/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 		protected override string TemplateName { get; }
+		/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateWildcard"/>
 		protected override string TemplateWildcard { get; }
 
 		/// <summary>

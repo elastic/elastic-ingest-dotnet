@@ -4,24 +4,30 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using Elastic.Channels;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
 
 namespace Elastic.Ingest.Elasticsearch.DataStreams
 {
+	/// <summary> A channel to push messages to Elasticsearch data streams </summary>
 	public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataStreamChannelOptions<TEvent>>
 	{
 		private readonly CreateOperation _fixedHeader;
 
+		/// <inheritdoc cref="DataStreamChannel{TEvent}"/>
 		public DataStreamChannel(DataStreamChannelOptions<TEvent> options) : base(options)
 		{
 			var target = Options.DataStream.ToString();
 			_fixedHeader = new CreateOperation { Index = target };
 		}
 
+		/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
 		protected override BulkOperationHeader CreateBulkOperationHeader(TEvent @event) => _fixedHeader;
 
+		/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 		protected override string TemplateName => Options.DataStream.GetTemplateName();
+		/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateWildcard"/>
 		protected override string TemplateWildcard => Options.DataStream.GetNamespaceWildcard();
 
 		/// <summary>
@@ -46,6 +52,9 @@ namespace Elastic.Ingest.Elasticsearch.DataStreams
 			return (name, indexTemplateBody);
 		}
 
+		/// <summary>
+		/// Yields additional component templates to include in the index template based on the data stream naming scheme
+		/// </summary>
 		protected List<string> GetInferredComponentTemplates()
 		{
 			var additionalComponents = new List<string> { "data-streams-mappings" };

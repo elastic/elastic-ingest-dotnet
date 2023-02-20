@@ -7,6 +7,9 @@ using System.Threading;
 
 namespace Elastic.Channels
 {
+	/// <summary>
+	/// Controls how data should be buffered in <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/> implementations
+	/// </summary>
 	public class BufferOptions
 	{
 		/// <summary>

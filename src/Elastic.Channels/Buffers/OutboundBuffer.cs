@@ -7,8 +7,13 @@ using System.Collections.Generic;
 
 namespace Elastic.Channels.Buffers;
 
+/// <summary>
+/// The buffer to be exported over <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
+/// </summary>
+/// <remarks>Due to change as we move this over to use ArrayPool</remarks>
 public interface IOutboundBuffer<out TEvent> : IWriteTrackingBuffer
 {
+	/// <inheritdoc cref="IOutboundBuffer{TEvent}"/>
 	public IReadOnlyCollection<TEvent> Items { get; }
 }
 

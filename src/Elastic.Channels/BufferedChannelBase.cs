@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -11,12 +12,27 @@ using Elastic.Channels.Buffers;
 
 namespace Elastic.Channels;
 
+/// <summary> Represents a buffered channel implementation</summary>
+/// <typeparam name="TEvent">The type of data to be written</typeparam>
 public interface IBufferedChannel<in TEvent> : IDisposable
 {
+	/// <summary>
+	/// Tries to write <paramref name="item"/> to the inbound channel.
+	/// <para>Returns immediately if successful or unsuccessful</para>
+	/// </summary>
+	/// <returns>A bool indicating if the write was successful</returns>
 	bool TryWrite(TEvent item);
 
+	/// <summary>
+	/// Waits for availability on the inbound channel before attempting to write <paramref name="item"/>.
+	/// </summary>
+	/// <returns>A bool indicating if the write was successful</returns>
 	Task<bool> WaitToWriteAsync(TEvent item, CancellationToken ctx = default);
 
+	/// <summary>
+	/// Waits for availability on the inbound channel before attempting to write each item in <paramref name="events"/>.
+	/// </summary>
+	/// <returns>A bool indicating if all writes werwase successful</returns>
 	async Task<bool> WaitToWriteManyAsync(IEnumerable<TEvent> events, CancellationToken ctx = default)
 	{
 		var allWritten = true;
@@ -27,14 +43,22 @@ public interface IBufferedChannel<in TEvent> : IDisposable
 		}
 		return allWritten;
 	}
+
+	/// <summary>
+	/// Tries to write many <paramref name="events"/> to the channel returning true if ALL messages were written succesfully
+	/// </summary>
+	public bool TryWriteMany(IEnumerable<TEvent> events) =>
+		events.Select(e => TryWrite(e)).All(b => b);
 }
 
-public abstract class BufferedChannelBase<TEvent, TResponse> : BufferedChannelBase<ChannelOptionsBase<TEvent, TResponse>, TEvent, TResponse>
-	where TResponse : class, new()
-{
-	protected BufferedChannelBase(ChannelOptionsBase<TEvent, TResponse> options) : base(options) { }
-}
-
+/// <summary>
+/// The common base implementation of <see cref="IBufferedChannel{TEvent}"/> that all implementations inherit from.
+/// <para>This sets up the <see cref="InChannel"/> and <see cref="OutChannel"/> and the implementation that coordinates moving
+/// data from one to the other</para>
+/// </summary>
+/// <typeparam name="TChannelOptions">Concrete channel options implementation</typeparam>
+/// <typeparam name="TEvent">The type of data we are looking to <see cref="Export"/></typeparam>
+/// <typeparam name="TResponse">The type of responses we are expecting to get back from <see cref="Export"/></typeparam>
 public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	: ChannelWriter<TEvent>, IBufferedChannel<TEvent>
 	where TChannelOptions : ChannelOptionsBase<TEvent, TResponse>
@@ -45,6 +69,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	private readonly SemaphoreSlim _throttleTasks;
 	private readonly CountdownEvent? _signal;
 
+	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
 	protected BufferedChannelBase(TChannelOptions options)
 	{
 		TokenSource = new CancellationTokenSource();
@@ -91,19 +116,31 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	}
 
+	/// <summary>
+	/// All subclasses of <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/> need to at a minimum
+	/// implement this method to export buffered collection of <see cref="OutChannel"/>
+	/// </summary>
+	protected abstract Task<TResponse> Export(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx = default);
 
+
+
+	/// <summary>The channel options currently in use</summary>
 	public TChannelOptions Options { get; }
 
 	private CancellationTokenSource TokenSource { get; }
-	protected Channel<IOutboundBuffer<TEvent>> OutChannel { get; }
-	protected Channel<TEvent> InChannel { get; }
-	protected BufferOptions BufferOptions => Options.BufferOptions;
+	private Channel<IOutboundBuffer<TEvent>> OutChannel { get; }
+	private Channel<TEvent> InChannel { get; }
+	private BufferOptions BufferOptions => Options.BufferOptions;
+
 	internal InboundBuffer<TEvent> InboundBuffer { get; }
 
+	/// <inheritdoc cref="ChannelWriter{T}.WaitToWriteAsync"/>
 	public override ValueTask<bool> WaitToWriteAsync(CancellationToken ctx = default) => InChannel.Writer.WaitToWriteAsync(ctx);
 
+	/// <inheritdoc cref="ChannelWriter{T}.TryComplete"/>
 	public override bool TryComplete(Exception? error = null) => InChannel.Writer.TryComplete(error);
 
+	/// <inheritdoc cref="ChannelWriter{T}.TryWrite"/>
 	public override bool TryWrite(TEvent item)
 	{
 		if (InChannel.Writer.TryWrite(item))
@@ -115,6 +152,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		return false;
 	}
 
+	/// <inheritdoc cref="ChannelWriter{T}.WaitToWriteAsync"/>
 	public virtual async Task<bool> WaitToWriteAsync(TEvent item, CancellationToken ctx = default)
 	{
 		ctx = ctx == default ? TokenSource.Token : ctx;
@@ -128,10 +166,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		return false;
 	}
 
-	protected abstract Task<TResponse> Export(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx = default);
-
 	private static readonly IReadOnlyCollection<TEvent> DefaultRetryBuffer = new TEvent[] { };
 
+	/// <summary>
+	/// Subclasses may override this to yield items from <typeparamref name="TResponse"/> that can be retried.
+	/// <para>The default implementation of this simply always returns an empty collection</para>
+	/// </summary>
 	protected virtual IReadOnlyCollection<TEvent> RetryBuffer(
 		TResponse response,
 		IReadOnlyCollection<TEvent> currentBuffer,
@@ -259,6 +299,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			: new ValueTask<bool>(AsyncSlowPath(buffer));
 	}
 
+	/// <inheritdoc cref="IDisposable.Dispose"/>
 	public virtual void Dispose()
 	{
 		InboundBuffer.Dispose();
