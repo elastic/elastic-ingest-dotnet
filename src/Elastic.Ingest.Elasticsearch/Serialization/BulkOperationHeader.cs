@@ -8,33 +8,47 @@ using System.Text.Json.Serialization;
 
 namespace Elastic.Ingest.Elasticsearch.Serialization
 {
+	/// <summary> Represents the _bulk operation meta header </summary>
 	public abstract class BulkOperationHeader
 	{
+		/// <summary> The index or data stream to write to </summary>
 		[JsonPropertyName("_index")]
 		public string? Index { get; init; }
 
+		/// <summary> The id of the object being written </summary>
 		[JsonPropertyName("_id")]
 		public string? Id { get; init;  }
 
+		/// <summary> Require <see cref="Index"/> to point to an alias </summary>
 		[JsonPropertyName("require_alias")]
 		public bool? RequireAlias { get; init; }
 	}
+
+	/// <summary> Represents the _bulk create operation meta header </summary>
 	[JsonConverter(typeof(BulkOperationHeaderConverter<CreateOperation>))]
 	public class CreateOperation : BulkOperationHeader
 	{
+		/// <summary>  </summary>
 		[JsonPropertyName("dynamic_templates")]
 		public Dictionary<string, string>? DynamicTemplates { get; init; }
 	}
+
+	/// <summary> Represents the _bulk index operation meta header </summary>
 	[JsonConverter(typeof(BulkOperationHeaderConverter<IndexOperation>))]
 	public class IndexOperation : BulkOperationHeader
 	{
+		/// <summary>  </summary>
 		[JsonPropertyName("dynamic_templates")]
 		public Dictionary<string, string>? DynamicTemplates { get; init; }
 	}
+
+	/// <summary> Represents the _bulk delete operation meta header </summary>
 	[JsonConverter(typeof(BulkOperationHeaderConverter<DeleteOperation>))]
 	public class DeleteOperation : BulkOperationHeader
 	{
 	}
+
+	/// <summary> Represents the _bulk update operation meta header </summary>
 	[JsonConverter(typeof(BulkOperationHeaderConverter<UpdateOperation>))]
 	public class UpdateOperation : BulkOperationHeader
 	{

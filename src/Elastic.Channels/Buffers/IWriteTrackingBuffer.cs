@@ -12,6 +12,10 @@ namespace Elastic.Channels.Buffers;
 /// </summary>
 public interface IWriteTrackingBuffer
 {
+	/// <summary> The current size of the buffer  </summary>
 	int Count { get; }
+	/// <summary>
+	/// The duration since the first write
+	/// </summary>
 	TimeSpan? DurationSinceFirstWrite { get; }
 }

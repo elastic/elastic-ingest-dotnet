@@ -8,11 +8,15 @@ using Elastic.Transport.Products.Elasticsearch;
 
 namespace Elastic.Ingest.Elasticsearch.Serialization
 {
+	/// <summary> Represents a bulk response item</summary>
 	[JsonConverter(typeof(ItemConverter))]
 	public class BulkResponseItem
 	{
+		/// <summary> The action that was used for the event (create/index) </summary>
 		public string Action { get; internal set; } = null!;
+		/// <summary> Elasticsearch error if any </summary>
 		public ErrorCause? Error { get; internal set; }
+		/// <summary> Status code from Elasticsearch writing the event </summary>
 		public int Status { get; internal set; }
 	}
 

@@ -17,9 +17,13 @@ namespace Elastic.Channels
 	/// <typeparam name="TResponse"></typeparam>
 	public abstract class ChannelOptionsBase<TEvent, TResponse>
 	{
+		/// <inheritdoc cref="BufferOptions"/>
 		public BufferOptions BufferOptions { get; set; } = new ();
 
-		public Func<Stream, CancellationToken, TEvent, Task> WriteEvent { get; set; } = null!;
+		/// <summary>
+		/// Optionally provides a custom write implementation to a channel. Concrete channel implementations are not required to adhere to this config
+		/// </summary>
+		public Func<Stream, CancellationToken, TEvent, Task>? WriteEvent { get; set; } = null;
 
 		/// <summary> Called if the call to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/> throws. </summary>
 		public Action<Exception>? ExportExceptionCallback { get; set; }

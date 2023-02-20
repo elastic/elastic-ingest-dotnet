@@ -10,6 +10,11 @@ using Elastic.Ingest.Elasticsearch.Serialization;
 
 namespace Elastic.Ingest.Elasticsearch.Diagnostics;
 
+/// <summary>
+/// A very rudimentary diagnostics object tracking various important metrics to provide insights into the
+/// machinery of <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>.
+/// <para>This will be soon be replaced by actual metrics</para>
+/// </summary>
 // ReSharper disable once UnusedType.Global
 public class ElasticsearchChannelListener<TEvent> : ChannelListener<TEvent, BulkResponse>
 {
@@ -17,9 +22,11 @@ public class ElasticsearchChannelListener<TEvent> : ChannelListener<TEvent, Bulk
 	private string? _firstItemError;
 	private int _serverRejections;
 
+	/// <inheritdoc cref="ChannelListener{TEvent,TResponse}.PublishSuccess"/>
 	public override bool PublishSuccess => base.PublishSuccess && string.IsNullOrEmpty(_firstItemError);
 
 	// ReSharper disable once UnusedMember.Global
+	/// <inheritdoc cref="ChannelListener{TEvent,TResponse}.Register"/>
 	public ElasticsearchChannelListener<TEvent> Register(ResponseItemsChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem> options)
 	{
 		base.Register(options);
@@ -38,6 +45,7 @@ public class ElasticsearchChannelListener<TEvent> : ChannelListener<TEvent, Bulk
 		return this;
 	}
 
+	/// <inheritdoc cref="ChannelListener{TEvent,TResponse}.AdditionalData"/>
 	protected override string AdditionalData => $@"Server Rejected Calls: {_serverRejections:N0}
 Server Rejected Items: {_rejectedItems:N0}
 First Error: {_firstItemError}

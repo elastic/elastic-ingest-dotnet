@@ -5,14 +5,15 @@
 namespace Elastic.Channels.Diagnostics;
 
 /// <summary>
-/// A NOOP implementation of <see cref="BufferedChannelBase{TEvent,TResponse}"/> that:
-/// <para> -tracks the number of times <see cref="Send"/> is invoked under <see cref="SentBuffersCount"/> </para>
-/// <para> -observes the maximum concurrent calls to <see cref="Send"/> under <see cref="ObservedConcurrency"/> </para>
+/// A NOOP implementation of <see cref="IBufferedChannel{TEvent}"/> that:
+/// <para> -tracks the number of times <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/> is invoked under <see cref="NoopBufferedChannel.ExportedBuffers"/> </para>
+/// <para> -observes the maximum concurrent calls to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/> under <see cref="NoopBufferedChannel.ObservedConcurrency"/> </para>
 /// </summary>
 public class DiagnosticsBufferedChannel : NoopBufferedChannel
 {
 	private readonly string? _name;
 
+	/// <inheritdoc cref="DiagnosticsBufferedChannel"/>
 	public DiagnosticsBufferedChannel(BufferOptions options, bool observeConcurrency = false, string? name = null)
 		: base(options, observeConcurrency)
 	{
@@ -20,8 +21,13 @@ public class DiagnosticsBufferedChannel : NoopBufferedChannel
 		Listener = new ChannelListener<NoopEvent, NoopResponse>(_name).Register(Options);
 	}
 
+	/// <inheritdoc cref="ChannelListener{TEvent,TResponse}"/>
+	// ReSharper disable once MemberCanBePrivate.Global
 	public ChannelListener<NoopEvent, NoopResponse> Listener { get; }
 
+	/// <summary>
+	/// Provides a debug message to give insights to the machinery of <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
+	/// </summary>
 	public override string ToString() => $@"------------------------------------------
 {Listener}
 

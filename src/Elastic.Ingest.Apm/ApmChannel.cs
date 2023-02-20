@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using Elastic.Channels;
 using Elastic.Ingest.Apm.Model;
 using Elastic.Ingest.Transport;
 using Elastic.Transport;
@@ -33,21 +34,32 @@ namespace Elastic.Ingest.Apm
 		};
 	}
 
+	/// <summary>
+	/// An <see cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/> implementation that sends V2 intake API data
+	/// to APM server.
+	/// </summary>
 	public class ApmChannel : TransportChannelBase<ApmChannelOptions, IIntakeObject, EventIntakeResponse, IntakeErrorItem>
 	{
+		/// <inheritdoc cref="ApmChannel"/>
 		public ApmChannel(ApmChannelOptions options) : base(options) { }
 
 		//retry if APM server returns 429
+		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Retry"/>
 		protected override bool Retry(EventIntakeResponse response) => response.ApiCallDetails.HttpStatusCode == 429;
 
+		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryAllItems"/>
 		protected override bool RetryAllItems(EventIntakeResponse response) => response.ApiCallDetails.HttpStatusCode == 429;
 
 		//APM does not return the status for all events sent. Therefor we always return an empty set for individual items to retry
-		private List<(IIntakeObject, IntakeErrorItem)> _emptyZip = new();
+		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Zip"/>
 		protected override List<(IIntakeObject, IntakeErrorItem)> Zip(EventIntakeResponse response, IReadOnlyCollection<IIntakeObject> page) => _emptyZip;
+		private List<(IIntakeObject, IntakeErrorItem)> _emptyZip = new();
+		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryEvent"/>
 		protected override bool RetryEvent((IIntakeObject, IntakeErrorItem) @event) => false;
+		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RejectEvent"/>
 		protected override bool RejectEvent((IIntakeObject, IntakeErrorItem) @event) => false;
 
+		/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
 		protected override Task<EventIntakeResponse> Export(HttpTransport transport, IReadOnlyCollection<IIntakeObject> page, CancellationToken ctx = default) =>
 			transport.RequestAsync<EventIntakeResponse>(HttpMethod.POST, "/intake/v2/events",
 				PostData.StreamHandler(page,

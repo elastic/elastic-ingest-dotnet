@@ -11,10 +11,14 @@ using Elastic.Transport;
 namespace Elastic.Ingest.Transport;
 
 //TODO make ReflectionVersionInfo in Elastic.Transport not sealed
+/// <summary>
+/// Returns assembly version information based on type.
+/// </summary>
 public sealed class LibraryVersion : VersionInfo
 {
 	private static readonly Regex VersionRegex = new(@"^\d+\.\d+\.\d\-?");
 
+	/// <summary> </summary>
 	public static readonly LibraryVersion Current = Create<LibraryVersion>();
 
 	private LibraryVersion() { }

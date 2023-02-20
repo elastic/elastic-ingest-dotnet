@@ -6,8 +6,13 @@ using Elastic.Transport;
 
 namespace Elastic.Ingest.Elasticsearch.Indices
 {
+	/// <summary>
+	/// Provides options to <see cref="IndexChannel{TEvent}"/> to control how and where data gets written to Elasticsearch
+	/// </summary>
+	/// <typeparam name="TEvent"></typeparam>
 	public class IndexChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEvent>
 	{
+		/// <inheritdoc cref="IndexChannelOptions{TEvent}"/>
 		public IndexChannelOptions(HttpTransport transport) : base(transport) { }
 
 		/// <summary>

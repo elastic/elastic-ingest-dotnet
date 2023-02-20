@@ -9,6 +9,9 @@ using Elastic.Channels.Buffers;
 
 namespace Elastic.Channels;
 
+/// <summary>
+/// Channel options to <see cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
+/// </summary>
 public abstract class ResponseItemsChannelOptionsBase<TEvent, TResponse, TBulkResponseItem>
 	: ChannelOptionsBase<TEvent, TResponse>
 {
@@ -27,16 +30,17 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 	where TChannelOptions : ResponseItemsChannelOptionsBase<TEvent, TResponse, TBulkResponseItem>
 	where TResponse : class, new()
 {
+	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
 	protected ResponseItemsBufferedChannelBase(TChannelOptions options) : base(options) { }
 
-	/// <summary> Based on <see cref="TResponse"/> should return a bool indicating if retry is needed</summary>
+	/// <summary> Based on <typeparamref name="TResponse"/> should return a bool indicating if retry is needed</summary>
 	protected abstract bool Retry(TResponse response);
 
 	/// <summary> Indicates that ALL items have to be retried in which case no further special handling is needed</summary>
 	protected abstract bool RetryAllItems(TResponse response);
 
 	/// <summary>
-	/// Implementers have to implement this to align sent <see cref="TEvent"/> to received <see cref="TBulkResponseItem"/>'s
+	/// Implementers have to implement this to align sent <typeparamref name="TEvent"/> to received <typeparamref name="TBulkResponseItem"/>'s
 	/// </summary>
 	protected abstract List<(TEvent, TBulkResponseItem)> Zip(TResponse response, IReadOnlyCollection<TEvent> page);
 
@@ -49,6 +53,7 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 	/// </summary>
 	protected abstract bool RejectEvent((TEvent, TBulkResponseItem) @event);
 
+	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.RetryBuffer"/>>
 	protected override IReadOnlyCollection<TEvent> RetryBuffer(TResponse response, IReadOnlyCollection<TEvent> events,
 		IWriteTrackingBuffer consumedBufferStatistics
 	)

@@ -12,23 +12,34 @@ using Elastic.Transport.Products.Elasticsearch;
 namespace Elastic.Ingest.Elasticsearch.Serialization
 {
 
+	/// <summary>Represents the _bulk response from Elasticsearch</summary>
 	public class BulkResponse : TransportResponse
 	{
+		/// <summary>
+		/// Individual bulk response items information
+		/// </summary>
 		[JsonPropertyName("items")]
 		[JsonConverter(typeof(ResponseItemsConverter))]
 		public IReadOnlyCollection<BulkResponseItem> Items { get; set; } = null!;
 
+		/// <summary> Overall bulk error from Elasticsearch if any</summary>
 		[JsonPropertyName("error")]
 		public ErrorCause? Error { get; set; }
 
+		/// <summary>
+		/// Tries and get the error from Elasticsearch as string
+		/// </summary>
+		/// <returns>True if Elasticsearch contained an overall bulk error</returns>
 		public bool TryGetServerErrorReason(out string? reason)
 		{
 			reason = Error?.Reason;
 			return !string.IsNullOrWhiteSpace(reason);
 		}
 
+		/// <inheritdoc cref="object.ToString"/>
 		public override string ToString() => ApiCallDetails.DebugInformation;
 	}
+
 	internal class ResponseItemsConverter : JsonConverter<IReadOnlyCollection<BulkResponseItem>>
 	{
 		public static readonly IReadOnlyCollection<BulkResponseItem> EmptyBulkItems =

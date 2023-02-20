@@ -81,7 +81,7 @@ jobs:
       name: publish canary packages to feedz.io
       if: github.event_name == 'push' && startswith(github.ref, 'refs/heads')
 
-    - run: ./build.sh generatereleasenotes -s true
+    - run: ./build.sh generatereleasenotes -s true --token ${{secrets.GITHUB_TOKEN}}
       name: Generate release notes for tag
       if: github.event_name == 'push' && startswith(github.ref, 'refs/tags')
     - run: ./build.sh createreleaseongithub -s true --token ${{secrets.GITHUB_TOKEN}}

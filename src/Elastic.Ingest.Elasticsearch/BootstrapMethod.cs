@@ -4,6 +4,7 @@
 
 namespace Elastic.Ingest.Elasticsearch;
 
+/// <summary> Controls how to bootstrap target indices or data streams</summary>
 public enum BootstrapMethod
 {
 	/// <summary>

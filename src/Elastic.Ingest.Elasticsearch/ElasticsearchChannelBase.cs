@@ -8,18 +8,27 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Elastic.Channels;
+using Elastic.Ingest.Elasticsearch.DataStreams;
+using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
 using Elastic.Transport;
 
 namespace Elastic.Ingest.Elasticsearch
 {
+	/// <summary>
+	/// An abstract base class for both <see cref="DataStreamChannel{TEvent}"/> and <see cref="IndexChannel{TEvent}"/>
+	/// <para>Coordinates most of the sending to- and bootstrapping of Elasticsearch</para>
+	/// </summary>
 	public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		: TransportChannelBase<TChannelOptions, TEvent, BulkResponse, BulkResponseItem>
 		where TChannelOptions : TransportChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem>
 	{
+		/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/>
 		protected ElasticsearchChannelBase(TChannelOptions options) : base(options) { }
 
+		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Retry"/>
 		protected override bool Retry(BulkResponse response)
 		{
 			var details = response.ApiCallDetails;
@@ -28,17 +37,22 @@ namespace Elastic.Ingest.Elasticsearch
 			return details.HasSuccessfulStatusCode;
 		}
 
+		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryAllItems"/>
 		protected override bool RetryAllItems(BulkResponse response) => response.ApiCallDetails.HttpStatusCode == 429;
 
+		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Zip"/>
 		protected override List<(TEvent, BulkResponseItem)> Zip(BulkResponse response, IReadOnlyCollection<TEvent> page) =>
 			page.Zip(response.Items, (doc, item) => (doc, item)).ToList();
 
+		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryEvent"/>
 		protected override bool RetryEvent((TEvent, BulkResponseItem) @event) =>
 			ElasticsearchChannelStatics.RetryStatusCodes.Contains(@event.Item2.Status);
 
+		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RejectEvent"/>
 		protected override bool RejectEvent((TEvent, BulkResponseItem) @event) =>
 			@event.Item2.Status < 200 || @event.Item2.Status > 300;
 
+		/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Export(Elastic.Transport.HttpTransport,System.Collections.Generic.IReadOnlyCollection{TEvent},System.Threading.CancellationToken)"/>
 		protected override Task<BulkResponse> Export(HttpTransport transport, IReadOnlyCollection<TEvent> page, CancellationToken ctx = default) =>
 			transport.RequestAsync<BulkResponse>(HttpMethod.POST, "/_bulk",
 				PostData.StreamHandler(page,
@@ -49,6 +63,9 @@ namespace Elastic.Ingest.Elasticsearch
 					async (b, stream, ctx) => { await WriteBufferToStreamAsync(b, stream, ctx).ConfigureAwait(false); })
 				, ElasticsearchChannelStatics.RequestParams, ctx);
 
+		/// <summary>
+		/// Asks implementations to create a <see cref="BulkOperationHeader"/> based on the <paramref name="event"/> being exported.
+		/// </summary>
 		protected abstract BulkOperationHeader CreateBulkOperationHeader(TEvent @event);
 
 		private async Task WriteBufferToStreamAsync(IReadOnlyCollection<TEvent> b, Stream stream, CancellationToken ctx)
@@ -78,10 +95,13 @@ namespace Elastic.Ingest.Elasticsearch
 			}
 		}
 
+		/// <summary>  </summary>
 		protected class HeadIndexTemplateResponse : TransportResponse { }
 
+		/// <summary>  </summary>
 		protected class PutIndexTemplateResponse : TransportResponse { }
 
+		/// <summary>  </summary>
 		protected class PutComponentTemplateResponse : TransportResponse { }
 
 

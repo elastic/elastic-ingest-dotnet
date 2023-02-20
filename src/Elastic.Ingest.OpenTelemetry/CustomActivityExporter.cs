@@ -6,8 +6,10 @@ using OpenTelemetry;
 
 namespace Elastic.Ingest.OpenTelemetry
 {
+	/// <summary> </summary>
 	public class CustomActivityProcessor : BatchActivityExportProcessor
 	{
+		/// <summary> </summary>
 		public CustomActivityProcessor(
 			BaseExporter<Activity> exporter,
 			int maxQueueSize = 2048,
@@ -21,6 +23,7 @@ namespace Elastic.Ingest.OpenTelemetry
 			Activity.ForceDefaultIdFormat = true;
 		}
 
+		/// <summary> </summary>
 		public void Add(Activity a) => OnExport(a);
 
 	}

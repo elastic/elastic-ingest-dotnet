@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 
 namespace Elastic.Ingest.Apm.Model
 {
+	/// <summary>Marker interface for V2 intake objects </summary>
 	public interface IIntakeObject { }
 
 	/// <summary>
@@ -14,6 +15,7 @@ namespace Elastic.Ingest.Apm.Model
 	/// </summary>
 	public class Transaction : IIntakeObject
 	{
+		/// <see cref="Transaction"/>
 		public Transaction(string type, string id, string traceId, SpanCount spanCount, double duration, long timestamp)
 		{
 			Type = type;
@@ -76,6 +78,7 @@ namespace Elastic.Ingest.Apm.Model
 		[JsonPropertyName("sampled")]
 		public bool? Sampled { get; set; }
 
+		/// <summary></summary>
 		[JsonPropertyName("span_count")]
 		public SpanCount SpanCount { get; set; }
 
@@ -93,8 +96,10 @@ namespace Elastic.Ingest.Apm.Model
 		public string Type { get; set; }
 	}
 
+	/// <summary></summary>
 	public class Marks { }
 
+	/// <summary></summary>
 	public class SpanCount
 	{
 		/// <summary>
@@ -110,8 +115,10 @@ namespace Elastic.Ingest.Apm.Model
 		public long Started { get; set; }
 	}
 
+	/// <summary></summary>
     public class Span : IIntakeObject
 	{
+		/// <summary></summary>
 		public Span(string type, string name, string id, string traceId, string parentId, long timestamp)
 		{
 			Type = type;
@@ -205,6 +212,7 @@ namespace Elastic.Ingest.Apm.Model
         public string Type { get; set; }
     }
 
+	/// <summary></summary>
     public class Context
     {
         /// <summary>
@@ -230,6 +238,7 @@ namespace Elastic.Ingest.Apm.Model
         public ContextService? Service { get; set; }
     }
 
+	/// <summary></summary>
     public class Db
     {
         /// <summary>
@@ -264,6 +273,7 @@ namespace Elastic.Ingest.Apm.Model
         public string? User { get; set; }
     }
 
+	/// <summary></summary>
     public class Destination
     {
         /// <summary>
@@ -283,6 +293,7 @@ namespace Elastic.Ingest.Apm.Model
         public DestinationService? Service { get; set; }
     }
 
+	/// <summary></summary>
     public class DestinationService
     {
         /// <summary>
@@ -304,6 +315,7 @@ namespace Elastic.Ingest.Apm.Model
         public string? Type { get; set; }
     }
 
+	/// <summary></summary>
     public class Http
     {
         /// <summary>
@@ -322,6 +334,7 @@ namespace Elastic.Ingest.Apm.Model
         public string? Url { get; set; }
     }
 
+	/// <summary></summary>
     public class ContextService
     {
         /// <summary>
@@ -335,6 +348,7 @@ namespace Elastic.Ingest.Apm.Model
         public string? Name { get; set; }
     }
 
+	/// <summary></summary>
     public class Agent
     {
         /// <summary>

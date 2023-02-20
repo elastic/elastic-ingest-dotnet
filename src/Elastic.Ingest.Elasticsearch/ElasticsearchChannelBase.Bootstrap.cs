@@ -11,7 +11,9 @@ namespace Elastic.Ingest.Elasticsearch
 {
 	public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	{
+		/// <summary> The index template name <see cref="BootstrapElasticsearch"/> should register.</summary>
 		protected abstract string TemplateName { get; }
+		/// <summary> The index template wildcard the <see cref="BootstrapElasticsearch"/> should register for its index template.</summary>
 		protected abstract string TemplateWildcard { get; }
 
 		/// <summary>
@@ -21,6 +23,12 @@ namespace Elastic.Ingest.Elasticsearch
 		protected abstract (string, string) GetDefaultIndexTemplate(string name, string match, string mappingsName, string settingsName);
 
 
+		/// <summary>
+		/// Bootstrap the target data stream. Will register the appropriate index and component templates
+		/// </summary>
+		/// <param name="bootstrapMethod">Either None (no bootstrapping), Silent (quiet exit), Failure (throw exceptions)</param>
+		/// <param name="ilmPolicy">Registers a component template that ensures the template is managed by this ilm policy</param>
+		/// <param name="ctx"></param>
 		public virtual async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, string? ilmPolicy = null, CancellationToken ctx = default)
 		{
 			if (bootstrapMethod == BootstrapMethod.None) return true;
@@ -44,6 +52,11 @@ namespace Elastic.Ingest.Elasticsearch
 			return true;
 		}
 
+		/// <summary>
+		/// Bootstrap the target data stream. Will register the appropriate index and component templates
+		/// </summary>
+		/// <param name="bootstrapMethod">Either None (no bootstrapping), Silent (quiet exit), Failure (throw exceptions)</param>
+		/// <param name="ilmPolicy">Registers a component template that ensures the template is managed by this ilm policy</param>
 		public virtual bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod, string? ilmPolicy = null)
 		{
 			if (bootstrapMethod == BootstrapMethod.None) return true;
@@ -67,6 +80,7 @@ namespace Elastic.Ingest.Elasticsearch
 			return true;
 		}
 
+		/// <summary></summary>
 		protected bool IndexTemplateExists(string name)
 		{
 			var templateExists = Options.Transport.Request<HeadIndexTemplateResponse>(HttpMethod.HEAD, $"_index_template/{name}");
@@ -74,6 +88,7 @@ namespace Elastic.Ingest.Elasticsearch
 			return statusCode is 200;
 		}
 
+		/// <summary></summary>
 		protected async Task<bool> IndexTemplateExistsAsync(string name, CancellationToken ctx = default)
 		{
 			var templateExists = await Options.Transport.RequestAsync<HeadIndexTemplateResponse>
@@ -83,6 +98,7 @@ namespace Elastic.Ingest.Elasticsearch
 			return statusCode is 200;
 		}
 
+		/// <summary></summary>
 		protected bool PutIndexTemplate(BootstrapMethod bootstrapMethod, string name, string body)
 		{
 			var putIndexTemplateResponse = Options.Transport.Request<PutIndexTemplateResponse>
@@ -95,6 +111,7 @@ namespace Elastic.Ingest.Elasticsearch
 					$"Failure to create index templates for {TemplateWildcard}: {putIndexTemplateResponse}");
 		}
 
+		/// <summary></summary>
 		protected async Task<bool> PutIndexTemplateAsync(BootstrapMethod bootstrapMethod, string name, string body, CancellationToken ctx = default)
 		{
 			var putIndexTemplateResponse = await Options.Transport.RequestAsync<PutIndexTemplateResponse>
@@ -108,6 +125,7 @@ namespace Elastic.Ingest.Elasticsearch
 					$"Failure to create index templates for {TemplateWildcard}: {putIndexTemplateResponse}");
 		}
 
+		/// <summary></summary>
 		protected bool PutComponentTemplate(BootstrapMethod bootstrapMethod, string name, string body)
 		{
 			var putComponentTemplate = Options.Transport.Request<PutComponentTemplateResponse>
@@ -120,6 +138,7 @@ namespace Elastic.Ingest.Elasticsearch
 					$"Failure to create component template `${name}` for {TemplateWildcard}: {putComponentTemplate}");
 		}
 
+		/// <summary></summary>
 		protected async Task<bool> PutComponentTemplateAsync(BootstrapMethod bootstrapMethod, string name, string body, CancellationToken ctx = default)
 		{
 			var putComponentTemplate = await Options.Transport.RequestAsync<PutComponentTemplateResponse>
