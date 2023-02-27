@@ -14,6 +14,7 @@ using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
 using Elastic.Transport;
+using static Elastic.Ingest.Elasticsearch.ElasticsearchChannelStatics;
 
 namespace Elastic.Ingest.Elasticsearch
 {
@@ -46,7 +47,7 @@ namespace Elastic.Ingest.Elasticsearch
 
 		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryEvent"/>
 		protected override bool RetryEvent((TEvent, BulkResponseItem) @event) =>
-			ElasticsearchChannelStatics.RetryStatusCodes.Contains(@event.Item2.Status);
+			RetryStatusCodes.Contains(@event.Item2.Status);
 
 		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RejectEvent"/>
 		protected override bool RejectEvent((TEvent, BulkResponseItem) @event) =>
@@ -61,7 +62,7 @@ namespace Elastic.Ingest.Elasticsearch
 						/* NOT USED */
 					},
 					async (b, stream, ctx) => { await WriteBufferToStreamAsync(b, stream, ctx).ConfigureAwait(false); })
-				, ElasticsearchChannelStatics.RequestParams, ctx);
+				, RequestParams, ctx);
 
 		/// <summary>
 		/// Asks implementations to create a <see cref="BulkOperationHeader"/> based on the <paramref name="event"/> being exported.
@@ -75,23 +76,23 @@ namespace Elastic.Ingest.Elasticsearch
 				if (@event == null) continue;
 
 				var indexHeader = CreateBulkOperationHeader(@event);
-				await JsonSerializer.SerializeAsync(stream, indexHeader, indexHeader.GetType(), ElasticsearchChannelStatics.SerializerOptions, ctx)
+				await JsonSerializer.SerializeAsync(stream, indexHeader, indexHeader.GetType(), SerializerOptions, ctx)
 					.ConfigureAwait(false);
-				await stream.WriteAsync(ElasticsearchChannelStatics.LineFeed, 0, 1, ctx).ConfigureAwait(false);
+				await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
 
 				if (indexHeader is UpdateOperation)
-					await stream.WriteAsync(ElasticsearchChannelStatics.DocUpdateHeaderStart, ctx).ConfigureAwait(false);
+					await stream.WriteAsync(DocUpdateHeaderStart, 0, DocUpdateHeaderStart.Length, ctx).ConfigureAwait(false);
 
 				if (Options.WriteEvent != null)
 					await Options.WriteEvent(stream, ctx, @event).ConfigureAwait(false);
 				else
-					await JsonSerializer.SerializeAsync(stream, @event, typeof(TEvent), ElasticsearchChannelStatics.SerializerOptions, ctx)
+					await JsonSerializer.SerializeAsync(stream, @event, typeof(TEvent), SerializerOptions, ctx)
 						.ConfigureAwait(false);
 
 				if (indexHeader is UpdateOperation)
-					await stream.WriteAsync(ElasticsearchChannelStatics.DocUpdateHeaderEnd, ctx).ConfigureAwait(false);
+					await stream.WriteAsync(DocUpdateHeaderEnd, 0, DocUpdateHeaderEnd.Length, ctx).ConfigureAwait(false);
 
-				await stream.WriteAsync(ElasticsearchChannelStatics.LineFeed, 0, 1, ctx).ConfigureAwait(false);
+				await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
 			}
 		}
 
