@@ -87,7 +87,7 @@ Inbound Buffer Publish Failures: {_inboundPublishFailures:N0}
 Outbound Buffer Read Loop Started: {_outboundChannelStarted}
 Outbound Buffer Read Loop Exited: {_outboundChannelExited}
 Outbound Buffer Publishes: {_outboundPublishes:N0}
-Outbound Buffer Publish Failures: {_outboundPublishes:N0}
+Outbound Buffer Publish Failures: {_outboundPublishFailures:N0}
 {AdditionalData}
 Exception: {ObservedException}
 ";
