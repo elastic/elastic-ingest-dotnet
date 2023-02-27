@@ -265,18 +265,15 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 					break;
 			}
 
-			Options.PublishToOutboundChannelCallback?.Invoke();
 			if (InboundBuffer.NoThresholdsHit) continue;
-
-			//:w
-			//Options.PublishToOutboundChannel?.Invoke();
 
 			var outboundBuffer = new OutboundBuffer<TEvent>(InboundBuffer);
 			InboundBuffer.Reset();
 
 			if (await PublishAsync(outboundBuffer).ConfigureAwait(false))
-				continue;
-			Options.PublishToOutboundChannelFailureCallback?.Invoke();
+				Options.PublishToOutboundChannelCallback?.Invoke();
+			else
+				Options.PublishToOutboundChannelFailureCallback?.Invoke();
 		}
 	}
 
