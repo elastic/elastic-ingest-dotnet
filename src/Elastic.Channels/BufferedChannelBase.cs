@@ -33,22 +33,12 @@ public interface IBufferedChannel<in TEvent> : IDisposable
 	/// Waits for availability on the inbound channel before attempting to write each item in <paramref name="events"/>.
 	/// </summary>
 	/// <returns>A bool indicating if all writes werwase successful</returns>
-	async Task<bool> WaitToWriteManyAsync(IEnumerable<TEvent> events, CancellationToken ctx = default)
-	{
-		var allWritten = true;
-		foreach (var e in events)
-		{
-			var written = await WaitToWriteAsync(e, ctx).ConfigureAwait(false);
-			if (!written) allWritten = written;
-		}
-		return allWritten;
-	}
+	Task<bool> WaitToWriteManyAsync(IEnumerable<TEvent> events, CancellationToken ctx = default);
 
 	/// <summary>
 	/// Tries to write many <paramref name="events"/> to the channel returning true if ALL messages were written succesfully
 	/// </summary>
-	bool TryWriteMany(IEnumerable<TEvent> events) =>
-		events.Select(e => TryWrite(e)).All(b => b);
+	bool TryWriteMany(IEnumerable<TEvent> events);
 }
 
 /// <summary>
@@ -122,8 +112,6 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// </summary>
 	protected abstract Task<TResponse> Export(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx = default);
 
-
-
 	/// <summary>The channel options currently in use</summary>
 	public TChannelOptions Options { get; }
 
@@ -151,6 +139,23 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		Options.PublishToInboundChannelFailureCallback?.Invoke();
 		return false;
 	}
+
+
+	/// <inheritdoc cref="IBufferedChannel{TEvent}.WaitToWriteManyAsync"/>
+	public async Task<bool> WaitToWriteManyAsync(IEnumerable<TEvent> events, CancellationToken ctx = default)
+	{
+		var allWritten = true;
+		foreach (var e in events)
+		{
+			var written = await WaitToWriteAsync(e, ctx).ConfigureAwait(false);
+			if (!written) allWritten = written;
+		}
+		return allWritten;
+	}
+
+	/// <inheritdoc cref="IBufferedChannel{TEvent}.TryWriteMany"/>
+	public bool TryWriteMany(IEnumerable<TEvent> events) =>
+		events.Select(e => TryWrite(e)).All(b => b);
 
 	/// <inheritdoc cref="ChannelWriter{T}.WaitToWriteAsync"/>
 	public virtual async Task<bool> WaitToWriteAsync(TEvent item, CancellationToken ctx = default)
