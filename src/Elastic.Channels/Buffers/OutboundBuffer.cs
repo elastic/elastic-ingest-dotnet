@@ -3,7 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 
 namespace Elastic.Channels.Buffers;
 
@@ -11,24 +11,32 @@ namespace Elastic.Channels.Buffers;
 /// The buffer to be exported over <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
 /// </summary>
 /// <remarks>Due to change as we move this over to use ArrayPool</remarks>
-public interface IOutboundBuffer<out TEvent> : IWriteTrackingBuffer
+public interface IOutboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 {
-	/// <inheritdoc cref="IOutboundBuffer{TEvent}"/>
-	public IReadOnlyCollection<TEvent> Items { get; }
+	/// <summary>
+	///
+	/// </summary>
+	/// <returns></returns>
+	ArraySegment<TEvent> GetArraySegment();
 }
 
 internal class OutboundBuffer<TEvent> : IOutboundBuffer<TEvent>
 {
-	public IReadOnlyCollection<TEvent> Items { get; }
+	//public IReadOnlyCollection<TEvent> Items { get; }
+	private TEvent[] ArrayItems { get; }
+
+	public int Count { get; }
+	public TimeSpan? DurationSinceFirstWrite { get; }
 
 	public OutboundBuffer(InboundBuffer<TEvent> buffer)
 	{
 		Count = buffer.Count;
 		DurationSinceFirstWrite = buffer.DurationSinceFirstWrite;
 		// create a shallow copied collection to hand to consumers.
-		Items = buffer.Copy();
+		ArrayItems = buffer.Reset();
 	}
 
-	public int Count { get; }
-	public TimeSpan? DurationSinceFirstWrite { get; }
+	public ArraySegment<TEvent> GetArraySegment() => new ArraySegment<TEvent>(ArrayItems, 0, Count);
+
+	public void Dispose() => ArrayPool<TEvent>.Shared.Return(ArrayItems);
 }

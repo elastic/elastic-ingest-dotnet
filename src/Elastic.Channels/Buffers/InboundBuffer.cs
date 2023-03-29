@@ -3,7 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Collections.Generic;
+using System.Buffers;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -21,13 +21,14 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 
 	private CancellationTokenSource _breaker = new();
 
-	public List<TEvent> Buffer { get; }
+	private TEvent[] Buffer { get; set; }
 
 	/// <summary>The time that the first event is read from the channel and added to the buffer, from first read or after the buffer is reset.</summary>
 	private DateTimeOffset? TimeOfFirstWrite { get; set; }
 	private DateTimeOffset? TimeOfFirstWaitToRead { get; set; }
 
-	public int Count => Buffer.Count;
+	private int _count = 0;
+	public int Count => _count;
 	public TimeSpan? DurationSinceFirstWrite => DateTimeOffset.UtcNow - TimeOfFirstWrite;
 	public TimeSpan? DurationSinceFirstWaitToRead => DateTimeOffset.UtcNow - TimeOfFirstWaitToRead;
 	public bool NoThresholdsHit => Count == 0
@@ -37,28 +38,26 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 	{
 		_maxBufferSize = maxBufferSize;
 		_forceFlushAfter = forceFlushAfter;
-		Buffer = new List<TEvent>(maxBufferSize);
+		Buffer = ArrayPool<TEvent>.Shared.Rent(maxBufferSize);
 		TimeOfFirstWrite = null;
 	}
 
+	// not thread safe, buffer is guarded by a single consumer on the inbound channel
 	public void Add(TEvent item)
 	{
 		TimeOfFirstWrite ??= DateTimeOffset.UtcNow;
-		Buffer.Add(item);
+		Buffer[_count] = item;
+		Interlocked.Increment(ref _count);
 	}
 
-	public void Reset()
+	public TEvent[] Reset()
 	{
-		Buffer.Clear();
+		_count = 0;
 		TimeOfFirstWrite = null;
 		TimeOfFirstWaitToRead = null;
-	}
-
-	public TEvent[] Copy()
-	{
-		var outgoingBuffer = new TEvent[Buffer.Count];
-		Buffer.CopyTo(outgoingBuffer);
-		return outgoingBuffer;
+		var bufferRef = Buffer;
+		Buffer = ArrayPool<TEvent>.Shared.Rent(_maxBufferSize);
+		return bufferRef;
 	}
 
 	private TimeSpan Wait

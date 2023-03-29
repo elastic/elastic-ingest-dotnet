@@ -47,7 +47,7 @@ public class NoopBufferedChannel
 	private int _currentMax;
 
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
-	protected override async Task<NoopResponse> Export(IReadOnlyCollection<NoopEvent> buffer, CancellationToken ctx = default)
+	protected override async Task<NoopResponse> Export(ArraySegment<NoopEvent> buffer, CancellationToken ctx = default)
 	{
 		Interlocked.Increment(ref _exportedBuffers);
 		if (!Options.TrackConcurrency) return new NoopResponse();
