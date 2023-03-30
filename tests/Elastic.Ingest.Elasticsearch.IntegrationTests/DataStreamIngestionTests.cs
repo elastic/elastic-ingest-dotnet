@@ -28,6 +28,7 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 			var slim = new CountdownEvent(1);
 			var options = new DataStreamChannelOptions<TimeSeriesDocument>(Client.Transport)
 			{
+				UseArrayBuffer = true,
 				DataStream = targetDataStream,
 				BufferOptions = new BufferOptions { WaitHandle = slim, OutboundBufferMaxSize = 1 }
 			};

@@ -28,6 +28,8 @@ namespace Elastic.Ingest.Elasticsearch.Indices
 
 			var index = string.Format(Options.IndexFormat, indexTime);
 			var id = Options.BulkOperationIdLookup?.Invoke(@event);
+			if (!string.IsNullOrWhiteSpace(id) && id != null && (Options.BulkUpsertLookup?.Invoke(@event, id) ?? false))
+				return new UpdateOperation { Id = id, Index = index };
 			return
 				!string.IsNullOrWhiteSpace(id)
 					? new IndexOperation { Index = index, Id = id }

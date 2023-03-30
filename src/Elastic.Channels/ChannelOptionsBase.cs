@@ -2,6 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -19,11 +20,6 @@ namespace Elastic.Channels
 	{
 		/// <inheritdoc cref="BufferOptions"/>
 		public BufferOptions BufferOptions { get; set; } = new ();
-
-		/// <summary>
-		/// Optionally provides a custom write implementation to a channel. Concrete channel implementations are not required to adhere to this config
-		/// </summary>
-		public Func<Stream, CancellationToken, TEvent, Task>? WriteEvent { get; set; } = null;
 
 		/// <summary> Called if the call to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/> throws. </summary>
 		public Action<Exception>? ExportExceptionCallback { get; set; }

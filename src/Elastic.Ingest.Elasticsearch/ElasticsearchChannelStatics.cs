@@ -16,7 +16,7 @@ namespace Elastic.Ingest.Elasticsearch
 	{
 		public static readonly byte[] LineFeed = { (byte)'\n' };
 
-		public static readonly byte[] DocUpdateHeaderStart = Encoding.UTF8.GetBytes("{\"doc\": ");
+		public static readonly byte[] DocUpdateHeaderStart = Encoding.UTF8.GetBytes("{\"doc_as_upsert\": true, \"doc\": ");
 		public static readonly byte[] DocUpdateHeaderEnd = Encoding.UTF8.GetBytes(" }");
 
 		public static readonly ElasticsearchRequestParameters RequestParams =
@@ -29,5 +29,9 @@ namespace Elastic.Ingest.Elasticsearch
 			DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
 			Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
 		};
+
+		public static readonly JsonWriterOptions WriterOptions =
+			// SkipValidation as we write ndjson
+			new() { Encoder = SerializerOptions.Encoder, Indented = SerializerOptions.WriteIndented, SkipValidation = true};
 	}
 }
