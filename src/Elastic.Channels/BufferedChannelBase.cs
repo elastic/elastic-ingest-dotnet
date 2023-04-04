@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Elastic.Channels.Buffers;
+using Elastic.Channels.Diagnostics;
 
 namespace Elastic.Channels;
 
@@ -59,11 +60,31 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	private readonly SemaphoreSlim _throttleTasks;
 	private readonly CountdownEvent? _signal;
 
+	private readonly ChannelCallbackInvoker<TEvent, TResponse> _callbacks;
+	private readonly IChannelDiagnosticsListener? _diagnosticsListener;
+
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
-	protected BufferedChannelBase(TChannelOptions options)
+	protected BufferedChannelBase(TChannelOptions options) : this(options, null) { }
+
+	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
+	protected BufferedChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners)
 	{
 		TokenSource = new CancellationTokenSource();
 		Options = options;
+
+		var listeners = callbackListeners == null ? new[] { Options } : callbackListeners.Concat(new[] { Options }).ToArray();
+		_diagnosticsListener = listeners
+			.Select(l => (l is IChannelDiagnosticsListener c) ? c : null)
+			.FirstOrDefault(e=> e != null);
+		if (_diagnosticsListener == null && !options.DisableDiagnostics)
+		{
+			// if no debug listener was already provided but was requested explicitly create one.
+			var l =  new ChannelDiagnosticsListener<TEvent, TResponse>(GetType().Name);
+			_diagnosticsListener = l;
+			listeners = listeners.Concat(new[] { l }).ToArray();
+		}
+		_callbacks = new ChannelCallbackInvoker<TEvent, TResponse>(listeners);
+
 		var maxConsumers = Math.Max(1, BufferOptions.ExportMaxConcurrency);
 		_throttleTasks = new SemaphoreSlim(maxConsumers, maxConsumers);
 		_signal = options.BufferOptions.WaitHandle;
@@ -133,10 +154,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		if (InChannel.Writer.TryWrite(item))
 		{
-			Options.PublishToInboundChannelCallback?.Invoke();
+			_callbacks.PublishToInboundChannelCallback?.Invoke();
 			return true;
 		}
-		Options.PublishToInboundChannelFailureCallback?.Invoke();
+		_callbacks.PublishToInboundChannelFailureCallback?.Invoke();
 		return false;
 	}
 
@@ -164,10 +185,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		if (await InChannel.Writer.WaitToWriteAsync(ctx).ConfigureAwait(false) &&
 		    InChannel.Writer.TryWrite(item))
 		{
-			Options.PublishToInboundChannelCallback?.Invoke();
+			_callbacks.PublishToInboundChannelCallback?.Invoke();
 			return true;
 		}
-		Options.PublishToInboundChannelFailureCallback?.Invoke();
+		_callbacks.PublishToInboundChannelFailureCallback?.Invoke();
 		return false;
 	}
 
@@ -185,7 +206,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	private async Task ConsumeOutboundEvents()
 	{
-		Options.OutboundChannelStartedCallback?.Invoke();
+		_callbacks.OutboundChannelStartedCallback?.Invoke();
 
 		var maxConsumers = Options.BufferOptions.ExportMaxConcurrency;
 		var taskList = new List<Task>(maxConsumers);
@@ -212,7 +233,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			}
 		}
 		await Task.WhenAll(taskList).ConfigureAwait(false);
-		Options.OutboundChannelExitedCallback?.Invoke();
+		_callbacks.OutboundChannelExitedCallback?.Invoke();
 	}
 
 	private async Task ExportBuffer(IReadOnlyCollection<TEvent> items, IWriteTrackingBuffer buffer)
@@ -223,40 +244,42 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			if (TokenSource.Token.IsCancellationRequested) break;
 			if (_signal is { IsSet: true }) break;
 
-			Options.ExportItemsAttemptCallback?.Invoke(i, items.Count);
+			_callbacks.ExportItemsAttemptCallback?.Invoke(i, items.Count);
 			TResponse? response;
 			try
 			{
 				response = await Export(items, TokenSource.Token).ConfigureAwait(false);
-				Options.ExportResponseCallback?.Invoke(response, buffer);
+				_callbacks.ExportResponseCallback?.Invoke(response, buffer);
 			}
 			catch (Exception e)
 			{
-				Options.ExportExceptionCallback?.Invoke(e);
+				_callbacks.ExportExceptionCallback?.Invoke(e);
 				break;
 			}
 
 			items = RetryBuffer(response, items, buffer);
+			if (items.Count > 0 && i == 0)
+				_callbacks.ExportRetryableCountCallback?.Invoke(items.Count);
 
 			// delay if we still have items and we are not at the end of the max retry cycle
 			var atEndOfRetries = i == maxRetries;
 			if (items.Count > 0 && !atEndOfRetries)
 			{
 				await Task.Delay(Options.BufferOptions.ExportBackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
-				Options.ExportRetryCallback?.Invoke(items);
+				_callbacks.ExportRetryCallback?.Invoke(items);
 			}
 			// otherwise if retryable items still exist and the user wants to be notified notify the user
 			else if (items.Count > 0 && atEndOfRetries)
-				Options.ExportMaxRetriesCallback?.Invoke(items);
+				_callbacks.ExportMaxRetriesCallback?.Invoke(items);
 		}
-		Options.BufferOptions.ExportBufferCallback?.Invoke();
+		_callbacks.ExportBufferCallback?.Invoke();
 		if (_signal is { IsSet: false })
 			_signal.Signal();
 	}
 
 	private async Task ConsumeInboundEvents(int maxQueuedMessages, TimeSpan maxInterval)
 	{
-		Options.InboundChannelStartedCallback?.Invoke();
+		_callbacks.InboundChannelStartedCallback?.Invoke();
 		while (await InboundBuffer.WaitToReadAsync(InChannel.Reader).ConfigureAwait(false))
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
@@ -276,9 +299,9 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			InboundBuffer.Reset();
 
 			if (await PublishAsync(outboundBuffer).ConfigureAwait(false))
-				Options.PublishToOutboundChannelCallback?.Invoke();
+				_callbacks.PublishToOutboundChannelCallback?.Invoke();
 			else
-				Options.PublishToOutboundChannelFailureCallback?.Invoke();
+				_callbacks.PublishToOutboundChannelFailureCallback?.Invoke();
 		}
 	}
 
@@ -300,6 +323,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			? new ValueTask<bool>(true)
 			: new ValueTask<bool>(AsyncSlowPath(buffer));
 	}
+
+	/// <inheritdoc cref="object.ToString"/>>
+	public override string ToString() =>
+		_diagnosticsListener != null ? _diagnosticsListener.ToString() : base.ToString();
 
 	/// <inheritdoc cref="IDisposable.Dispose"/>
 	public virtual void Dispose()
