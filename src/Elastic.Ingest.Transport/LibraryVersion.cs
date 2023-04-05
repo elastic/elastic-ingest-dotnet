@@ -80,8 +80,4 @@ public sealed class LibraryVersion : VersionInfo
 
 		return match.Success ? match.Value : EmptyVersion;
 	}
-
-	// Transport normalizes all pre-releases to p
-	/// <inheritdoc cref="object.ToString"/>
-	public override string ToString() => Version.ToString();
 }
