@@ -47,7 +47,7 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 
 			channel.TryWrite(new CatalogDocument { Created = date, Title = "Hello World!", Id = "hello-world" });
 			if (!slim.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
-				throw new Exception("ecs document was not persisted within 10 seconds");
+				throw new Exception($"ecs document was not persisted within 10 seconds: {channel}");
 
 			var refreshResult = await Client.Indices.RefreshAsync(indexName);
 			refreshResult.IsValidResponse.Should().BeTrue("{0}", refreshResult.DebugInformation);
