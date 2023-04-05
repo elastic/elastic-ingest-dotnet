@@ -2,6 +2,8 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 using System;
+using System.Collections.Generic;
+using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
@@ -14,7 +16,10 @@ namespace Elastic.Ingest.Elasticsearch.Indices
 	public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChannelOptions<TEvent>>
 	{
 		/// <inheritdoc cref="IndexChannel{TEvent}"/>
-		public IndexChannel(IndexChannelOptions<TEvent> options) : base(options)
+		public IndexChannel(IndexChannelOptions<TEvent> options) : this(options, null) { }
+
+		/// <inheritdoc cref="IndexChannel{TEvent}"/>
+		public IndexChannel(IndexChannelOptions<TEvent> options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners) : base(options, callbackListeners)
 		{
 			TemplateName = string.Format(Options.IndexFormat, "template");
 			TemplateWildcard = string.Format(Options.IndexFormat, "*");
