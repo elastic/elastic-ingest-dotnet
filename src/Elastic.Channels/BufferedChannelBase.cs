@@ -61,7 +61,9 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	private readonly CountdownEvent? _signal;
 
 	private readonly ChannelCallbackInvoker<TEvent, TResponse> _callbacks;
-	private readonly IChannelDiagnosticsListener? _diagnosticsListener;
+
+	/// <inheritdoc cref="IChannelDiagnosticsListener"/>
+	public IChannelDiagnosticsListener? DiagnosticsListener { get; }
 
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
 	protected BufferedChannelBase(TChannelOptions options) : this(options, null) { }
@@ -73,14 +75,14 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		Options = options;
 
 		var listeners = callbackListeners == null ? new[] { Options } : callbackListeners.Concat(new[] { Options }).ToArray();
-		_diagnosticsListener = listeners
+		DiagnosticsListener = listeners
 			.Select(l => (l is IChannelDiagnosticsListener c) ? c : null)
 			.FirstOrDefault(e=> e != null);
-		if (_diagnosticsListener == null && !options.DisableDiagnostics)
+		if (DiagnosticsListener == null && !options.DisableDiagnostics)
 		{
 			// if no debug listener was already provided but was requested explicitly create one.
 			var l =  new ChannelDiagnosticsListener<TEvent, TResponse>(GetType().Name);
-			_diagnosticsListener = l;
+			DiagnosticsListener = l;
 			listeners = listeners.Concat(new[] { l }).ToArray();
 		}
 		_callbacks = new ChannelCallbackInvoker<TEvent, TResponse>(listeners);
@@ -326,7 +328,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	/// <inheritdoc cref="object.ToString"/>>
 	public override string ToString() =>
-		_diagnosticsListener != null ? _diagnosticsListener.ToString() : base.ToString();
+		DiagnosticsListener != null ? DiagnosticsListener.ToString() : base.ToString();
 
 	/// <inheritdoc cref="IDisposable.Dispose"/>
 	public virtual void Dispose()

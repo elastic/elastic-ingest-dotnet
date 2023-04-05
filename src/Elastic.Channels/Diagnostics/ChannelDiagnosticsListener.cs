@@ -10,10 +10,18 @@ using Elastic.Channels.Buffers;
 namespace Elastic.Channels.Diagnostics;
 
 /// <summary>
-/// Marker interface used by <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/> to improve
-/// its to string if a <see cref="ChannelDiagnosticsListener{TEvent,TResponse}"/> gets injected.
+/// Active Diagnostics listener used by <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
 /// </summary>
-internal interface IChannelDiagnosticsListener {}
+public interface IChannelDiagnosticsListener
+{
+	/// <summary>
+	/// Keeps track of the first observed exception to calls to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
+	/// </summary>
+	public Exception? ObservedException { get; }
+
+	/// <summary> Indicates if the overall publishing thus far was successful</summary>
+	bool PublishSuccess { get; }
+}
 
 /// <summary>
 /// A very rudimentary diagnostics object tracking various important metrics to provide insights into the
@@ -62,12 +70,10 @@ public class ChannelDiagnosticsListener<TEvent, TResponse> : IChannelCallbacks<T
 		ExportRetryableCountCallback = i => _returnedRetryableObjects = true;
 	}
 
-	/// <summary>
-	/// Keeps track of the first observed exception to calls to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
-	/// </summary>
+	/// <inheritdoc cref="IChannelDiagnosticsListener.ObservedException"/>
 	public Exception? ObservedException { get; private set; }
 
-	/// <summary> Indicates if the overall publishing was successful</summary>
+	/// <inheritdoc cref="IChannelDiagnosticsListener.PublishSuccess"/>
 	public bool PublishSuccess => !_returnedRetryableObjects && ObservedException == null && _exportedBuffers > 0 && _maxRetriesExceeded == 0 && _items > 0;
 
 	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.ExportExceptionCallback"/>
