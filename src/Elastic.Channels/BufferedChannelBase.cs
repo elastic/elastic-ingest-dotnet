@@ -40,6 +40,9 @@ public interface IBufferedChannel<in TEvent> : IDisposable
 	/// Tries to write many <paramref name="events"/> to the channel returning true if ALL messages were written succesfully
 	/// </summary>
 	bool TryWriteMany(IEnumerable<TEvent> events);
+
+	/// <inheritdoc cref="IChannelDiagnosticsListener"/>
+	IChannelDiagnosticsListener? DiagnosticsListener { get; }
 }
 
 /// <summary>
