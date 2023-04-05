@@ -5,6 +5,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Elastic.Channels;
+using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
 
@@ -16,7 +17,10 @@ namespace Elastic.Ingest.Elasticsearch.DataStreams
 		private readonly CreateOperation _fixedHeader;
 
 		/// <inheritdoc cref="DataStreamChannel{TEvent}"/>
-		public DataStreamChannel(DataStreamChannelOptions<TEvent> options) : base(options)
+		public DataStreamChannel(DataStreamChannelOptions<TEvent> options) : this(options, null) { }
+
+		/// <inheritdoc cref="DataStreamChannel{TEvent}"/>
+		public DataStreamChannel(DataStreamChannelOptions<TEvent> options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners) : base(options, callbackListeners)
 		{
 			var target = Options.DataStream.ToString();
 			_fixedHeader = new CreateOperation { Index = target };
