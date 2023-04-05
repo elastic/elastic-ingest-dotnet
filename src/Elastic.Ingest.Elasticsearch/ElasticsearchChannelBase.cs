@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels;
+using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Serialization;
@@ -27,7 +28,12 @@ namespace Elastic.Ingest.Elasticsearch
 		where TChannelOptions : TransportChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem>
 	{
 		/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/>
-		protected ElasticsearchChannelBase(TChannelOptions options) : base(options) { }
+		protected ElasticsearchChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners)
+			: base(options, callbackListeners) { }
+
+		/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/>
+		protected ElasticsearchChannelBase(TChannelOptions options)
+			: base(options) { }
 
 		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Retry"/>
 		protected override bool Retry(BulkResponse response)
