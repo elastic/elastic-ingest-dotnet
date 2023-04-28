@@ -29,10 +29,11 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 			{
 				IndexFormat = indexPrefix + "{0:yyyy.MM.dd}",
 				BulkOperationIdLookup = c => c.Id,
+				BulkUpsertLookup = (c, id) => id == "hello-world-2",
 				TimestampLookup = c => c.Created,
 				BufferOptions = new BufferOptions
 				{
-					WaitHandle = slim, OutboundBufferMaxSize = 1,
+					WaitHandle = slim, OutboundBufferMaxSize = 2,
 				}
 			};
 			var channel = new IndexChannel<CatalogDocument>(options);
@@ -46,13 +47,14 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 			index.Indices.Should().BeNullOrEmpty();
 
 			channel.TryWrite(new CatalogDocument { Created = date, Title = "Hello World!", Id = "hello-world" });
+			channel.TryWrite(new CatalogDocument { Created = date, Title = "Hello World!", Id = "hello-world-2" });
 			if (!slim.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
 				throw new Exception($"ecs document was not persisted within 10 seconds: {channel}");
 
 			var refreshResult = await Client.Indices.RefreshAsync(indexName);
 			refreshResult.IsValidResponse.Should().BeTrue("{0}", refreshResult.DebugInformation);
 			var searchResult = await Client.SearchAsync<CatalogDocument>(s => s.Indices(indexName));
-			searchResult.Total.Should().Be(1);
+			searchResult.Total.Should().Be(2);
 
 			var storedDocument = searchResult.Documents.First();
 			storedDocument.Id.Should().Be("hello-world");

@@ -42,5 +42,14 @@ namespace Elastic.Ingest.Elasticsearch.Indices
 		/// <para>https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-request-body</para>
 		/// </summary>
 		public Func<TEvent, string>? BulkOperationIdLookup { get; set; }
+
+		/// <summary>
+		/// Uses the callback provided to <see cref="BulkOperationIdLookup"/> to determine if this is in fact an update operation
+		/// <para>If this returns true the document will be sent as an upsert operation</para>
+		/// <para>Otherwise (the default) `index` bulk operation will be issued for the document.</para>
+		/// <para>Read more about bulk operations here:</para>
+		/// <para>https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-request-body</para>
+		/// </summary>
+		public Func<TEvent, string, bool>? BulkUpsertLookup { get; set; }
 	}
 }

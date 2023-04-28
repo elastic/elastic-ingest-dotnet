@@ -22,16 +22,14 @@ namespace Elastic.Ingest.Apm
 	{
 		public static readonly byte[] LineFeed = { (byte)'\n' };
 
-		public static readonly DefaultRequestParameters RequestParams = new ()
+		public static readonly DefaultRequestParameters RequestParams = new()
 		{
 			RequestConfiguration = new RequestConfiguration { ContentType = "application/x-ndjson" }
 		};
 
 		public static readonly JsonSerializerOptions SerializerOptions = new()
 		{
-			DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-			MaxDepth = 64,
-			Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+			DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, MaxDepth = 64, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
 		};
 	}
 
@@ -53,10 +51,14 @@ namespace Elastic.Ingest.Apm
 
 		//APM does not return the status for all events sent. Therefor we always return an empty set for individual items to retry
 		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Zip"/>
-		protected override List<(IIntakeObject, IntakeErrorItem)> Zip(EventIntakeResponse response, IReadOnlyCollection<IIntakeObject> page) => _emptyZip;
+		protected override List<(IIntakeObject, IntakeErrorItem)> Zip(EventIntakeResponse response, IReadOnlyCollection<IIntakeObject> page) =>
+			_emptyZip;
+
 		private List<(IIntakeObject, IntakeErrorItem)> _emptyZip = new();
+
 		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryEvent"/>
 		protected override bool RetryEvent((IIntakeObject, IntakeErrorItem) @event) => false;
+
 		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RejectEvent"/>
 		protected override bool RejectEvent((IIntakeObject, IntakeErrorItem) @event) => false;
 
@@ -80,9 +82,21 @@ namespace Elastic.Ingest.Apm
 			// "agent":{"version":"1.10.0","name":"java","ephemeral_id":"e71be9ac-93b0-44b9-a997-5638f6ccfc36"},"framework":{"name":"spring","version":"5.0.0"},"runtime":{"name":"Java","version":"10.0.2"}},"labels":{"group":"experimental","ab_testing":true,"segment":5}}}
 			// TODO cache
 			var p = Process.GetCurrentProcess();
-			var metadata = new { metadata = new { process = new { pid = p.Id, title = p.ProcessName }, service = new { name  = System.Text.RegularExpressions.Regex.Replace(p.ProcessName, "[^a-zA-Z0-9 _-]", "_"), version = "1.0.0", agent = new { name = "dotnet", version = "0.0.1"} } } };
+			var metadata = new
+			{
+				metadata = new
+				{
+					process = new { pid = p.Id, title = p.ProcessName },
+					service = new
+					{
+						name = System.Text.RegularExpressions.Regex.Replace(p.ProcessName, "[^a-zA-Z0-9 _-]", "_"),
+						version = "1.0.0",
+						agent = new { name = "dotnet", version = "0.0.1" }
+					}
+				}
+			};
 			await JsonSerializer.SerializeAsync(stream, metadata, metadata.GetType(), ApmChannelStatics.SerializerOptions, ctx)
-					.ConfigureAwait(false);
+				.ConfigureAwait(false);
 			await stream.WriteAsync(ApmChannelStatics.LineFeed, 0, 1, ctx).ConfigureAwait(false);
 		}
 
@@ -93,25 +107,19 @@ namespace Elastic.Ingest.Apm
 			{
 				if (@event == null) continue;
 
-				if (Options.WriteEvent != null)
-					await Options.WriteEvent(stream, ctx, @event).ConfigureAwait(false);
-				else
+				var type = @event switch
 				{
-					var type = @event switch
-					{
-						Transaction _ => "transaction",
-						_ => "unknown"
-					};
-					var dictionary = new Dictionary<string, object>() { { type, @event } };
+					Transaction _ => "transaction",
+					_ => "unknown"
+				};
+				var dictionary = new Dictionary<string, object>() { { type, @event } };
 
 
-					await JsonSerializer.SerializeAsync(stream, dictionary, dictionary.GetType(), ApmChannelStatics.SerializerOptions, ctx)
-						.ConfigureAwait(false);
-				}
+				await JsonSerializer.SerializeAsync(stream, dictionary, dictionary.GetType(), ApmChannelStatics.SerializerOptions, ctx)
+					.ConfigureAwait(false);
 
 				await stream.WriteAsync(ApmChannelStatics.LineFeed, 0, 1, ctx).ConfigureAwait(false);
 			}
 		}
-
 	}
 }
