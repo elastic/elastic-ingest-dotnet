@@ -102,7 +102,7 @@ namespace Elastic.Ingest.OpenTelemetry
 		public CustomActivityProcessor Processor { get; }
 
 		/// <summary> </summary>
-		protected override Task<TraceExportResult> Export(IReadOnlyCollection<Activity> page, CancellationToken ctx = default)
+		protected override Task<TraceExportResult> Export(ArraySegment<Activity> page, CancellationToken ctx = default)
 		{
 			var batch = BatchCreator(page);
 			var result = TraceExporter.Export(batch);

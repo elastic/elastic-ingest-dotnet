@@ -59,8 +59,8 @@ namespace Elastic.Ingest.Elasticsearch
 		protected override bool RejectEvent((TEvent, BulkResponseItem) @event) =>
 			@event.Item2.Status < 200 || @event.Item2.Status > 300;
 
-		/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Export(Elastic.Transport.HttpTransport,System.Collections.Generic.IReadOnlyCollection{TEvent},System.Threading.CancellationToken)"/>
-		protected override Task<BulkResponse> Export(HttpTransport transport, IReadOnlyCollection<TEvent> page, CancellationToken ctx = default) =>
+		/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Export(Elastic.Transport.HttpTransport,System.ArraySegment{TEvent},System.Threading.CancellationToken)"/>
+		protected override Task<BulkResponse> Export(HttpTransport transport, ArraySegment<TEvent> page, CancellationToken ctx = default) =>
 			transport.RequestAsync<BulkResponse>(HttpMethod.POST, "/_bulk",
 				PostData.StreamHandler(page,
 					(_, _) =>
@@ -75,10 +75,18 @@ namespace Elastic.Ingest.Elasticsearch
 		/// </summary>
 		protected abstract BulkOperationHeader CreateBulkOperationHeader(TEvent @event);
 
-		private async Task WriteBufferToStreamAsync(IReadOnlyCollection<TEvent> b, Stream stream, CancellationToken ctx)
+		private async Task WriteBufferToStreamAsync(ArraySegment<TEvent> b, Stream stream, CancellationToken ctx)
 		{
-			foreach (var @event in b)
+#if NETSTANDARD2_1_OR_GREATER
+			for (var i = 0; i < b.Count; i++)
 			{
+				var @event = b[i];
+#else
+			IReadOnlyList<TEvent> items = b;
+			for (var i = 0; i < items.Count; i++)
+			{
+				var @event = items[i];
+#endif
 				if (@event == null) continue;
 
 				var indexHeader = CreateBulkOperationHeader(@event);
@@ -92,7 +100,7 @@ namespace Elastic.Ingest.Elasticsearch
 				if (Options.WriteEvent != null)
 					await Options.WriteEvent(stream, ctx, @event).ConfigureAwait(false);
 				else
-					await JsonSerializer.SerializeAsync(stream, @event, typeof(TEvent), SerializerOptions, ctx)
+					await JsonSerializer.SerializeAsync<TEvent>(stream, @event, SerializerOptions, ctx)
 						.ConfigureAwait(false);
 
 				if (indexHeader is UpdateOperation)

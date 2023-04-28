@@ -60,11 +60,11 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 	protected abstract bool RejectEvent((TEvent, TBulkResponseItem) @event);
 
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.RetryBuffer"/>>
-	protected override IReadOnlyCollection<TEvent> RetryBuffer(TResponse response, IReadOnlyCollection<TEvent> events,
+	protected override ArraySegment<TEvent> RetryBuffer(TResponse response, ArraySegment<TEvent> events,
 		IWriteTrackingBuffer consumedBufferStatistics
 	)
 	{
-		if (!Retry(response)) return Enumerable.Empty<TEvent>().ToList();
+		if (!Retry(response)) return EmptyArraySegments<TEvent>.Empty;
 
 		var backOffWholeRequest = RetryAllItems(response);
 
@@ -72,10 +72,10 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 		if (backOffWholeRequest) return events;
 
 		var zipped = Zip(response, events);
-		events = zipped
+		var retryEvents = zipped
 			.Where(t => RetryEvent(t))
 			.Select(t => t.Item1)
-			.ToList();
+			.ToArray();
 
 		// report any events that are going to be dropped
 		if (Options.ServerRejectionCallback != null)
@@ -85,6 +85,6 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 				.ToList();
 			if (rejected.Count > 0) Options.ServerRejectionCallback(rejected);
 		}
-		return events;
+		return new ArraySegment<TEvent>(retryEvents);
 	}
 }

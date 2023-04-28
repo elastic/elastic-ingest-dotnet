@@ -16,8 +16,9 @@ Console.WriteLine($"Total Events: {totalEvents:N0} events");
 Console.WriteLine($"Max in flight: {maxInFlight:N0}");
 Console.WriteLine();
 
-Console.WriteLine("--- System.Threading.Channel write/read to completion---");
 var sw = Stopwatch.StartNew();
+/*
+Console.WriteLine("--- System.Threading.Channel write/read to completion---");
 var (written, read) = await Drain.RegularChannel(totalEvents, maxInFlight);
 sw.Stop();
 var messagePerSec = totalEvents / sw.Elapsed.TotalSeconds;
@@ -25,7 +26,7 @@ Console.WriteLine($"Written: {written:N0} Read: {read:N0}");
 Console.WriteLine($"Duration: {sw.Elapsed:g}");
 Console.WriteLine($"Messages per second: {messagePerSec:N0}");
 Console.WriteLine();
-
+*/
 
 Console.WriteLine("--- Elastic.Channel write/read to completion---");
 var expectedSentBuffers = Math.Max(1, totalEvents / bufferSize);
@@ -36,7 +37,7 @@ sw.Reset();
 sw.Restart();
 var (writtenElastic, channel) = await Drain.ElasticChannel(totalEvents, maxInFlight, bufferSize, concurrency, expectedSentBuffers);
 sw.Stop();
-messagePerSec = totalEvents / sw.Elapsed.TotalSeconds;
+var messagePerSec = totalEvents / sw.Elapsed.TotalSeconds;
 
 Console.WriteLine();
 // channel is a DiagnosticBufferedChannel that pretty prints a lot of useful information

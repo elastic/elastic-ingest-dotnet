@@ -136,7 +136,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// All subclasses of <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/> need to at a minimum
 	/// implement this method to export buffered collection of <see cref="OutChannel"/>
 	/// </summary>
-	protected abstract Task<TResponse> Export(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx = default);
+	protected abstract Task<TResponse> Export(ArraySegment<TEvent> buffer, CancellationToken ctx = default);
 
 	/// <summary>The channel options currently in use</summary>
 	public TChannelOptions Options { get; }
@@ -197,17 +197,14 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		return false;
 	}
 
-	private static readonly IReadOnlyCollection<TEvent> DefaultRetryBuffer = new TEvent[] { };
-
 	/// <summary>
 	/// Subclasses may override this to yield items from <typeparamref name="TResponse"/> that can be retried.
 	/// <para>The default implementation of this simply always returns an empty collection</para>
 	/// </summary>
-	protected virtual IReadOnlyCollection<TEvent> RetryBuffer(
-		TResponse response,
-		IReadOnlyCollection<TEvent> currentBuffer,
+	protected virtual ArraySegment<TEvent> RetryBuffer(TResponse response,
+		ArraySegment<TEvent> currentBuffer,
 		IWriteTrackingBuffer statistics
-	) => DefaultRetryBuffer;
+	) => EmptyArraySegments<TEvent>.Empty;
 
 	private async Task ConsumeOutboundEvents()
 	{
@@ -224,24 +221,27 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 			while (OutChannel.Reader.TryRead(out var buffer))
 			{
-				var items = buffer.Items;
-				await _throttleTasks.WaitAsync().ConfigureAwait(false);
-				var t = ExportBuffer(items, buffer);
-				taskList.Add(t);
-
-				if (taskList.Count >= maxConsumers)
+				using (buffer)
 				{
-					var completedTask = await Task.WhenAny(taskList).ConfigureAwait(false);
-					taskList.Remove(completedTask);
+					var items = buffer.GetArraySegment();
+					await _throttleTasks.WaitAsync().ConfigureAwait(false);
+					var t = ExportBuffer(items, buffer);
+					taskList.Add(t);
+
+					if (taskList.Count >= maxConsumers)
+					{
+						var completedTask = await Task.WhenAny(taskList).ConfigureAwait(false);
+						taskList.Remove(completedTask);
+					}
+					_throttleTasks.Release();
 				}
-				_throttleTasks.Release();
 			}
 		}
 		await Task.WhenAll(taskList).ConfigureAwait(false);
 		_callbacks.OutboundChannelExitedCallback?.Invoke();
 	}
 
-	private async Task ExportBuffer(IReadOnlyCollection<TEvent> items, IWriteTrackingBuffer buffer)
+	private async Task ExportBuffer(ArraySegment<TEvent> items, IOutboundBuffer<TEvent> buffer)
 	{
 		var maxRetries = Options.BufferOptions.ExportMaxRetries;
 		for (var i = 0; i <= maxRetries && items.Count > 0; i++)
@@ -301,7 +301,6 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			if (InboundBuffer.NoThresholdsHit) continue;
 
 			var outboundBuffer = new OutboundBuffer<TEvent>(InboundBuffer);
-			InboundBuffer.Reset();
 
 			if (await PublishAsync(outboundBuffer).ConfigureAwait(false))
 				_callbacks.PublishToOutboundChannelCallback?.Invoke();

@@ -2,6 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -60,7 +61,7 @@ namespace Elastic.Ingest.Apm
 		protected override bool RejectEvent((IIntakeObject, IntakeErrorItem) @event) => false;
 
 		/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
-		protected override Task<EventIntakeResponse> Export(HttpTransport transport, IReadOnlyCollection<IIntakeObject> page, CancellationToken ctx = default) =>
+		protected override Task<EventIntakeResponse> Export(HttpTransport transport, ArraySegment<IIntakeObject> page, CancellationToken ctx = default) =>
 			transport.RequestAsync<EventIntakeResponse>(HttpMethod.POST, "/intake/v2/events",
 				PostData.StreamHandler(page,
 					(_, _) =>
