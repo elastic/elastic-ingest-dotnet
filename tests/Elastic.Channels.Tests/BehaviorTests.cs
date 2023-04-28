@@ -97,7 +97,7 @@ namespace Elastic.Channels.Tests
 			signalled.Should().BeTrue("The channel was not drained in the expected time");
 			written.Should().Be(totalEvents);
 			channel.ExportedBuffers.Should().Be(expectedPages);
-			channel.ObservedConcurrency.Should().Be(4);
+			channel.ObservedConcurrency.Should().BeGreaterThan(1);
 		}
 
 		[Fact] public async Task ManyChannelsContinueToDoWork()

@@ -65,7 +65,10 @@ namespace Elastic.Ingest.Elasticsearch
 		protected override Task<BulkResponse> Export(HttpTransport transport, ArraySegment<TEvent> page, CancellationToken ctx = default)
 		{
 #if NETSTANDARD2_1
+			// Option is obsolete to prevent external users to set it.
+#pragma warning disable CS0618
 			if (Options.UseReadOnlyMemory)
+#pragma warning restore CS0618
 			{
 				var bytes = GetBytes(page);
 				return transport.RequestAsync<BulkResponse>(HttpMethod.POST, "/_bulk", PostData.ReadOnlyMemory(bytes), RequestParams, ctx);

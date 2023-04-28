@@ -28,7 +28,9 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 			var slim = new CountdownEvent(1);
 			var options = new DataStreamChannelOptions<TimeSeriesDocument>(Client.Transport)
 			{
+#pragma warning disable CS0618
 				UseReadOnlyMemory = true,
+#pragma warning restore CS0618
 				DataStream = targetDataStream,
 				BufferOptions = new BufferOptions { WaitHandle = slim, OutboundBufferMaxSize = 1 }
 			};
