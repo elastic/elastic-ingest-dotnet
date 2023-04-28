@@ -11,31 +11,10 @@ namespace Elastic.Channels.Diagnostics;
 /// </summary>
 public class DiagnosticsBufferedChannel : NoopBufferedChannel
 {
-	private readonly string? _name;
-
 	/// <inheritdoc cref="DiagnosticsBufferedChannel"/>
 	public DiagnosticsBufferedChannel(BufferOptions options, bool observeConcurrency = false, string? name = null)
-		: base(options, observeConcurrency)
+		: base(options, new [] { new ChannelDiagnosticsListener<NoopEvent, NoopResponse>(name ?? nameof(DiagnosticsBufferedChannel)) }, observeConcurrency)
 	{
-		_name = name;
-		Listener = new ChannelListener<NoopEvent, NoopResponse>(_name).Register(Options);
 	}
 
-	/// <inheritdoc cref="ChannelListener{TEvent,TResponse}"/>
-	// ReSharper disable once MemberCanBePrivate.Global
-	public ChannelListener<NoopEvent, NoopResponse> Listener { get; }
-
-	/// <summary>
-	/// Provides a debug message to give insights to the machinery of <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
-	/// </summary>
-	public override string ToString() => $@"------------------------------------------
-{Listener}
-
-InboundBuffer Count: {InboundBuffer.Count:N0}
-InboundBuffer Duration Since First Wait: {InboundBuffer.DurationSinceFirstWaitToRead}
-InboundBuffer Duration Since First Write: {InboundBuffer.DurationSinceFirstWrite}
-InboundBuffer No Thresholds hit: {InboundBuffer.NoThresholdsHit}
-Exported Buffers: {ExportedBuffers:N0}
-Observed Concurrency: {ObservedConcurrency:N0}
-------------------------------------------";
 }

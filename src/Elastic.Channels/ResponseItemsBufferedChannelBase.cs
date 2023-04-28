@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Elastic.Channels.Buffers;
+using Elastic.Channels.Diagnostics;
 
 namespace Elastic.Channels;
 
@@ -31,7 +32,12 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 	where TResponse : class, new()
 {
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
-	protected ResponseItemsBufferedChannelBase(TChannelOptions options) : base(options) { }
+	protected ResponseItemsBufferedChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners)
+		: base(options, callbackListeners) { }
+
+	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
+	protected ResponseItemsBufferedChannelBase(TChannelOptions options)
+		: base(options) { }
 
 	/// <summary> Based on <typeparamref name="TResponse"/> should return a bool indicating if retry is needed</summary>
 	protected abstract bool Retry(TResponse response);

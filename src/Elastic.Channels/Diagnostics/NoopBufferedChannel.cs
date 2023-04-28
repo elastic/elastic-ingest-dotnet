@@ -31,10 +31,26 @@ public class NoopBufferedChannel
 	}
 
 	/// <inheritdoc cref="NoopBufferedChannel"/>
-	public NoopBufferedChannel(BufferOptions options, bool observeConcurrency = false) : base(new NoopChannelOptions
+	public NoopBufferedChannel(NoopChannelOptions options) : base(options) { }
+
+	/// <inheritdoc cref="NoopBufferedChannel"/>
+	public NoopBufferedChannel(
+		BufferOptions options,
+		bool observeConcurrency = false
+	) : this(options, null, observeConcurrency)
 	{
-		BufferOptions = options, TrackConcurrency = observeConcurrency
-	}) { }
+
+	}
+
+	/// <inheritdoc cref="NoopBufferedChannel"/>
+	public NoopBufferedChannel(
+		BufferOptions options,
+		ICollection<IChannelCallbacks<NoopEvent, NoopResponse>>? channelListeners,
+		bool observeConcurrency = false
+	) : base(new NoopChannelOptions { BufferOptions = options, TrackConcurrency = observeConcurrency }, channelListeners)
+	{
+
+	}
 
 	/// <summary> Returns the number of times <see cref="Export"/> was called</summary>
 	public long ExportedBuffers => _exportedBuffers;
@@ -58,4 +74,17 @@ public class NoopBufferedChannel
 		if (max > ObservedConcurrency) ObservedConcurrency = max;
 		return new NoopResponse();
 	}
+
+	/// <summary>
+	/// Provides a debug message to give insights to the machinery of <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
+	/// </summary>
+	public override string ToString() => $@"------------------------------------------
+{base.ToString()}
+
+InboundBuffer Count: {InboundBuffer.Count:N0}
+InboundBuffer Duration Since First Wait: {InboundBuffer.DurationSinceFirstWaitToRead}
+InboundBuffer Duration Since First Write: {InboundBuffer.DurationSinceFirstWrite}
+InboundBuffer No Thresholds hit: {InboundBuffer.NoThresholdsHit}
+Observed Concurrency: {ObservedConcurrency:N0}
+------------------------------------------";
 }

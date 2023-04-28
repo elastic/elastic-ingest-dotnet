@@ -63,8 +63,7 @@ namespace Elastic.Ingest.Apm
 		protected override bool RejectEvent((IIntakeObject, IntakeErrorItem) @event) => false;
 
 		/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
-		protected override Task<EventIntakeResponse> Export(HttpTransport transport, ArraySegment<IIntakeObject> page, CancellationToken ctx = default
-		) =>
+		protected override Task<EventIntakeResponse> Export(HttpTransport transport, ArraySegment<IIntakeObject> page, CancellationToken ctx = default) =>
 			transport.RequestAsync<EventIntakeResponse>(HttpMethod.POST, "/intake/v2/events",
 				PostData.StreamHandler(page,
 					(_, _) =>

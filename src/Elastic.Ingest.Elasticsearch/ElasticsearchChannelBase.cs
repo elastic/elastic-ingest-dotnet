@@ -11,6 +11,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels;
+using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Serialization;
@@ -29,7 +30,12 @@ namespace Elastic.Ingest.Elasticsearch
 		where TChannelOptions : ElasticsearchChannelOptionsBase<TEvent>
 	{
 		/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/>
-		protected ElasticsearchChannelBase(TChannelOptions options) : base(options) { }
+		protected ElasticsearchChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners)
+			: base(options, callbackListeners) { }
+
+		/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/>
+		protected ElasticsearchChannelBase(TChannelOptions options)
+			: base(options) { }
 
 		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Retry"/>
 		protected override bool Retry(BulkResponse response)
@@ -122,15 +128,15 @@ namespace Elastic.Ingest.Elasticsearch
 #endif
 		private async Task WriteBufferToStreamAsync(ArraySegment<TEvent> b, Stream stream, CancellationToken ctx)
 		{
-			// for is okay on ArraySegment, foreach performs bad:
-			// https://antao-almada.medium.com/how-to-use-span-t-and-memory-t-c0b126aae652
-			// ReSharper disable once ForCanBeConvertedToForeach
 #if NETSTANDARD2_1_OR_GREATER
 			var items = b;
 #else
 			// needs cast prior to netstandard2.0
 			IReadOnlyList<TEvent> items = b;
 #endif
+			// for is okay on ArraySegment, foreach performs bad:
+			// https://antao-almada.medium.com/how-to-use-span-t-and-memory-t-c0b126aae652
+			// ReSharper disable once ForCanBeConvertedToForeach
 			for (var i = 0; i < items.Count; i++)
 			{
 				var @event = items[i];

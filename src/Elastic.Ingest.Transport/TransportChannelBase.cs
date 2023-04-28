@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels;
+using Elastic.Channels.Diagnostics;
 using Elastic.Transport;
 
 namespace Elastic.Ingest.Transport
@@ -23,7 +24,12 @@ namespace Elastic.Ingest.Transport
 
 	{
 		/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
-		protected TransportChannelBase(TChannelOptions options) : base(options) { }
+		protected TransportChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners)
+			: base(options, callbackListeners) { }
+
+		/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
+		protected TransportChannelBase(TChannelOptions options)
+			: base(options) { }
 
 		/// <summary> Implement sending the current <paramref name="page"/> of the buffer to the output. </summary>
 		/// <param name="transport"></param>

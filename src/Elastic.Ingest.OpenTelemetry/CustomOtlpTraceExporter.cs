@@ -12,6 +12,7 @@ using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
 using Elastic.Channels;
+using Elastic.Channels.Diagnostics;
 
 namespace Elastic.Ingest.OpenTelemetry
 {
@@ -59,7 +60,11 @@ namespace Elastic.Ingest.OpenTelemetry
 	public class TraceChannel : BufferedChannelBase<TraceChannelOptions, Activity, TraceExportResult>
 	{
 		/// <summary> </summary>
-		public TraceChannel(TraceChannelOptions options) : base(options) {
+		public TraceChannel(TraceChannelOptions options) : this(options, null) { }
+
+		/// <summary> </summary>
+		public TraceChannel(TraceChannelOptions options, ICollection<IChannelCallbacks<Activity, TraceExportResult>>? callbackListeners)
+			: base(options, callbackListeners) {
 			var o = new OtlpExporterOptions();
 			o.Endpoint = options.Endpoint;
             o.Headers = $"Authorization=Bearer {options.SecretToken}";

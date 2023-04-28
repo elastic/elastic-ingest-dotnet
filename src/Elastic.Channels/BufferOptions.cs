@@ -54,13 +54,6 @@ namespace Elastic.Channels
 		public Func<int, TimeSpan> ExportBackoffPeriod { get; set; } = (i) => TimeSpan.FromSeconds(2 * (i + 1));
 
 		/// <summary>
-		/// Called once after a buffer has been flushed, if the buffer is retried this callback is only called once
-		/// all retries have been exhausted. Its called regardless of whether the call to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
-		/// succeeded.
-		/// </summary>
-		public Action? ExportBufferCallback { get; set; }
-
-		/// <summary>
 		/// Allows you to inject a <see cref="CountdownEvent"/> to wait for N number of buffers to flush.
 		/// </summary>
 		public CountdownEvent? WaitHandle { get; set; }

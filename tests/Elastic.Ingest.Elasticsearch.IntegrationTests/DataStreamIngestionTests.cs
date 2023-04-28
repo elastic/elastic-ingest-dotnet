@@ -43,7 +43,7 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests
 
 			channel.TryWrite(new TimeSeriesDocument { Timestamp = DateTimeOffset.Now, Message = "hello-world" });
 			if (!slim.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
-				throw new Exception("document was not persisted within 10 seconds");
+				throw new Exception($"document was not persisted within 10 seconds: {channel}");
 
 			var refreshResult = await Client.Indices.RefreshAsync(targetDataStream.ToString());
 			refreshResult.IsValidResponse.Should().BeTrue("{0}", refreshResult.DebugInformation);
