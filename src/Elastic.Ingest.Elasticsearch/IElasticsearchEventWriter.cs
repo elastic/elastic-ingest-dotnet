@@ -19,8 +19,9 @@ public interface IElasticsearchEventWriter<TEvent>
 #if NETSTANDARD2_1_OR_GREATER
 	/// <summary>
 	/// Provide a custom routine to write <typeparamref name="TEvent"/> to an ArrayBufferWriter{T}
-	/// <para>If `null` <see cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/> will fallback to its internal implementation.</para>
-	/// <para>This implementation is only called if <see cref="ElasticsearchChannelOptionsBase{TEvent}.UseArrayBuffer"/> is true, defaults to false</para>
+	/// <para>This implementation is only called if <see cref="ElasticsearchChannelOptionsBase{TEvent}.UseReadOnlyMemory"/> is true, defaults to false</para>
+	/// <para>Otherwise <see cref="WriteToStreamAsync"/> is called instead.</para>
+	/// <para>If `null` <see cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/> will fallback to its own internal implementation.</para>
 	/// </summary>
 	Action<ArrayBufferWriter<byte>, TEvent>? WriteToArrayBuffer { get; set; }
 #endif

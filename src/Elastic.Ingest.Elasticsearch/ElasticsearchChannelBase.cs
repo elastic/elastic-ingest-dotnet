@@ -65,7 +65,7 @@ namespace Elastic.Ingest.Elasticsearch
 		protected override Task<BulkResponse> Export(HttpTransport transport, ArraySegment<TEvent> page, CancellationToken ctx = default)
 		{
 #if NETSTANDARD2_1
-			if (Options.UseArrayBuffer)
+			if (Options.UseReadOnlyMemory)
 			{
 				var bytes = GetBytes(page);
 				return transport.RequestAsync<BulkResponse>(HttpMethod.POST, "/_bulk", PostData.ReadOnlyMemory(bytes), RequestParams, ctx);

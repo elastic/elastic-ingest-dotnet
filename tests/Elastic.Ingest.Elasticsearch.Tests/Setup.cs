@@ -58,7 +58,7 @@ namespace Elastic.Ingest.Elasticsearch.Tests
 				ChannelOptions = new IndexChannelOptions<TestDocument>(transport)
 				{
 					BufferOptions = BufferOptions,
-					UseArrayBuffer = true,
+					UseReadOnlyMemory = true,
 					ServerRejectionCallback = (_) => Interlocked.Increment(ref _rejections),
 					ExportItemsAttemptCallback = (_, _) => Interlocked.Increment(ref _requests),
 					ExportResponseCallback = (_, _) => Interlocked.Increment(ref _responses),

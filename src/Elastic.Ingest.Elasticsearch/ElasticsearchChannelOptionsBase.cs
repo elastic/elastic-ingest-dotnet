@@ -22,8 +22,13 @@ namespace Elastic.Ingest.Elasticsearch
 		/// </summary>
 		public IElasticsearchEventWriter<TEvent>? EventWriter { get; set; }
 
-		/// <summary> Expert option, will prefer serializing using <see cref="ReadOnlyMemory{TEvent}"/></summary>
-		public bool UseArrayBuffer { get; set; }
+		/// <summary>
+		/// Expert option, This will eagerly serialize to <see cref="ReadOnlyMemory{TEvent}"/>
+		/// and use <see cref="PostData.ReadOnlyMemory"/>. If false (default) the channel will use
+		/// <see cref="PostData.StreamableData{T}"/> to directly write to the stream.
+		/// </summary>
+		[Obsolete("Temporary exposed expert option, used to evaluate two different approaches to serialization")]
+		public bool UseReadOnlyMemory { get; set; }
 
 	}
 }
