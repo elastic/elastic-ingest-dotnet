@@ -21,7 +21,7 @@ public class NoopBufferedChannel
 	public class NoopEvent
 	{
 		/// <summary> An id marker for the noop event </summary>
-		public int? Id { get; set; }
+		public long? Id { get; set; }
 	}
 
 	/// <summary> Empty response for use with <see cref="NoopBufferedChannel"/> </summary>
@@ -35,21 +35,15 @@ public class NoopBufferedChannel
 	}
 
 	/// <inheritdoc cref="NoopBufferedChannel"/>
-	public NoopBufferedChannel(NoopChannelOptions options) : base(options) { }
+	public NoopBufferedChannel(
+		NoopChannelOptions options,
+		ICollection<IChannelCallbacks<NoopEvent, NoopResponse>>? channelListeners = null
+	) : base(options, channelListeners) { }
 
 	/// <inheritdoc cref="NoopBufferedChannel"/>
 	public NoopBufferedChannel(
 		BufferOptions options,
-		bool observeConcurrency = false
-	) : this(options, null, observeConcurrency)
-	{
-
-	}
-
-	/// <inheritdoc cref="NoopBufferedChannel"/>
-	public NoopBufferedChannel(
-		BufferOptions options,
-		ICollection<IChannelCallbacks<NoopEvent, NoopResponse>>? channelListeners,
+		ICollection<IChannelCallbacks<NoopEvent, NoopResponse>>? channelListeners = null,
 		bool observeConcurrency = false
 	) : base(new NoopChannelOptions { BufferOptions = options, TrackConcurrency = observeConcurrency }, channelListeners)
 	{

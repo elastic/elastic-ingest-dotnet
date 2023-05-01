@@ -23,6 +23,12 @@ public class DiagnosticsBufferedChannel : NoopBufferedChannel
 	{
 	}
 
+	/// <inheritdoc cref="DiagnosticsBufferedChannel"/>
+	public DiagnosticsBufferedChannel(NoopChannelOptions options, string? name = null)
+		: base(options, new [] { new ChannelDiagnosticsListener<NoopEvent, NoopResponse>(name ?? nameof(DiagnosticsBufferedChannel)) })
+	{
+	}
+
 	private long _bufferMismatches;
 	/// <summary> Keeps track of the number of times the buffer size or the buffer offset was off</summary>
 	public long BufferMismatches => _bufferMismatches;
