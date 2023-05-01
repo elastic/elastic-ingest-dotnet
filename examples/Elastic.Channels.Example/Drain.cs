@@ -53,11 +53,11 @@ public static class Drain
 			OutboundBufferMaxLifetime = TimeSpan.FromSeconds(20)
 
 		};
-		var channel = new DiagnosticsBufferedChannel(bufferOptions, observeConcurrency: false);
+		var channel = new DiagnosticsBufferedChannel(bufferOptions, observeConcurrency: true);
 
 		for (var i = 0; i < totalEvents; i++)
 		{
-			var e = new NoopBufferedChannel.NoopEvent();
+			var e = new NoopBufferedChannel.NoopEvent { Id = i };
 			if (await channel.WaitToWriteAsync(e))
 				written++;
 		}

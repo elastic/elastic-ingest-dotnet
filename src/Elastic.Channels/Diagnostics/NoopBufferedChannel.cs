@@ -18,7 +18,11 @@ public class NoopBufferedChannel
 	: BufferedChannelBase<NoopBufferedChannel.NoopChannelOptions, NoopBufferedChannel.NoopEvent, NoopBufferedChannel.NoopResponse>
 {
 	/// <summary> Empty event for use with <see cref="NoopBufferedChannel"/> </summary>
-	public class NoopEvent { }
+	public class NoopEvent
+	{
+		/// <summary> An id marker for the noop event </summary>
+		public int? Id { get; set; }
+	}
 
 	/// <summary> Empty response for use with <see cref="NoopBufferedChannel"/> </summary>
 	public class NoopResponse { }
