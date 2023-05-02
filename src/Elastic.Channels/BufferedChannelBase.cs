@@ -180,8 +180,17 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	}
 
 	/// <inheritdoc cref="IBufferedChannel{TEvent}.TryWriteMany"/>
-	public bool TryWriteMany(IEnumerable<TEvent> events) =>
-		events.Select(e => TryWrite(e)).All(b => b);
+	public bool TryWriteMany(IEnumerable<TEvent> events)
+	{
+		var written = true;
+
+		foreach (var @event in  events)
+		{
+			written = TryWrite(@event);
+		}
+
+		return written;
+	}
 
 	/// <inheritdoc cref="ChannelWriter{T}.WaitToWriteAsync"/>
 	public virtual async Task<bool> WaitToWriteAsync(TEvent item, CancellationToken ctx = default)
@@ -307,6 +316,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			else
 				_callbacks.PublishToOutboundChannelFailureCallback?.Invoke();
 		}
+
+#if DEBUG
+		Console.WriteLine("Exiting consume inbound loop.");
+#endif
+
+		OutChannel.Writer.TryComplete();
 	}
 
 	private ValueTask<bool> PublishAsync(IOutboundBuffer<TEvent> buffer)
