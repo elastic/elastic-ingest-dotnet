@@ -55,6 +55,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elastic.Ingest.Apm.Example"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elastic.Ingest.OpenTelemetry.Example", "examples\Elastic.Ingest.OpenTelemetry.Example\Elastic.Ingest.OpenTelemetry.Example.csproj", "{F2F1FC18-C30F-4D9E-9EF0-F1E89EE71D17}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Elastic.Channels.Continuous", "examples\Elastic.Channels.Continuous\Elastic.Channels.Continuous.csproj", "{42069F63-6AB0-43D1-AF8B-C7DD521F64C5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -73,6 +75,7 @@ Global
 		{92F87F85-3028-4E98-A1C7-6CCEC4392AB4} = {A60DDBBB-4BF4-4B3B-A13A-E0B409917433}
 		{81F91C49-F590-47E2-AA69-AA713E840DD6} = {B67CBB46-74C1-47EB-9E41-D55C5E0E0D85}
 		{F2F1FC18-C30F-4D9E-9EF0-F1E89EE71D17} = {B67CBB46-74C1-47EB-9E41-D55C5E0E0D85}
+		{42069F63-6AB0-43D1-AF8B-C7DD521F64C5} = {B67CBB46-74C1-47EB-9E41-D55C5E0E0D85}
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{9F529525-E8E3-463D-A920-4D6E34150FC5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -123,5 +126,9 @@ Global
 		{F2F1FC18-C30F-4D9E-9EF0-F1E89EE71D17}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F2F1FC18-C30F-4D9E-9EF0-F1E89EE71D17}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F2F1FC18-C30F-4D9E-9EF0-F1E89EE71D17}.Release|Any CPU.Build.0 = Release|Any CPU
+		{42069F63-6AB0-43D1-AF8B-C7DD521F64C5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{42069F63-6AB0-43D1-AF8B-C7DD521F64C5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{42069F63-6AB0-43D1-AF8B-C7DD521F64C5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{42069F63-6AB0-43D1-AF8B-C7DD521F64C5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
