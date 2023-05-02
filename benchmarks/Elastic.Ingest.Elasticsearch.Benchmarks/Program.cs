@@ -23,6 +23,6 @@ using System.Globalization;
 
 var bm = new BulkIngestion();
 bm.Setup();
-bm.BulkAll();
+await bm.BulkAll();
 
 Console.WriteLine("DONE");

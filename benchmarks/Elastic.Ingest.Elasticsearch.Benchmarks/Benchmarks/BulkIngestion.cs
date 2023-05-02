@@ -11,7 +11,8 @@ public class BulkIngestion
 	private int _responses;
 
 	// NOTE: response includes 5_000 items
-	private static readonly byte[] _responseBytes = File.ReadAllBytes($"{Directory.GetCurrentDirectory()}\\SampleData\\BulkIngestResponseSuccess.txt");
+	private static readonly byte[] _responseBytes =
+		File.ReadAllBytes(Path.Combine(Directory.GetCurrentDirectory(), "SampleData", "BulkIngestResponseSuccess.txt"));
 
 	private static TransportConfiguration GetConfig()
 	{
@@ -25,33 +26,37 @@ public class BulkIngestion
 
 	private readonly ManualResetEvent _waitHandle = new(false);
 
-	private IndexChannelOptions<StockData> ChannelOptions => new(Transport)
-	{
-		BufferOptions = new Channels.BufferOptions { OutboundBufferMaxSize = 5_000 },
-		DisableDiagnostics = true,
-		IndexFormat = "stock-data-v8",
-		OutboundChannelExitedCallback = () =>
-		{
-			Console.WriteLine("Outbound channel exiting...");
-			_waitHandle.Set();
-		},
-		ExportResponseCallback = (response, a) =>
-		{
-			Interlocked.Add(ref _responses, response.Items.Count);
-			Console.WriteLine(_responses);
-		},
-		PublishToOutboundChannelCallback = () => Console.WriteLine("PUBLISHED")		
-	};
+	private IndexChannelOptions<StockData>? ChannelOptions { get; set; }
+	private IndexChannel<StockData>? Channel { get; set; }
 
-	private IndexChannel<StockData> Channel => new(ChannelOptions);
-
+	private static long _totalEventsToPublish = 100_000;
+	private static long _maxExportSize = 5_000;
 	private StockData[] _data = Array.Empty<StockData>();
 
 	[GlobalSetup]
 	public void Setup()
 	{
-		var data = new List<StockData>(100000);
-		var file = new StreamReader($"{Directory.GetCurrentDirectory()}\\SampleData\\StockData_100k.csv");
+		ChannelOptions = new IndexChannelOptions<StockData>(Transport)
+		{
+			BufferOptions = new Channels.BufferOptions { OutboundBufferMaxSize = 5_000, InboundBufferMaxSize = (int)_totalEventsToPublish },
+			DisableDiagnostics = true,
+			IndexFormat = "stock-data-v8",
+			OutboundChannelExitedCallback = () =>
+			{
+				Console.WriteLine("Outbound channel exiting...");
+				_waitHandle.Set();
+			},
+			ExportResponseCallback = (r, a) =>
+			{
+				var response = Interlocked.Increment(ref _responses);
+				Console.WriteLine($"Response: {response} / {_totalEventsToPublish / _maxExportSize}. Buffer size: {a.Count}");
+			},
+			PublishToOutboundChannelCallback = () => Console.WriteLine("PUBLISHED")
+		};
+		Channel = new IndexChannel<StockData>(ChannelOptions);
+
+		var data = new List<StockData>(100_000);
+		var file = new StreamReader(Path.Combine(Directory.GetCurrentDirectory(), "SampleData", "StockData_100k.csv"));
 
 		string? line;
 
@@ -62,13 +67,21 @@ public class BulkIngestion
 	}
 
 	[Benchmark]
-	public void BulkAll()
+	public async Task BulkAll()
 	{
-		Channel.TryWriteMany(_data);
-
+		Console.WriteLine($"Attempting to write {_data.Length:N0} items");
+		foreach (var d in _data)
+		{
+			var written = false;
+			var ready = await Channel!.WaitToWriteAsync();
+			if (ready) written = Channel.TryWrite(d);
+			if (!written)
+				throw new Exception($"Could not write {d.Name}");
+		}
 		// Thread.Sleep(1000);
+		Console.WriteLine($"Attempting to complete channel");
 
-		Channel.TryComplete();
+		Channel!.TryComplete();
 
 		_waitHandle.WaitOne();
 	}
