@@ -21,7 +21,6 @@ namespace Elastic.Ingest.Transport
 		ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem>
 		where TChannelOptions : TransportChannelOptionsBase<TEvent, TResponse, TBulkResponseItem>
 		where TResponse : TransportResponse, new()
-
 	{
 		/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
 		protected TransportChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners)
