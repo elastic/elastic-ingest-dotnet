@@ -51,8 +51,8 @@ public interface IBufferedChannel<in TEvent> : IDisposable
 /// data from one to the other</para>
 /// </summary>
 /// <typeparam name="TChannelOptions">Concrete channel options implementation</typeparam>
-/// <typeparam name="TEvent">The type of data we are looking to <see cref="Export"/></typeparam>
-/// <typeparam name="TResponse">The type of responses we are expecting to get back from <see cref="Export"/></typeparam>
+/// <typeparam name="TEvent">The type of data we are looking to <see cref="ExportAsync"/></typeparam>
+/// <typeparam name="TResponse">The type of responses we are expecting to get back from <see cref="ExportAsync"/></typeparam>
 public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	: ChannelWriter<TEvent>, IBufferedChannel<TEvent>
 	where TChannelOptions : ChannelOptionsBase<TEvent, TResponse>
@@ -136,7 +136,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// All subclasses of <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/> need to at a minimum
 	/// implement this method to export buffered collection of <see cref="OutChannel"/>
 	/// </summary>
-	protected abstract Task<TResponse> Export(ArraySegment<TEvent> buffer, CancellationToken ctx = default);
+	protected abstract Task<TResponse> ExportAsync(ArraySegment<TEvent> buffer, CancellationToken ctx = default);
 
 	/// <summary>The channel options currently in use</summary>
 	public TChannelOptions Options { get; }
@@ -253,7 +253,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			TResponse? response;
 			try
 			{
-				response = await Export(items, TokenSource.Token).ConfigureAwait(false);
+				response = await ExportAsync(items, TokenSource.Token).ConfigureAwait(false);
 				_callbacks.ExportResponseCallback?.Invoke(response, buffer);
 			}
 			catch (Exception e)

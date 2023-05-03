@@ -19,15 +19,15 @@ namespace Elastic.Channels
 		public int InboundBufferMaxSize { get; set; } = 100_000;
 
 		/// <summary>
-		/// The maximum size to export to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/> at once.
+		/// The maximum size to export to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/> at once.
 		/// <para>Defaults to <c>1_000</c></para>
 		/// </summary>
 		public int OutboundBufferMaxSize { get; set; } = 1_000;
 
 		/// <summary>
-		/// The maximum lifetime of a buffer to export to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>.
+		/// The maximum lifetime of a buffer to export to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>.
 		/// If a buffer is older then the configured <see cref="OutboundBufferMaxLifetime"/> it will be flushed to
-		/// <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/> regardless of it's current size
+		/// <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/> regardless of it's current size
 		/// <para>Defaults to <c>5 seconds</c></para>
 		/// </summary>
 		public TimeSpan OutboundBufferMaxLifetime { get; set; } = TimeSpan.FromSeconds(5);

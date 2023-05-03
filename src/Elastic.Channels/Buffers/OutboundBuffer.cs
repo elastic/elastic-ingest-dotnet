@@ -8,7 +8,7 @@ using System.Buffers;
 namespace Elastic.Channels.Buffers;
 
 /// <summary>
-/// The buffer to be exported over <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
+/// The buffer to be exported over <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>
 /// </summary>
 /// <remarks>Due to change as we move this over to use ArrayPool</remarks>
 public interface IOutboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
