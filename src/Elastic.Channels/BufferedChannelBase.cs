@@ -122,14 +122,17 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 		InboundBuffer = new InboundBuffer<TEvent>(maxOut, BufferOptions.OutboundBufferMaxLifetime);
 
-		_outThread = Task.Factory.StartNew(async () => await ConsumeOutboundEvents().ConfigureAwait(false),
-			TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness);
-		_inThread = Task.Factory.StartNew(async () =>
-				await ConsumeInboundEvents(maxOut, BufferOptions.OutboundBufferMaxLifetime)
-					.ConfigureAwait(false)
-			, TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness
-		);
+		_outThread = Task.Factory.StartNew(async () =>
+			await ConsumeOutboundEventsAsync().ConfigureAwait(false),
+				CancellationToken.None,
+				TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness,
+				TaskScheduler.Default);
 
+		_inThread = Task.Factory.StartNew(async () =>
+			await ConsumeInboundEventsAsync(maxOut, BufferOptions.OutboundBufferMaxLifetime).ConfigureAwait(false),
+				CancellationToken.None,
+				TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness,
+				TaskScheduler.Default);
 	}
 
 	/// <summary>
