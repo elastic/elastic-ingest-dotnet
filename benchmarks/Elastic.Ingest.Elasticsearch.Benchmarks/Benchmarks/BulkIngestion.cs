@@ -7,7 +7,7 @@ using Performance.Common;
 
 namespace Elastic.Ingest.Elasticsearch.Benchmarks;
 
-[SimpleJob(RunStrategy.Monitoring, invocationCount: 20, id: "BulkIngestionJob")]
+[SimpleJob(RunStrategy.Monitoring, invocationCount: 10, id: "BulkIngestionJob")]
 public class BulkIngestion
 {
 	private static readonly int MaxExportSize = 5_000;
@@ -26,6 +26,9 @@ public class BulkIngestion
 	[ParamsAllValues]
 	public bool DisableDiagnostics { get; set; }
 
+	[ParamsAllValues]
+	public bool UseReadOnlyMemory { get; set; }
+
 	[GlobalSetup]
 	public void Setup()
 	{
@@ -36,6 +39,7 @@ public class BulkIngestion
 				new SingleNodePool(new("http://localhost:9200")),
 				new InMemoryConnection(StockData.CreateSampleDataSuccessWithFilterPathResponseBytes(MaxExportSize))));
 
+#pragma warning disable CS0618 // Type or member is obsolete
 		_options = new IndexChannelOptions<StockData>(transport)
 		{
 			BufferOptions = new Channels.BufferOptions
@@ -43,6 +47,7 @@ public class BulkIngestion
 				OutboundBufferMaxSize = MaxExportSize
 			},
 			DisableDiagnostics = DisableDiagnostics,
+			UseReadOnlyMemory = UseReadOnlyMemory,
 			IndexFormat = "stock-data-v8",
 			OutboundChannelExitedCallback = () => _waitHandle.Set(),
 #if DEBUG
@@ -54,6 +59,7 @@ public class BulkIngestion
 			PublishToOutboundChannelCallback = () => Console.WriteLine("PUBLISHED")
 #endif
 		};
+#pragma warning restore CS0618 // Type or member is obsolete
 	}
 
 	[Benchmark]
