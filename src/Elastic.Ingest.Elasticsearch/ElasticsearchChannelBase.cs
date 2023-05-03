@@ -74,7 +74,8 @@ namespace Elastic.Ingest.Elasticsearch
                 return transport.RequestAsync<BulkResponse>(HttpMethod.POST, "/_bulk", PostData.ReadOnlyMemory(bytes), RequestParams, ctx);
             }
 #endif
-            return transport.RequestAsync<BulkResponse>(HttpMethod.POST, "/_bulk",
+#pragma warning disable IDE0022 // Use expression body for method
+			return transport.RequestAsync<BulkResponse>(HttpMethod.POST, "/_bulk",
                 PostData.StreamHandler(page,
                     (_, _) =>
                     {
@@ -82,7 +83,8 @@ namespace Elastic.Ingest.Elasticsearch
                     },
                     async (b, stream, ctx) => { await WriteBufferToStreamAsync(b, stream, ctx).ConfigureAwait(false); })
                 , RequestParams, ctx);
-        }
+#pragma warning restore IDE0022 // Use expression body for method
+		}
 
         /// <summary>
         /// Asks implementations to create a <see cref="BulkOperationHeader"/> based on the <paramref name="event"/> being exported.
