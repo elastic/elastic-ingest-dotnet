@@ -65,10 +65,12 @@ namespace Elastic.Ingest.OpenTelemetry
 		/// <summary> </summary>
 		public TraceChannel(TraceChannelOptions options, ICollection<IChannelCallbacks<Activity, TraceExportResult>>? callbackListeners)
 			: base(options, callbackListeners) {
-			var o = new OtlpExporterOptions();
-			o.Endpoint = options.Endpoint;
-            o.Headers = $"Authorization=Bearer {options.SecretToken}";
-            TraceExporter = new CustomOtlpTraceExporter(o, options);
+			var o = new OtlpExporterOptions
+			{
+				Endpoint = options.Endpoint,
+				Headers = $"Authorization=Bearer {options.SecretToken}"
+			};
+			TraceExporter = new CustomOtlpTraceExporter(o, options);
             Processor = new CustomActivityProcessor(TraceExporter,
 				maxExportBatchSize: options.BufferOptions.OutboundBufferMaxSize,
 				maxQueueSize: options.BufferOptions.InboundBufferMaxSize,
@@ -102,7 +104,7 @@ namespace Elastic.Ingest.OpenTelemetry
 		public CustomActivityProcessor Processor { get; }
 
 		/// <summary> </summary>
-		protected override Task<TraceExportResult> Export(ArraySegment<Activity> page, CancellationToken ctx = default)
+		protected override Task<TraceExportResult> ExportAsync(ArraySegment<Activity> page, CancellationToken ctx = default)
 		{
 			var batch = BatchCreator(page);
 			var result = TraceExporter.Export(batch);
