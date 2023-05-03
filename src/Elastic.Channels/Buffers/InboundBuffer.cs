@@ -88,9 +88,9 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 		try
 		{
 			_breaker.CancelAfter(Wait);
-			var _ = await reader.WaitToReadAsync(_breaker.Token).ConfigureAwait(false);
+			var result = await reader.WaitToReadAsync(_breaker.Token).ConfigureAwait(false);
 			_breaker.CancelAfter(-1);
-			return true;
+			return result;
 		}
 		catch (Exception) when (_breaker.IsCancellationRequested)
 		{
