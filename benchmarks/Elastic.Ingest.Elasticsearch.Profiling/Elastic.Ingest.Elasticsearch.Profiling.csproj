@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="JetBrains.Profiler.Api" Version="1.3.0" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Elastic.Ingest.Elasticsearch\Elastic.Ingest.Elasticsearch.csproj" />
+    <ProjectReference Include="..\Performance.Common\Performance.Common.csproj" />
+  </ItemGroup>
+
+</Project>
