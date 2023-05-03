@@ -54,7 +54,7 @@ namespace Elastic.Ingest.Apm
 		protected override List<(IIntakeObject, IntakeErrorItem)> Zip(EventIntakeResponse response, IReadOnlyCollection<IIntakeObject> page) =>
 			_emptyZip;
 
-		private List<(IIntakeObject, IntakeErrorItem)> _emptyZip = new();
+		private readonly List<(IIntakeObject, IntakeErrorItem)> _emptyZip = new();
 
 		/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryEvent"/>
 		protected override bool RetryEvent((IIntakeObject, IntakeErrorItem) @event) => false;
