@@ -33,7 +33,7 @@ public interface IBufferedChannel<in TEvent> : IDisposable
 	/// <summary>
 	/// Waits for availability on the inbound channel before attempting to write each item in <paramref name="events"/>.
 	/// </summary>
-	/// <returns>A bool indicating if all writes werwase successful</returns>
+    /// <returns>A bool indicating if all writes were successful</returns>
 	Task<bool> WaitToWriteManyAsync(IEnumerable<TEvent> events, CancellationToken ctx = default);
 
 	/// <summary>
@@ -80,11 +80,11 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var listeners = callbackListeners == null ? new[] { Options } : callbackListeners.Concat(new[] { Options }).ToArray();
 		DiagnosticsListener = listeners
 			.Select(l => (l is IChannelDiagnosticsListener c) ? c : null)
-			.FirstOrDefault(e=> e != null);
+            .FirstOrDefault(e => e != null);
 		if (DiagnosticsListener == null && !options.DisableDiagnostics)
 		{
 			// if no debug listener was already provided but was requested explicitly create one.
-			var l =  new ChannelDiagnosticsListener<TEvent, TResponse>(GetType().Name);
+            var l = new ChannelDiagnosticsListener<TEvent, TResponse>(GetType().Name);
 			DiagnosticsListener = l;
 			listeners = listeners.Concat(new[] { l }).ToArray();
 		}
