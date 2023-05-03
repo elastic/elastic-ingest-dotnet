@@ -134,6 +134,9 @@ resharper_redundant_argument_default_value_highlighting=do_not_show
 # Do not penalize code that explicitly lists generic arguments
 resharper_redundant_type_arguments_of_method_highlighting=do_not_show
 
+# Microsoft.VisualStudio.Threading.Analyzers
+dotnet_diagnostic.VSTHRD200.severity = error
+
 [Jenkinsfile]
 indent_style = space
 indent_size = 2
