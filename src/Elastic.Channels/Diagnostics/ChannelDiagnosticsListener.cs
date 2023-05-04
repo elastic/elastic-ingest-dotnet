@@ -15,7 +15,7 @@ namespace Elastic.Channels.Diagnostics;
 public interface IChannelDiagnosticsListener
 {
 	/// <summary>
-	/// Keeps track of the first observed exception to calls to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
+	/// Keeps track of the first observed exception to calls to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>
 	/// </summary>
 	public Exception? ObservedException { get; }
 

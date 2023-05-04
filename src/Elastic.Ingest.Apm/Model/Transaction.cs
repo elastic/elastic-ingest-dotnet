@@ -4,135 +4,135 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace Elastic.Ingest.Apm.Model
+namespace Elastic.Ingest.Apm.Model;
+
+/// <summary>Marker interface for V2 intake objects </summary>
+public interface IIntakeObject { }
+
+/// <summary>
+/// An event corresponding to an incoming request or similar task occurring in a monitored
+/// service
+/// </summary>
+public class Transaction : IIntakeObject
 {
-	/// <summary>Marker interface for V2 intake objects </summary>
-	public interface IIntakeObject { }
+	/// <see cref="Transaction"/>
+	public Transaction(string type, string id, string traceId, SpanCount spanCount, double duration, long timestamp)
+	{
+		Type = type;
+		Id = id;
+		TraceId = traceId;
+		SpanCount = spanCount;
+		Duration = duration;
+		Timestamp = timestamp;
+	}
 
 	/// <summary>
-	/// An event corresponding to an incoming request or similar task occurring in a monitored
-	/// service
+	/// Recorded time of the event, UTC based and formatted as microseconds since Unix epoch
 	/// </summary>
-	public class Transaction : IIntakeObject
-	{
-		/// <see cref="Transaction"/>
-		public Transaction(string type, string id, string traceId, SpanCount spanCount, double duration, long timestamp)
-		{
-			Type = type;
-			Id = id;
-			TraceId = traceId;
-			SpanCount = spanCount;
-			Duration = duration;
-			Timestamp = timestamp;
-		}
+	[JsonPropertyName("timestamp")]
+	public long Timestamp { get; set; }
 
-		/// <summary>
-		/// Recorded time of the event, UTC based and formatted as microseconds since Unix epoch
-		/// </summary>
-		[JsonPropertyName("timestamp")]
-		public long Timestamp { get; set; }
+	/// <summary>
+	/// How long the transaction took to complete, in ms with 3 decimal points
+	/// </summary>
+	[JsonPropertyName("duration")]
+	public double? Duration { get; set; }
 
-		/// <summary>
-		/// How long the transaction took to complete, in ms with 3 decimal points
-		/// </summary>
-		[JsonPropertyName("duration")]
-		public double? Duration { get; set; }
+	/// <summary>
+	/// Hex encoded 64 random bits ID of the transaction.
+	/// </summary>
+	[JsonPropertyName("id")]
+	public string Id { get; set; }
 
-		/// <summary>
-		/// Hex encoded 64 random bits ID of the transaction.
-		/// </summary>
-		[JsonPropertyName("id")]
-		public string Id { get; set; }
+	/// <summary>
+	/// Generic designation of a transaction in the scope of a single service (eg: 'GET
+	/// /users/:id')
+	/// </summary>
+	[JsonPropertyName("name")]
+	public string? Name { get; set; }
 
-		/// <summary>
-		/// Generic designation of a transaction in the scope of a single service (eg: 'GET
-		/// /users/:id')
-		/// </summary>
-		[JsonPropertyName("name")]
-		public string? Name { get; set; }
+	/// <summary>
+	/// Hex encoded 64 random bits ID of the parent transaction or span. Only root transactions
+	/// of a trace do not have a parent_id, otherwise it needs to be set.
+	/// </summary>
+	[JsonPropertyName("parent_id")]
+	public string? ParentId { get; set; }
 
-		/// <summary>
-		/// Hex encoded 64 random bits ID of the parent transaction or span. Only root transactions
-		/// of a trace do not have a parent_id, otherwise it needs to be set.
-		/// </summary>
-		[JsonPropertyName("parent_id")]
-		public string? ParentId { get; set; }
+	/// <summary>
+	/// The result of the transaction. For HTTP-related transactions, this should be the status
+	/// code formatted like 'HTTP 2xx'.
+	/// </summary>
+	[JsonPropertyName("result")]
+	public string? Result { get; set; }
 
-		/// <summary>
-		/// The result of the transaction. For HTTP-related transactions, this should be the status
-		/// code formatted like 'HTTP 2xx'.
-		/// </summary>
-		[JsonPropertyName("result")]
-		public string? Result { get; set; }
+	/// <summary>
+	/// Sampling rate
+	/// </summary>
+	[JsonPropertyName("sample_rate")]
+	public double? SampleRate { get; set; }
 
-		/// <summary>
-		/// Sampling rate
-		/// </summary>
-		[JsonPropertyName("sample_rate")]
-		public double? SampleRate { get; set; }
-
-		/// <summary>
-		/// Transactions that are 'sampled' will include all available information. Transactions that
-		/// are not sampled will not have 'spans' or 'context'. Defaults to true.
-		/// </summary>
-		[JsonPropertyName("sampled")]
-		public bool? Sampled { get; set; }
-
-		/// <summary></summary>
-		[JsonPropertyName("span_count")]
-		public SpanCount SpanCount { get; set; }
-
-		/// <summary>
-		/// Hex encoded 128 random bits ID of the correlated trace.
-		/// </summary>
-		[JsonPropertyName("trace_id")]
-		public string TraceId { get; set; }
-
-		/// <summary>
-		/// Keyword of specific relevance in the service's domain (eg: 'request', 'backgroundjob',
-		/// etc)
-		/// </summary>
-		[JsonPropertyName("type")]
-		public string Type { get; set; }
-	}
+	/// <summary>
+	/// Transactions that are 'sampled' will include all available information. Transactions that
+	/// are not sampled will not have 'spans' or 'context'. Defaults to true.
+	/// </summary>
+	[JsonPropertyName("sampled")]
+	public bool? Sampled { get; set; }
 
 	/// <summary></summary>
-	public class Marks { }
+	[JsonPropertyName("span_count")]
+	public SpanCount SpanCount { get; set; }
 
-	/// <summary></summary>
-	public class SpanCount
-	{
-		/// <summary>
-		/// Number of spans that have been dropped by the agent recording the transaction.
-		/// </summary>
-		[JsonPropertyName("dropped")]
-		public long? Dropped { get; set; }
+	/// <summary>
+	/// Hex encoded 128 random bits ID of the correlated trace.
+	/// </summary>
+	[JsonPropertyName("trace_id")]
+	public string TraceId { get; set; }
 
-		/// <summary>
-		/// Number of correlated spans that are recorded.
-		/// </summary>
-		[JsonPropertyName("started")]
-		public long Started { get; set; }
-	}
+	/// <summary>
+	/// Keyword of specific relevance in the service's domain (eg: 'request', 'backgroundjob',
+	/// etc)
+	/// </summary>
+	[JsonPropertyName("type")]
+	public string Type { get; set; }
+}
 
-	/// <summary></summary>
+/// <summary></summary>
+public class Marks { }
+
+/// <summary></summary>
+public class SpanCount
+{
+	/// <summary>
+	/// Number of spans that have been dropped by the agent recording the transaction.
+	/// </summary>
+	[JsonPropertyName("dropped")]
+	public long? Dropped { get; set; }
+
+	/// <summary>
+	/// Number of correlated spans that are recorded.
+	/// </summary>
+	[JsonPropertyName("started")]
+	public long Started { get; set; }
+}
+
+/// <summary></summary>
     public class Span : IIntakeObject
+{
+	/// <summary></summary>
+	public Span(string type, string name, string id, string traceId, string parentId, long timestamp)
 	{
-		/// <summary></summary>
-		public Span(string type, string name, string id, string traceId, string parentId, long timestamp)
-		{
-			Type = type;
-			Name = name;
-			Id = id;
-			TraceId = traceId;
-			ParentId = parentId;
-			Timestamp = timestamp;
-		}
+		Type = type;
+		Name = name;
+		Id = id;
+		TraceId = traceId;
+		ParentId = parentId;
+		Timestamp = timestamp;
+	}
 
-		/// <summary>
-		/// Recorded time of the event, UTC based and formatted as microseconds since Unix epoch
-		/// </summary>
-		public long Timestamp { get; set; }
+	/// <summary>
+	/// Recorded time of the event, UTC based and formatted as microseconds since Unix epoch
+	/// </summary>
+	public long Timestamp { get; set; }
 
         /// <summary>
         /// The specific kind of event within the sub-type represented by the span (e.g. query,
@@ -140,17 +140,17 @@ namespace Elastic.Ingest.Apm.Model
         /// </summary>
         public string? Action { get; set; }
 
-		/// <summary>
+	/// <summary>
         /// List of successor transactions and/or spans.
         /// </summary>
         public List<string>? ChildIds { get; set; }
 
-		/// <summary>
+	/// <summary>
         /// Any other arbitrary data captured by the agent, optionally provided by the user
         /// </summary>
         public Context? Context { get; set; }
 
-		/// <summary>
+	/// <summary>
         /// Duration of the span in milliseconds
         /// </summary>
         public double? Duration { get; set; }
@@ -180,7 +180,7 @@ namespace Elastic.Ingest.Apm.Model
         /// </summary>
         public List<object>? Stacktrace { get; set; }
 
-		/// <summary>
+	/// <summary>
         /// Offset relative to the transaction's timestamp identifying the start of the span, in
         /// milliseconds
         /// </summary>
@@ -191,7 +191,7 @@ namespace Elastic.Ingest.Apm.Model
         /// </summary>
         public string? Subtype { get; set; }
 
-		/// <summary>
+	/// <summary>
         /// Indicates whether the span was executed synchronously or asynchronously.
         /// </summary>
         public bool? Sync { get; set; }
@@ -206,13 +206,13 @@ namespace Elastic.Ingest.Apm.Model
         /// </summary>
         public string? TransactionId { get; set; }
 
-		/// <summary>
+	/// <summary>
         /// Keyword of specific relevance in the service's domain (eg: 'db', 'template', etc)
         /// </summary>
         public string Type { get; set; }
     }
 
-	/// <summary></summary>
+/// <summary></summary>
     public class Context
     {
         /// <summary>
@@ -238,7 +238,7 @@ namespace Elastic.Ingest.Apm.Model
         public ContextService? Service { get; set; }
     }
 
-	/// <summary></summary>
+/// <summary></summary>
     public class Db
     {
         /// <summary>
@@ -273,7 +273,7 @@ namespace Elastic.Ingest.Apm.Model
         public string? User { get; set; }
     }
 
-	/// <summary></summary>
+/// <summary></summary>
     public class Destination
     {
         /// <summary>
@@ -293,7 +293,7 @@ namespace Elastic.Ingest.Apm.Model
         public DestinationService? Service { get; set; }
     }
 
-	/// <summary></summary>
+/// <summary></summary>
     public class DestinationService
     {
         /// <summary>
@@ -315,7 +315,7 @@ namespace Elastic.Ingest.Apm.Model
         public string? Type { get; set; }
     }
 
-	/// <summary></summary>
+/// <summary></summary>
     public class Http
     {
         /// <summary>
@@ -334,7 +334,7 @@ namespace Elastic.Ingest.Apm.Model
         public string? Url { get; set; }
     }
 
-	/// <summary></summary>
+/// <summary></summary>
     public class ContextService
     {
         /// <summary>
@@ -348,7 +348,7 @@ namespace Elastic.Ingest.Apm.Model
         public string? Name { get; set; }
     }
 
-	/// <summary></summary>
+/// <summary></summary>
     public class Agent
     {
         /// <summary>
@@ -366,4 +366,3 @@ namespace Elastic.Ingest.Apm.Model
         /// </summary>
         public string? Version { get; set; }
     }
-}

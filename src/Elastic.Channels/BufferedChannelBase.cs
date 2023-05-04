@@ -33,11 +33,11 @@ public interface IBufferedChannel<in TEvent> : IDisposable
 	/// <summary>
 	/// Waits for availability on the inbound channel before attempting to write each item in <paramref name="events"/>.
 	/// </summary>
-	/// <returns>A bool indicating if all writes werwase successful</returns>
+	/// <returns>A bool indicating if all writes were successful</returns>
 	Task<bool> WaitToWriteManyAsync(IEnumerable<TEvent> events, CancellationToken ctx = default);
 
 	/// <summary>
-	/// Tries to write many <paramref name="events"/> to the channel returning true if ALL messages were written succesfully
+	/// Tries to write many <paramref name="events"/> to the channel returning true if ALL messages were written successfully
 	/// </summary>
 	bool TryWriteMany(IEnumerable<TEvent> events);
 
@@ -51,8 +51,8 @@ public interface IBufferedChannel<in TEvent> : IDisposable
 /// data from one to the other</para>
 /// </summary>
 /// <typeparam name="TChannelOptions">Concrete channel options implementation</typeparam>
-/// <typeparam name="TEvent">The type of data we are looking to <see cref="Export"/></typeparam>
-/// <typeparam name="TResponse">The type of responses we are expecting to get back from <see cref="Export"/></typeparam>
+/// <typeparam name="TEvent">The type of data we are looking to <see cref="ExportAsync"/></typeparam>
+/// <typeparam name="TResponse">The type of responses we are expecting to get back from <see cref="ExportAsync"/></typeparam>
 public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	: ChannelWriter<TEvent>, IBufferedChannel<TEvent>
 	where TChannelOptions : ChannelOptionsBase<TEvent, TResponse>
@@ -80,11 +80,11 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var listeners = callbackListeners == null ? new[] { Options } : callbackListeners.Concat(new[] { Options }).ToArray();
 		DiagnosticsListener = listeners
 			.Select(l => (l is IChannelDiagnosticsListener c) ? c : null)
-			.FirstOrDefault(e=> e != null);
+			.FirstOrDefault(e => e != null);
 		if (DiagnosticsListener == null && !options.DisableDiagnostics)
 		{
 			// if no debug listener was already provided but was requested explicitly create one.
-			var l =  new ChannelDiagnosticsListener<TEvent, TResponse>(GetType().Name);
+			var l = new ChannelDiagnosticsListener<TEvent, TResponse>(GetType().Name);
 			DiagnosticsListener = l;
 			listeners = listeners.Concat(new[] { l }).ToArray();
 		}
@@ -122,21 +122,24 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 		InboundBuffer = new InboundBuffer<TEvent>(maxOut, BufferOptions.OutboundBufferMaxLifetime);
 
-		_outThread = Task.Factory.StartNew(async () => await ConsumeOutboundEvents().ConfigureAwait(false),
-			TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness);
-		_inThread = Task.Factory.StartNew(async () =>
-				await ConsumeInboundEvents(maxOut, BufferOptions.OutboundBufferMaxLifetime)
-					.ConfigureAwait(false)
-			, TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness
-		);
+		_outThread = Task.Factory.StartNew(async () =>
+			await ConsumeOutboundEventsAsync().ConfigureAwait(false),
+				CancellationToken.None,
+				TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness,
+				TaskScheduler.Default);
 
+		_inThread = Task.Factory.StartNew(async () =>
+			await ConsumeInboundEventsAsync(maxOut, BufferOptions.OutboundBufferMaxLifetime).ConfigureAwait(false),
+				CancellationToken.None,
+				TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness,
+				TaskScheduler.Default);
 	}
 
 	/// <summary>
 	/// All subclasses of <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/> need to at a minimum
 	/// implement this method to export buffered collection of <see cref="OutChannel"/>
 	/// </summary>
-	protected abstract Task<TResponse> Export(ArraySegment<TEvent> buffer, CancellationToken ctx = default);
+	protected abstract Task<TResponse> ExportAsync(ArraySegment<TEvent> buffer, CancellationToken ctx = default);
 
 	/// <summary>The channel options currently in use</summary>
 	public TChannelOptions Options { get; }
@@ -197,7 +200,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		ctx = ctx == default ? TokenSource.Token : ctx;
 		if (await InChannel.Writer.WaitToWriteAsync(ctx).ConfigureAwait(false) &&
-		    InChannel.Writer.TryWrite(item))
+			InChannel.Writer.TryWrite(item))
 		{
 			_callbacks.PublishToInboundChannelCallback?.Invoke();
 			return true;
@@ -215,7 +218,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		IWriteTrackingBuffer statistics
 	) => EmptyArraySegments<TEvent>.Empty;
 
-	private async Task ConsumeOutboundEvents()
+	private async Task ConsumeOutboundEventsAsync()
 	{
 		_callbacks.OutboundChannelStartedCallback?.Invoke();
 
@@ -223,7 +226,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var taskList = new List<Task>(maxConsumers);
 
 		while (await OutChannel.Reader.WaitToReadAsync().ConfigureAwait(false))
-			// ReSharper disable once RemoveRedundantBraces
+		// ReSharper disable once RemoveRedundantBraces
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
 			if (_signal is { IsSet: true }) break;
@@ -234,7 +237,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 				{
 					var items = buffer.GetArraySegment();
 					await _throttleTasks.WaitAsync().ConfigureAwait(false);
-					var t = ExportBuffer(items, buffer);
+					var t = ExportBufferAsync(items, buffer);
 					taskList.Add(t);
 
 					if (taskList.Count >= maxConsumers)
@@ -250,7 +253,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		_callbacks.OutboundChannelExitedCallback?.Invoke();
 	}
 
-	private async Task ExportBuffer(ArraySegment<TEvent> items, IOutboundBuffer<TEvent> buffer)
+	private async Task ExportBufferAsync(ArraySegment<TEvent> items, IOutboundBuffer<TEvent> buffer)
 	{
 		var maxRetries = Options.BufferOptions.ExportMaxRetries;
 		for (var i = 0; i <= maxRetries && items.Count > 0; i++)
@@ -262,7 +265,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			TResponse? response;
 			try
 			{
-				response = await Export(items, TokenSource.Token).ConfigureAwait(false);
+				response = await ExportAsync(items, TokenSource.Token).ConfigureAwait(false);
 				_callbacks.ExportResponseCallback?.Invoke(response, buffer);
 			}
 			catch (Exception e)
@@ -291,7 +294,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			_signal.Signal();
 	}
 
-	private async Task ConsumeInboundEvents(int maxQueuedMessages, TimeSpan maxInterval)
+	private async Task ConsumeInboundEventsAsync(int maxQueuedMessages, TimeSpan maxInterval)
 	{
 		_callbacks.InboundChannelStartedCallback?.Invoke();
 		while (await InboundBuffer.WaitToReadAsync(InChannel.Reader).ConfigureAwait(false))

@@ -10,34 +10,32 @@ using Elastic.Channels;
 using Elastic.Channels.Diagnostics;
 using Elastic.Transport;
 
-namespace Elastic.Ingest.Transport
+namespace Elastic.Ingest.Transport;
+
+/// <summary>
+/// A <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/> implementation that provides a common base for channels
+/// looking to <see cref="ExportAsync(Elastic.Transport.HttpTransport,System.ArraySegment{TEvent},System.Threading.CancellationToken)"/> data
+/// over <see cref="HttpTransport"/>
+/// </summary>
+public abstract class TransportChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem> :
+	ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem>
+	where TChannelOptions : TransportChannelOptionsBase<TEvent, TResponse, TBulkResponseItem>
+	where TResponse : TransportResponse, new()
 {
-	/// <summary>
-	/// A <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/> implementation that provides a common base for channels
-	/// looking to <see cref="Export(Elastic.Transport.HttpTransport,System.ArraySegment{TEvent},System.Threading.CancellationToken)"/> data
-	/// over <see cref="HttpTransport"/>
-	/// </summary>
-	public abstract class TransportChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem> :
-		ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem>
-		where TChannelOptions : TransportChannelOptionsBase<TEvent, TResponse, TBulkResponseItem>
-		where TResponse : TransportResponse, new()
+	/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
+	protected TransportChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners)
+		: base(options, callbackListeners) { }
 
-	{
-		/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
-		protected TransportChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners)
-			: base(options, callbackListeners) { }
+	/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
+	protected TransportChannelBase(TChannelOptions options)
+		: base(options) { }
 
-		/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
-		protected TransportChannelBase(TChannelOptions options)
-			: base(options) { }
+	/// <summary> Implement sending the current <paramref name="page"/> of the buffer to the output. </summary>
+	/// <param name="transport"></param>
+	/// <param name="page">Active page of the buffer that needs to be send to the output</param>
+	/// <param name="ctx"></param>
+	protected abstract Task<TResponse> ExportAsync(HttpTransport transport, ArraySegment<TEvent> page, CancellationToken ctx = default);
 
-		/// <summary> Implement sending the current <paramref name="page"/> of the buffer to the output. </summary>
-		/// <param name="transport"></param>
-		/// <param name="page">Active page of the buffer that needs to be send to the output</param>
-		/// <param name="ctx"></param>
-		protected abstract Task<TResponse> Export(HttpTransport transport, ArraySegment<TEvent> page, CancellationToken ctx = default);
-
-		/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>>
-		protected override Task<TResponse> Export(ArraySegment<TEvent> buffer, CancellationToken ctx = default) => Export(Options.Transport, buffer, ctx);
-	}
+	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>>
+	protected override Task<TResponse> ExportAsync(ArraySegment<TEvent> buffer, CancellationToken ctx = default) => ExportAsync(Options.Transport, buffer, ctx);
 }

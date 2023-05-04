@@ -11,8 +11,8 @@ namespace Elastic.Channels.Diagnostics;
 
 /// <summary>
 /// A NOOP implementation of <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/> that:
-/// <para> -tracks the number of times <see cref="Export"/> is invoked under <see cref="ExportedBuffers"/> </para>
-/// <para> -observes the maximum concurrent calls to <see cref="Export"/> under <see cref="ObservedConcurrency"/> </para>
+/// <para> -tracks the number of times <see cref="ExportAsync"/> is invoked under <see cref="ExportedBuffers"/> </para>
+/// <para> -observes the maximum concurrent calls to <see cref="ExportAsync"/> under <see cref="ObservedConcurrency"/> </para>
 /// </summary>
 public class NoopBufferedChannel
 	: BufferedChannelBase<NoopBufferedChannel.NoopChannelOptions, NoopBufferedChannel.NoopEvent, NoopBufferedChannel.NoopResponse>
@@ -30,7 +30,7 @@ public class NoopBufferedChannel
 	/// <summary> Provides options how the <see cref="NoopBufferedChannel"/> should behave </summary>
 	public class NoopChannelOptions : ChannelOptionsBase<NoopEvent, NoopResponse>
 	{
-		/// <summary> If set (defaults:false) will track the max observed concurrency to <see cref="NoopBufferedChannel.Export"/></summary>
+		/// <summary> If set (defaults:false) will track the max observed concurrency to <see cref="NoopBufferedChannel.ExportAsync"/></summary>
 		public bool TrackConcurrency { get; set; }
 	}
 
@@ -50,18 +50,18 @@ public class NoopBufferedChannel
 
 	}
 
-	/// <summary> Returns the number of times <see cref="Export"/> was called</summary>
+	/// <summary> Returns the number of times <see cref="ExportAsync"/> was called</summary>
 	public long ExportedBuffers => _exportedBuffers;
 
 	private long _exportedBuffers;
 
-	/// <summary> The maximum observed concurrency to calls to <see cref="Export"/>, requires <see cref="NoopChannelOptions.TrackConcurrency"/> to be set</summary>
+	/// <summary> The maximum observed concurrency to calls to <see cref="ExportAsync"/>, requires <see cref="NoopChannelOptions.TrackConcurrency"/> to be set</summary>
 	public int ObservedConcurrency { get; private set; }
 
 	private int _currentMax;
 
-	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
-	protected override async Task<NoopResponse> Export(ArraySegment<NoopEvent> buffer, CancellationToken ctx = default)
+	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>
+	protected override async Task<NoopResponse> ExportAsync(ArraySegment<NoopEvent> buffer, CancellationToken ctx = default)
 	{
 		Interlocked.Increment(ref _exportedBuffers);
 		if (!Options.TrackConcurrency) return new NoopResponse();

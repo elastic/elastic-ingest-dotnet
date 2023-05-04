@@ -15,7 +15,7 @@ namespace Elastic.Channels.Diagnostics;
 /// </summary>
 public interface IChannelCallbacks<in TEvent, in TResponse>
 {
-	/// <summary> Called if the call to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/> throws. </summary>
+	/// <summary> Called if the call to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/> throws. </summary>
 	Action<Exception>? ExportExceptionCallback { get; }
 
 	/// <summary> Called with (number of retries) (number of items to be exported) </summary>
@@ -53,7 +53,7 @@ public interface IChannelCallbacks<in TEvent, in TResponse>
 
 	/// <summary>
 	/// Called once after a buffer has been flushed, if the buffer is retried this callback is only called once
-	/// all retries have been exhausted. Its called regardless of whether the call to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.Export"/>
+	/// all retries have been exhausted. Its called regardless of whether the call to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>
 	/// succeeded.
 	/// </summary>
 	Action? ExportBufferCallback { get; }
