@@ -46,3 +46,12 @@ Baseline for commit 8eef0e1dfbee8c5198ec0ab975b5d826e2356fcd (from 2023-05-02) i
 | BulkAll |              False |              True |  116.5 ms |   47.78 ms |    31.60 ms | 11600.0000 | 2400.0000 | 2000.0000 |    97934119 B |
 | BulkAll |               True |             False |  150.9 ms |   78.36 ms |    51.83 ms | 34800.0000 | 5400.0000 | 1700.0000 |    82012232 B |
 | BulkAll |               True |              True |  150.3 ms |   66.08 ms |    43.71 ms | 20900.0000 | 3700.0000 | 2000.0000 |    91253012 B |
+
+
+FixedIndexName_WriteToStreamAsync
+---------------------------------
+
+|                                     Method | Mean [ms] | Error [ms] | StdDev [ms] |    Ratio | RatioSD |      Gen0 |      Gen1 |      Gen2 | Allocated [B] | Alloc Ratio |
+|------------------------------------------- |----------:|-----------:|------------:|---------:|--------:|----------:|----------:|----------:|--------------:|------------:|
+|          FixedIndexName_WriteToStreamAsync |  71.62 ms |   1.425 ms |    3.358 ms | baseline |         | 3000.0000 | 1000.0000 | 1000.0000 |    29581107 B |             |
+| FixedIndexName_WriteToStreamOptimizedAsync |  53.11 ms |   1.057 ms |    2.430 ms |     -26% |    7.1% | 1300.0000 |  600.0000 |  600.0000 |     8997235 B |        -70% |
