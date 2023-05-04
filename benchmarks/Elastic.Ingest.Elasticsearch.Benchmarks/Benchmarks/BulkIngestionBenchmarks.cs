@@ -8,7 +8,7 @@ using Performance.Common;
 namespace Elastic.Ingest.Elasticsearch.Benchmarks;
 
 [SimpleJob(RunStrategy.Monitoring, invocationCount: 10, id: "BulkIngestionJob")]
-public class BulkIngestion
+public class BulkIngestionBenchmarks
 {
 	private static readonly int MaxExportSize = 5_000;
 	
