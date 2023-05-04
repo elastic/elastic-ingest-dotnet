@@ -75,11 +75,11 @@ public sealed class StockData
 			if (i < count - 1)
 			{
 				responseBytes[offset + FilterPathItemResponseBytes.Length] = Comma;
-				offset += (FilterPathItemResponseBytes.Length + 1);
+				offset += FilterPathItemResponseBytes.Length + 1;
 			}
 			else
 			{
-				offset += (FilterPathItemResponseBytes.Length);
+				offset += FilterPathItemResponseBytes.Length;
 			}
 		}
 

@@ -22,9 +22,12 @@ using Elastic.Ingest.Elasticsearch.Benchmarks.Benchmarks;
 //await bm.BulkAllAsync();
 //Console.WriteLine("DONE");
 
-var bm = new BulkRequestCreationBenchmarks();
+var bm = new BulkRequestCreationWithFixedIndexNameBenchmarks();
 bm.Setup();
-await bm.WriteToStreamOptimizedAsync();
+await bm.WriteToStreamAsync_OLD();
+
+var length = bm.MemoryStream.Length;
+
 bm.MemoryStream.Position = 0;
 var sr = new StreamReader(bm.MemoryStream);
 var json = sr.ReadToEnd();

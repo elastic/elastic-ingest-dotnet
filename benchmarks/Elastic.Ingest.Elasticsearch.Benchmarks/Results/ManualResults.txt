@@ -51,15 +51,33 @@ Baseline for commit 8eef0e1dfbee8c5198ec0ab975b5d826e2356fcd (from 2023-05-02) i
 BulkRequestCreationWithFixedIndexNameBenchmarks
 -----------------------------------------------
 
-|                                     Method | Mean [ms] | Error [ms] | StdDev [ms] |    Ratio | RatioSD |      Gen0 |      Gen1 |      Gen2 | Allocated [B] | Alloc Ratio |
-|------------------------------------------- |----------:|-----------:|------------:|---------:|--------:|----------:|----------:|----------:|--------------:|------------:|
-|          FixedIndexName_WriteToStreamAsync |  71.62 ms |   1.425 ms |    3.358 ms | baseline |         | 3000.0000 | 1000.0000 | 1000.0000 |    29581107 B |             |
-| FixedIndexName_WriteToStreamOptimizedAsync |  53.11 ms |   1.057 ms |    2.430 ms |     -26% |    7.1% | 1300.0000 |  600.0000 |  600.0000 |     8997235 B |        -70% |
+|                 Method | Mean [ms] | Error [ms] | StdDev [ms] |    Ratio | RatioSD |     Gen0 |     Gen1 |     Gen2 | Allocated [B] | Alloc Ratio |
+|----------------------- |----------:|-----------:|------------:|---------:|--------:|---------:|---------:|---------:|--------------:|------------:|
+| WriteToStreamAsync_OLD |  2.666 ms |  0.0553 ms |   0.1578 ms | baseline |         | 121.0938 | 121.0938 | 121.0938 |      653139 B |             |
+|     WriteToStreamAsync |  2.447 ms |  0.0487 ms |   0.1148 ms |      -8% |    7.5% | 121.0938 | 121.0938 | 121.0938 |      573139 B |        -12% |
 
-BulkRequestCreationWithTemplatedIndexNameBenchmarks
----------------------------------------------------
+Previous Request Body = 205000B
+New Request Body = 181000B
+Saves 24B per operation in the request body
 
-|                                       Method | Mean [ms] | Error [ms] | StdDev [ms] |    Ratio | RatioSD |      Gen0 |     Gen1 |     Gen2 | Allocated [B] | Alloc Ratio |
-|--------------------------------------------- |----------:|-----------:|------------:|---------:|--------:|----------:|---------:|---------:|--------------:|------------:|
-|          DynamicIndexName_WriteToStreamAsync |  112.7 ms |    3.53 ms |    10.17 ms | baseline |         | 2800.0000 | 800.0000 | 800.0000 |    30380834 B |             |
-| DynamicIndexName_WriteToStreamOptimizedAsync |  101.1 ms |    2.53 ms |     7.38 ms |     -10% |   11.4% | 2800.0000 | 800.0000 | 800.0000 |    30379709 B |         -0% |
+BulkRequestCreationWithFixedIndexNameBenchmarks (1k events)
+-----------------------------------------------------------
+
+|                            Method | Mean [ms] | Error [ms] | StdDev [ms] |     Gen0 |     Gen1 |     Gen2 | Allocated [B] |
+|---------------------------------- |----------:|-----------:|------------:|---------:|---------:|---------:|--------------:|
+| FixedIndexName_WriteToStreamAsync |  2.351 ms |  0.0481 ms |   0.1364 ms | 121.0938 | 121.0938 | 121.0938 |      573139 B |
+
+BulkRequestCreationWithTemplatedIndexNameBenchmarks (1k events)
+---------------------------------------------------------------
+
+|                              Method | Mean [ms] | Error [ms] | StdDev [ms] |      Gen0 |     Gen1 |     Gen2 | Allocated [B] |
+|------------------------------------ |----------:|-----------:|------------:| ---------:|---------:|---------:|--------------:|
+| DynamicIndexName_WriteToStreamAsync |  2.836 ms |  0.0564 ms |   0.1002 ms |  121.0938 | 121.0938 | 121.0938 |      661139 B |
+
+
+BulkRequestCreationForDataStreamBenchmarks (1k events)
+------------------------------------------------------
+
+|             Method | Mean [ms] | Error [ms] | StdDev [ms] |     Gen0 |     Gen1 |     Gen2 | Allocated [B] |
+|------------------- |----------:|-----------:|------------:|---------:|---------:|---------:|--------------:|
+| WriteToStreamAsync |  2.261 ms |  0.0442 ms |   0.1041 ms | 121.0938 | 121.0938 | 121.0938 |      525139 B |
