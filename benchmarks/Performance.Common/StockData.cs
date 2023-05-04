@@ -49,7 +49,7 @@ public sealed class StockData
 
 	public static StockData[] CreateSampleData(long count)
 	{
-		var data = new StockData[100_000];
+		var data = new StockData[count];
 
 		for (var i = 0; i < count; i++)
 		{
