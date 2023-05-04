@@ -15,31 +15,34 @@ namespace Elastic.Ingest.Elasticsearch.Indices;
 /// </summary>
 public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChannelOptions<TEvent>>
 {
+	private readonly bool _skipIndexNameOnOperations = false;
+	private readonly string _url;
+
 	/// <inheritdoc cref="IndexChannel{TEvent}"/>
 	public IndexChannel(IndexChannelOptions<TEvent> options) : this(options, null) { }
 
 	/// <inheritdoc cref="IndexChannel{TEvent}"/>
 	public IndexChannel(IndexChannelOptions<TEvent> options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners) : base(options, callbackListeners)
 	{
+		_url = base.BulkUrl;
+
+		// When the configured index format represents a fixed index name, we can optimize by providing a URL with the target index specified.
+		// We can later avoid the overhead of calculating and adding the index name to the operation headers.
+		if (string.Format(Options.IndexFormat, DateTimeOffset.Now).Equals(Options.IndexFormat, StringComparison.Ordinal))
+		{
+			_url = $"/{Options.IndexFormat}/{base.BulkUrl}";
+			_skipIndexNameOnOperations = true;
+		}
+
 		TemplateName = string.Format(Options.IndexFormat, "template");
 		TemplateWildcard = string.Format(Options.IndexFormat, "*");
 	}
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
-	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent @event)
-	{
-		var indexTime = Options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
-		if (Options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(Options.IndexOffset.Value);
+	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkUrl"/>
+	protected override string BulkUrl => _url;
 
-		var index = string.Format(Options.IndexFormat, indexTime);
-		var id = Options.BulkOperationIdLookup?.Invoke(@event);
-		if (!string.IsNullOrWhiteSpace(id) && id != null && (Options.BulkUpsertLookup?.Invoke(@event, id) ?? false))
-			return new UpdateOperation { Id = id, Index = index };
-		return
-			!string.IsNullOrWhiteSpace(id)
-				? new IndexOperation { Index = index, Id = id }
-				: new CreateOperation { Index = index };
-	}
+	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
+	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent @event) => BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(@event, Options, _skipIndexNameOnOperations);
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName { get; }

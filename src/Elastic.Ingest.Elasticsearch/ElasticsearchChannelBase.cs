@@ -3,11 +3,8 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Buffers;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels;
@@ -46,6 +43,11 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		return details.HasSuccessfulStatusCode;
 	}
 
+	/// <summary>
+	/// The URL for the bulk request.
+	/// </summary>
+	protected virtual string BulkUrl => "/_bulk";
+
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryAllItems"/>
 	protected override bool RetryAllItems(BulkResponse response) => response.ApiCallDetails.HttpStatusCode == 429;
 
@@ -70,103 +72,24 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		if (Options.UseReadOnlyMemory)
 #pragma warning restore CS0618
 		{
-			var bytes = GetBytes(page);
-			return transport.RequestAsync<BulkResponse>(HttpMethod.POST, "/_bulk", PostData.ReadOnlyMemory(bytes), RequestParams, ctx);
+			var bytes = BulkRequestDataFactory.GetBytes(page, Options, CreateBulkOperationHeader);
+			return transport.RequestAsync<BulkResponse>(HttpMethod.POST, BulkUrl, PostData.ReadOnlyMemory(bytes), RequestParams, ctx);
 		}
 #endif
-#pragma warning disable IDE0022 // Use expression body for method
-		return transport.RequestAsync<BulkResponse>(HttpMethod.POST, "/_bulk",
+		return transport.RequestAsync<BulkResponse>(HttpMethod.POST, BulkUrl,
 			PostData.StreamHandler(page,
 				(_, _) =>
 				{
 					/* NOT USED */
 				},
-				async (b, stream, ctx) => { await WriteBufferToStreamAsync(b, stream, ctx).ConfigureAwait(false); })
+				async (b, stream, ctx) => { await BulkRequestDataFactory.WriteBufferToStreamAsync(b, stream, Options, CreateBulkOperationHeader, ctx).ConfigureAwait(false); })
 			, RequestParams, ctx);
-#pragma warning restore IDE0022 // Use expression body for method
 	}
 
 	/// <summary>
 	/// Asks implementations to create a <see cref="BulkOperationHeader"/> based on the <paramref name="event"/> being exported.
 	/// </summary>
 	protected abstract BulkOperationHeader CreateBulkOperationHeader(TEvent @event);
-
-#if NETSTANDARD2_1_OR_GREATER
-	private ReadOnlyMemory<byte> GetBytes(ArraySegment<TEvent> page)
-	{
-		// ArrayBufferWriter inserts comma's when serializing multiple times
-		// Hence the multiple writer.Resets() as advised on this feature request
-		// https://github.com/dotnet/runtime/issues/82314
-		var bufferWriter = new ArrayBufferWriter<byte>();
-		using var writer = new Utf8JsonWriter(bufferWriter, WriterOptions);
-		foreach (var @event in page.AsSpan())
-		{
-			var indexHeader = CreateBulkOperationHeader(@event);
-			JsonSerializer.Serialize(writer, indexHeader, indexHeader.GetType(), SerializerOptions);
-			bufferWriter.Write(LineFeed);
-			writer.Reset();
-
-			if (indexHeader is UpdateOperation)
-			{
-				bufferWriter.Write(DocUpdateHeaderStart);
-				writer.Reset();
-			}
-
-			if (Options.EventWriter?.WriteToArrayBuffer != null)
-				Options.EventWriter.WriteToArrayBuffer(bufferWriter, @event);
-			else
-				JsonSerializer.Serialize<TEvent>(writer, @event, SerializerOptions);
-			writer.Reset();
-
-			if (indexHeader is UpdateOperation)
-			{
-				bufferWriter.Write(DocUpdateHeaderEnd);
-				writer.Reset();
-			}
-
-			bufferWriter.Write(LineFeed);
-			writer.Reset();
-		}
-		return bufferWriter.WrittenMemory;
-	}
-
-#endif
-	private async Task WriteBufferToStreamAsync(ArraySegment<TEvent> b, Stream stream, CancellationToken ctx)
-	{
-#if NETSTANDARD2_1_OR_GREATER
-		var items = b;
-#else
-		// needs cast prior to netstandard2.0
-		IReadOnlyList<TEvent> items = b;
-#endif
-		// for is okay on ArraySegment, foreach performs bad:
-		// https://antao-almada.medium.com/how-to-use-span-t-and-memory-t-c0b126aae652
-		// ReSharper disable once ForCanBeConvertedToForeach
-		for (var i = 0; i < items.Count; i++)
-		{
-			var @event = items[i];
-			if (@event == null) continue;
-
-			var indexHeader = CreateBulkOperationHeader(@event);
-			await JsonSerializer.SerializeAsync(stream, indexHeader, indexHeader.GetType(), SerializerOptions, ctx)
-				.ConfigureAwait(false);
-			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
-
-			if (indexHeader is UpdateOperation)
-				await stream.WriteAsync(DocUpdateHeaderStart, 0, DocUpdateHeaderStart.Length, ctx).ConfigureAwait(false);
-
-			if (Options.EventWriter?.WriteToStreamAsync != null)
-				await Options.EventWriter.WriteToStreamAsync(stream, @event, ctx).ConfigureAwait(false);
-			else
-				await JsonSerializer.SerializeAsync<TEvent>(stream, @event, SerializerOptions, ctx)
-					.ConfigureAwait(false);
-
-			if (indexHeader is UpdateOperation)
-				await stream.WriteAsync(DocUpdateHeaderEnd, 0, DocUpdateHeaderEnd.Length, ctx).ConfigureAwait(false);
-
-			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
-		}
-	}
 
 	/// <summary>  </summary>
 	protected class HeadIndexTemplateResponse : TransportResponse { }
