@@ -6,14 +6,13 @@ using Elastic.Ingest.Apm.Model;
 using Elastic.Ingest.Transport;
 using Elastic.Transport;
 
-namespace Elastic.Ingest.Apm
+namespace Elastic.Ingest.Apm;
+
+/// <summary>
+/// Channel options for <see cref="ApmChannel"/>
+/// </summary>
+public class ApmChannelOptions : TransportChannelOptionsBase<IIntakeObject, EventIntakeResponse, IntakeErrorItem>
 {
-	/// <summary>
-	/// Channel options for <see cref="ApmChannel"/>
-	/// </summary>
-	public class ApmChannelOptions : TransportChannelOptionsBase<IIntakeObject, EventIntakeResponse, IntakeErrorItem>
-	{
-		/// <inheritdoc cref="ApmChannelOptions"/>
-		public ApmChannelOptions(HttpTransport transport) : base(transport) { }
-	}
+	/// <inheritdoc cref="ApmChannelOptions"/>
+	public ApmChannelOptions(HttpTransport transport) : base(transport) { }
 }

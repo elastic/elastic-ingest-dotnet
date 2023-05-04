@@ -36,7 +36,7 @@ internal class OutboundBuffer<TEvent> : IOutboundBuffer<TEvent>
 		ArrayItems = buffer.Reset();
 	}
 
-	public ArraySegment<TEvent> GetArraySegment() => new ArraySegment<TEvent>(ArrayItems, 0, Count);
+	public ArraySegment<TEvent> GetArraySegment() => new(ArrayItems, 0, Count);
 
 	public void Dispose() => ArrayPool<TEvent>.Shared.Return(ArrayItems);
 }

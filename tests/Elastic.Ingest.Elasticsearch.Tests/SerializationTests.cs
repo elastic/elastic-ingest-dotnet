@@ -7,21 +7,20 @@ using Elastic.Ingest.Elasticsearch.Serialization;
 using FluentAssertions;
 using Xunit;
 
-namespace Elastic.Ingest.Elasticsearch.Tests
+namespace Elastic.Ingest.Elasticsearch.Tests;
+
+public class SerializationTests
 {
-	public class SerializationTests
+	[Fact]
+	public void CanSerializeBulkResponseItem()
 	{
-		[Fact]
-		public void CanSerializeBulkResponseItem()
-		{
-			var json = "{\"index\":{\"status\":200}}";
-			var item = JsonSerializer.Deserialize<BulkResponseItem>(json);
+		var json = "{\"index\":{\"status\":200}}";
+		var item = JsonSerializer.Deserialize<BulkResponseItem>(json);
 
-			item.Should().NotBeNull();
+		item.Should().NotBeNull();
 
-			var actual = JsonSerializer.Serialize(item);
+		var actual = JsonSerializer.Serialize(item);
 
-			actual.Should().Be(json);
-		}
+		actual.Should().Be(json);
 	}
 }

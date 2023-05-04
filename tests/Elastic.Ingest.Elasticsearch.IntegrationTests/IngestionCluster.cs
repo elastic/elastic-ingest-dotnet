@@ -11,34 +11,33 @@ using Xunit.Abstractions;
 
 [assembly: TestFramework("Elastic.Elasticsearch.Xunit.Sdk.ElasticTestFramework", "Elastic.Elasticsearch.Xunit")]
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests
-{
-	/// <summary> Declare our cluster that we want to inject into our test classes </summary>
-	public class IngestionCluster : XunitClusterBase
-	{
-		public IngestionCluster() : base(new XunitClusterConfiguration("8.7.0") { StartingPortNumber = 9202 }) { }
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
-		public ElasticsearchClient CreateClient(ITestOutputHelper output) =>
-			this.GetOrAddClient(_ =>
-			{
-				var hostName = (System.Diagnostics.Process.GetProcessesByName("mitmproxy").Any()
-					? "ipv4.fiddler"
-					: "localhost");
-				var nodes = NodesUris(hostName);
-				var connectionPool = new StaticNodePool(nodes);
-				var settings = new ElasticsearchClientSettings(connectionPool)
-					.Proxy(new Uri("http://ipv4.fiddler:8080"), null!, null!)
-					.RequestTimeout(TimeSpan.FromSeconds(5))
-					.OnRequestCompleted(d =>
+/// <summary> Declare our cluster that we want to inject into our test classes </summary>
+public class IngestionCluster : XunitClusterBase
+{
+	public IngestionCluster() : base(new XunitClusterConfiguration("8.7.0") { StartingPortNumber = 9202 }) { }
+
+	public ElasticsearchClient CreateClient(ITestOutputHelper output) =>
+		this.GetOrAddClient(_ =>
+		{
+			var hostName = (System.Diagnostics.Process.GetProcessesByName("mitmproxy").Any()
+				? "ipv4.fiddler"
+				: "localhost");
+			var nodes = NodesUris(hostName);
+			var connectionPool = new StaticNodePool(nodes);
+			var settings = new ElasticsearchClientSettings(connectionPool)
+				.Proxy(new Uri("http://ipv4.fiddler:8080"), null!, null!)
+				.RequestTimeout(TimeSpan.FromSeconds(5))
+				.OnRequestCompleted(d =>
+				{
+					try { output.WriteLine(d.DebugInformation);}
+					catch
 					{
-						try { output.WriteLine(d.DebugInformation);}
-						catch
-						{
-							// ignored
-						}
-					})
-					.EnableDebugMode();
-				return new ElasticsearchClient(settings);
-			});
-	}
+						// ignored
+					}
+				})
+				.EnableDebugMode();
+			return new ElasticsearchClient(settings);
+		});
 }

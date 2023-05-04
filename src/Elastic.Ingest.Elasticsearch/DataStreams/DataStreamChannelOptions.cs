@@ -3,16 +3,15 @@
 // See the LICENSE file in the project root for more information
 using Elastic.Transport;
 
-namespace Elastic.Ingest.Elasticsearch.DataStreams
-{
-	/// <summary>Controls which data stream the channel should write to</summary>
-	public class DataStreamChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEvent>
-	{
-		/// <inheritdoc cref="DataStreamChannelOptions{TEvent}"/>
-		public DataStreamChannelOptions(HttpTransport transport) : base(transport) =>
-			DataStream = new DataStreamName(typeof(TEvent).Name.ToLowerInvariant());
+namespace Elastic.Ingest.Elasticsearch.DataStreams;
 
-		/// <inheritdoc cref="DataStreamName"/>
-		public DataStreamName DataStream { get; set; }
-	}
+/// <summary>Controls which data stream the channel should write to</summary>
+public class DataStreamChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEvent>
+{
+	/// <inheritdoc cref="DataStreamChannelOptions{TEvent}"/>
+	public DataStreamChannelOptions(HttpTransport transport) : base(transport) =>
+		DataStream = new DataStreamName(typeof(TEvent).Name.ToLowerInvariant());
+
+	/// <inheritdoc cref="DataStreamName"/>
+	public DataStreamName DataStream { get; set; }
 }
