@@ -30,7 +30,7 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 		// We can later avoid the overhead of calculating and adding the index name to the operation headers.
 		if (string.Format(Options.IndexFormat, DateTimeOffset.Now).Equals(Options.IndexFormat, StringComparison.Ordinal))
 		{
-			_url = $"/{Options.IndexFormat}/{base.BulkUrl}";
+			_url = $"/{Options.IndexFormat}{base.BulkUrl}";
 			_skipIndexNameOnOperations = true;
 		}
 

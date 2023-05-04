@@ -24,7 +24,7 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 	{
 		var dataStream = Options.DataStream.ToString();
 
-		_url = $"/{dataStream}/{base.BulkUrl}";
+		_url = $"/{dataStream}{base.BulkUrl}";
 		
 		_fixedHeader = new CreateOperation();
 	}
