@@ -35,5 +35,5 @@ var config = ManualConfig.Create(DefaultConfig.Instance);
 config.SummaryStyle = new SummaryStyle(CultureInfo.CurrentCulture, true, BenchmarkDotNet.Columns.SizeUnit.B, null!, ratioStyle: BenchmarkDotNet.Columns.RatioStyle.Percentage);
 config.AddDiagnoser(MemoryDiagnoser.Default);
 
-BenchmarkRunner.Run<BulkRequestCreationBenchmarks>(config);
+BenchmarkRunner.Run<BulkRequestCreationWithTemplatedIndexNameBenchmarks>(config);
 #endif

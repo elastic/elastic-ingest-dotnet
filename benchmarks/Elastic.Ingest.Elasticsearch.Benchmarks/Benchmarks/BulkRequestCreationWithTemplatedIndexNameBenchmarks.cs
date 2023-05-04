@@ -7,7 +7,7 @@ using Performance.Common;
 
 namespace Elastic.Ingest.Elasticsearch.Benchmarks.Benchmarks;
 
-public class BulkRequestCreationBenchmarks
+public class BulkRequestCreationWithTemplatedIndexNameBenchmarks
 {
 	private static readonly int DocumentsToIndex = 1_000;
 
@@ -32,15 +32,14 @@ public class BulkRequestCreationBenchmarks
 			BufferOptions = new Channels.BufferOptions
 			{
 				OutboundBufferMaxSize = DocumentsToIndex
-			},
-			IndexFormat = "stock-data-v8"
+			}
 		};
 
 		_data = StockData.CreateSampleData(DocumentsToIndex);
 	}
 
 	[Benchmark(Baseline = true)]
-	public async Task FixedIndexName_WriteToStreamAsync()
+	public async Task DynamicIndexName_WriteToStreamAsync()
 	{
 		MemoryStream.Position = 0;
 		var bytes = BulkRequestDataFactory.GetBytes(_data, _options!, CreateBulkOperationHeaderOld);
@@ -49,10 +48,10 @@ public class BulkRequestCreationBenchmarks
 	}
 
 	[Benchmark]
-	public async Task FixedIndexName_WriteToStreamOptimizedAsync()
+	public async Task DynamicIndexName_WriteToStreamOptimizedAsync()
 	{
 		MemoryStream.Position = 0;
-		var bytes = BulkRequestDataFactory.GetBytes(_data, _options!, e => BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(e, _options!, true));
+		var bytes = BulkRequestDataFactory.GetBytes(_data, _options!, e => BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(e, _options!, false));
 		var requestData = new RequestData(Elastic.Transport.HttpMethod.POST, "/_bulk", PostData.ReadOnlyMemory(bytes), _transportConfiguration!, null!, ((ITransportConfiguration)_transportConfiguration!).MemoryStreamFactory);
 		await requestData.PostData.WriteAsync(MemoryStream, _transportConfiguration!, CancellationToken.None);
 	}
@@ -61,7 +60,7 @@ public class BulkRequestCreationBenchmarks
 	private BulkOperationHeader CreateBulkOperationHeaderOld(StockData @event)
 	{
 		var indexTime = _options!.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
-		if(_options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(_options.IndexOffset.Value);
+		if (_options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(_options.IndexOffset.Value);
 
 		var index = string.Format(_options.IndexFormat, indexTime);
 		var id = _options.BulkOperationIdLookup?.Invoke(@event);

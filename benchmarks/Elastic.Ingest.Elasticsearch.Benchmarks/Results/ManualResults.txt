@@ -48,10 +48,18 @@ Baseline for commit 8eef0e1dfbee8c5198ec0ab975b5d826e2356fcd (from 2023-05-02) i
 | BulkAll |               True |              True |  150.3 ms |   66.08 ms |    43.71 ms | 20900.0000 | 3700.0000 | 2000.0000 |    91253012 B |
 
 
-FixedIndexName_WriteToStreamAsync
----------------------------------
+BulkRequestCreationWithFixedIndexNameBenchmarks
+-----------------------------------------------
 
 |                                     Method | Mean [ms] | Error [ms] | StdDev [ms] |    Ratio | RatioSD |      Gen0 |      Gen1 |      Gen2 | Allocated [B] | Alloc Ratio |
 |------------------------------------------- |----------:|-----------:|------------:|---------:|--------:|----------:|----------:|----------:|--------------:|------------:|
 |          FixedIndexName_WriteToStreamAsync |  71.62 ms |   1.425 ms |    3.358 ms | baseline |         | 3000.0000 | 1000.0000 | 1000.0000 |    29581107 B |             |
 | FixedIndexName_WriteToStreamOptimizedAsync |  53.11 ms |   1.057 ms |    2.430 ms |     -26% |    7.1% | 1300.0000 |  600.0000 |  600.0000 |     8997235 B |        -70% |
+
+BulkRequestCreationWithTemplatedIndexNameBenchmarks
+---------------------------------------------------
+
+|                                       Method | Mean [ms] | Error [ms] | StdDev [ms] |    Ratio | RatioSD |      Gen0 |     Gen1 |     Gen2 | Allocated [B] | Alloc Ratio |
+|--------------------------------------------- |----------:|-----------:|------------:|---------:|--------:|----------:|---------:|---------:|--------------:|------------:|
+|          DynamicIndexName_WriteToStreamAsync |  112.7 ms |    3.53 ms |    10.17 ms | baseline |         | 2800.0000 | 800.0000 | 800.0000 |    30380834 B |             |
+| DynamicIndexName_WriteToStreamOptimizedAsync |  101.1 ms |    2.53 ms |     7.38 ms |     -10% |   11.4% | 2800.0000 | 800.0000 | 800.0000 |    30379709 B |         -0% |
