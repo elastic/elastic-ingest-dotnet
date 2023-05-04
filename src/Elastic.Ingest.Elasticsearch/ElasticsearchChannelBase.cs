@@ -76,6 +76,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 			return transport.RequestAsync<BulkResponse>(HttpMethod.POST, BulkUrl, PostData.ReadOnlyMemory(bytes), RequestParams, ctx);
 		}
 #endif
+#pragma warning disable IDE0022 // Use expression body for method
 		return transport.RequestAsync<BulkResponse>(HttpMethod.POST, BulkUrl,
 			PostData.StreamHandler(page,
 				(_, _) =>
@@ -84,6 +85,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 				},
 				async (b, stream, ctx) => { await BulkRequestDataFactory.WriteBufferToStreamAsync(b, stream, Options, CreateBulkOperationHeader, ctx).ConfigureAwait(false); })
 			, RequestParams, ctx);
+#pragma warning restore IDE0022 // Use expression body for method
 	}
 
 	/// <summary>
