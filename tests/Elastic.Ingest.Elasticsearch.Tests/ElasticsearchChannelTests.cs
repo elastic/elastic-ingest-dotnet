@@ -42,9 +42,9 @@ public class ElasticsearchChannelTests
 			.ClientCalls(c => c.BulkResponse(429, 429))
 			.ClientCalls(c => c.BulkResponse(429, 429)) //retry 1
 			.ClientCalls(c => c.BulkResponse(429, 429)) //retry 2
-														// finally succeeds
+			// finally succeeds
 			.ClientCalls(c => c.BulkResponse(200, 200)) //retry 3
-														// next two succeed straight away
+			// next two succeed straight away
 			.ClientCalls(c => c.BulkResponse(200, 200)) //next batch
 		);
 		using var session = TestSetup.CreateTestSession(client);
