@@ -12,17 +12,31 @@ using BenchmarkDotNet.Diagnosers;
 using BenchmarkDotNet.Reports;
 using BenchmarkDotNet.Running;
 using System.Globalization;
+using Elastic.Ingest.Elasticsearch.Benchmarks.Benchmarks;
 
 #if DEBUG
 // MANUALLY RUN A BENCHMARKED METHOD DURING DEBUGGING
+
 //var bm = new BulkIngestion();
 //bm.Setup();
 //await bm.BulkAllAsync();
 //Console.WriteLine("DONE");
+
+var bm = new BulkRequestCreationWithFixedIndexNameBenchmarks();
+bm.Setup();
+await bm.WriteToStreamAsync_OLD();
+
+var length = bm.MemoryStream.Length;
+
+bm.MemoryStream.Position = 0;
+var sr = new StreamReader(bm.MemoryStream);
+var json = sr.ReadToEnd();
+
+Console.ReadKey();
 #else
 var config = ManualConfig.Create(DefaultConfig.Instance);
 config.SummaryStyle = new SummaryStyle(CultureInfo.CurrentCulture, true, BenchmarkDotNet.Columns.SizeUnit.B, null!, ratioStyle: BenchmarkDotNet.Columns.RatioStyle.Percentage);
 config.AddDiagnoser(MemoryDiagnoser.Default);
 
-BenchmarkRunner.Run<BulkIngestion>(config);
+BenchmarkRunner.Run<BulkRequestCreationWithTemplatedIndexNameBenchmarks>(config);
 #endif

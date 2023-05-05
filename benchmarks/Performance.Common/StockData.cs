@@ -49,7 +49,7 @@ public sealed class StockData
 
 	public static StockData[] CreateSampleData(long count)
 	{
-		var data = new StockData[100_000];
+		var data = new StockData[count];
 
 		for (var i = 0; i < count; i++)
 		{
@@ -75,11 +75,11 @@ public sealed class StockData
 			if (i < count - 1)
 			{
 				responseBytes[offset + FilterPathItemResponseBytes.Length] = Comma;
-				offset += (FilterPathItemResponseBytes.Length + 1);
+				offset += FilterPathItemResponseBytes.Length + 1;
 			}
 			else
 			{
-				offset += (FilterPathItemResponseBytes.Length);
+				offset += FilterPathItemResponseBytes.Length;
 			}
 		}
 
