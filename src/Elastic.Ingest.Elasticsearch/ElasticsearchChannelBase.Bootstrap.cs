@@ -108,7 +108,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		return bootstrapMethod == BootstrapMethod.Silent
 			? false
 			: throw new Exception(
-				$"Failure to create index templates for {TemplateWildcard}: {putIndexTemplateResponse}");
+				$"Failure to create index templates for {TemplateWildcard}: {putIndexTemplateResponse.ApiCallDetails.OriginalException.Message}", putIndexTemplateResponse.ApiCallDetails.OriginalException);
 	}
 
 	/// <summary></summary>
@@ -122,7 +122,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		return bootstrapMethod == BootstrapMethod.Silent
 			? false
 			: throw new Exception(
-				$"Failure to create index templates for {TemplateWildcard}: {putIndexTemplateResponse}");
+				$"Failure to create index templates for {TemplateWildcard}: {putIndexTemplateResponse.ApiCallDetails.OriginalException.Message}", putIndexTemplateResponse.ApiCallDetails.OriginalException);
 	}
 
 	/// <summary></summary>
@@ -135,7 +135,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		return bootstrapMethod == BootstrapMethod.Silent
 			? false
 			: throw new Exception(
-				$"Failure to create component template `${name}` for {TemplateWildcard}: {putComponentTemplate}");
+				$"Failure to create component template `${name}` for {TemplateWildcard}: {putComponentTemplate.ApiCallDetails.OriginalException.Message}", putComponentTemplate.ApiCallDetails.OriginalException);
 	}
 
 	/// <summary></summary>
@@ -149,7 +149,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		return bootstrapMethod == BootstrapMethod.Silent
 			? false
 			: throw new Exception(
-				$"Failure to create component template `${name}` for {TemplateWildcard}: {putComponentTemplate}");
+				$"Failure to create component template `${name}` for {TemplateWildcard}: {putComponentTemplate.ApiCallDetails.OriginalException.Message}", putComponentTemplate.ApiCallDetails.OriginalException);
 	}
 
 	/// <summary>
