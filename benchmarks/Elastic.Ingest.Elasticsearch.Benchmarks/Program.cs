@@ -24,7 +24,7 @@ using Elastic.Ingest.Elasticsearch.Benchmarks.Benchmarks;
 
 var bm = new BulkRequestCreationWithFixedIndexNameBenchmarks();
 bm.Setup();
-await bm.WriteToStreamAsync_OLD();
+await bm.WriteToStreamAsync();
 
 var length = bm.MemoryStream.Length;
 
