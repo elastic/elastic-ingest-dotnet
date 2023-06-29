@@ -6,14 +6,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Elastic.Transport;
 using Elastic.Transport.Products.Elasticsearch;
 
 namespace Elastic.Ingest.Elasticsearch.Serialization;
 
-
 /// <summary>Represents the _bulk response from Elasticsearch</summary>
-public class BulkResponse : TransportResponse
+public class BulkResponse : ElasticsearchResponse
 {
 	/// <summary>
 	/// Individual bulk response items information
@@ -35,9 +33,6 @@ public class BulkResponse : TransportResponse
 		reason = Error?.Reason;
 		return !string.IsNullOrWhiteSpace(reason);
 	}
-
-	/// <inheritdoc cref="object.ToString"/>
-	public override string ToString() => ApiCallDetails.DebugInformation;
 }
 
 internal class ResponseItemsConverter : JsonConverter<IReadOnlyCollection<BulkResponseItem>>

@@ -108,7 +108,9 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		return bootstrapMethod == BootstrapMethod.Silent
 			? false
 			: throw new Exception(
-				$"Failure to create index templates for {TemplateWildcard}: {putIndexTemplateResponse}");
+				$"Failure to create index templates for {TemplateWildcard}: {putIndexTemplateResponse}",
+				putIndexTemplateResponse.ApiCallDetails.OriginalException
+			);
 	}
 
 	/// <summary></summary>
@@ -122,7 +124,9 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		return bootstrapMethod == BootstrapMethod.Silent
 			? false
 			: throw new Exception(
-				$"Failure to create index templates for {TemplateWildcard}: {putIndexTemplateResponse}");
+				$"Failure to create index templates for {TemplateWildcard}: {putIndexTemplateResponse}",
+				putIndexTemplateResponse.ApiCallDetails.OriginalException
+			);
 	}
 
 	/// <summary></summary>
@@ -135,7 +139,9 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		return bootstrapMethod == BootstrapMethod.Silent
 			? false
 			: throw new Exception(
-				$"Failure to create component template `${name}` for {TemplateWildcard}: {putComponentTemplate}");
+				$"Failure to create component template `{name}` for {TemplateWildcard}: {putComponentTemplate}",
+				putComponentTemplate.ApiCallDetails.OriginalException
+			);
 	}
 
 	/// <summary></summary>
@@ -149,7 +155,9 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		return bootstrapMethod == BootstrapMethod.Silent
 			? false
 			: throw new Exception(
-				$"Failure to create component template `${name}` for {TemplateWildcard}: {putComponentTemplate}");
+				$"Failure to create component template `{name}` for {TemplateWildcard}: {putComponentTemplate}",
+				putComponentTemplate.ApiCallDetails.OriginalException
+			);
 	}
 
 	/// <summary>
