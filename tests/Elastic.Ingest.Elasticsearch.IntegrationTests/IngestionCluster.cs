@@ -4,6 +4,7 @@
 using System;
 using System.Linq;
 using Elastic.Clients.Elasticsearch;
+using Elastic.Elasticsearch.Ephemeral;
 using Elastic.Elasticsearch.Xunit;
 using Elastic.Transport;
 using Xunit;
@@ -16,7 +17,9 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 /// <summary> Declare our cluster that we want to inject into our test classes </summary>
 public class IngestionCluster : XunitClusterBase
 {
-	public IngestionCluster() : base(new XunitClusterConfiguration("8.7.0") { StartingPortNumber = 9202 }) { }
+	protected static string Version = "8.7.0";
+	public IngestionCluster() : this(new XunitClusterConfiguration(Version) { StartingPortNumber = 9202 }) { }
+	public IngestionCluster(XunitClusterConfiguration xunitClusterConfiguration) : base(xunitClusterConfiguration) { }
 
 	public ElasticsearchClient CreateClient(ITestOutputHelper output) =>
 		this.GetOrAddClient(_ =>
@@ -40,4 +43,14 @@ public class IngestionCluster : XunitClusterBase
 				.EnableDebugMode();
 			return new ElasticsearchClient(settings);
 		});
+}
+
+public class SecurityCluster : IngestionCluster
+{
+	public SecurityCluster() : base(new XunitClusterConfiguration(Version, ClusterFeatures.Security)
+	{
+		StartingPortNumber = 9202, TrialMode = XPackTrialMode.Trial
+		,
+
+	}) { }
 }

@@ -14,6 +14,7 @@ using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
 using Elastic.Transport;
+using Elastic.Transport.Products.Elasticsearch;
 using static Elastic.Ingest.Elasticsearch.ElasticsearchChannelStatics;
 
 namespace Elastic.Ingest.Elasticsearch;
@@ -94,11 +95,11 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	protected abstract BulkOperationHeader CreateBulkOperationHeader(TEvent @event);
 
 	/// <summary>  </summary>
-	protected class HeadIndexTemplateResponse : TransportResponse { }
+	protected class HeadIndexTemplateResponse : ElasticsearchResponse { }
 
 	/// <summary>  </summary>
-	protected class PutIndexTemplateResponse : TransportResponse { }
+	protected class PutIndexTemplateResponse : ElasticsearchResponse { }
 
 	/// <summary>  </summary>
-	protected class PutComponentTemplateResponse : TransportResponse { }
+	protected class PutComponentTemplateResponse : ElasticsearchResponse { }
 }
