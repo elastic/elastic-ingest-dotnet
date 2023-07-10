@@ -19,7 +19,7 @@ public abstract class IntegrationTestBase<TCluster> : IClusterFixture<TCluster>
 	protected ElasticsearchClient Client { get; }
 
 
-	protected IntegrationTestBase(IngestionCluster cluster, ITestOutputHelper output)
+	protected IntegrationTestBase(TCluster cluster, ITestOutputHelper output)
 	{
 		Cluster = cluster;
 		Client = cluster.CreateClient(output);
