@@ -138,6 +138,20 @@ public static class BulkRequestDataFactory
 
 		var id = options.BulkOperationIdLookup?.Invoke(@event);
 
+		if (options.OperationMode == OperationMode.Index)
+		{
+			return skipIndexName
+				? !string.IsNullOrWhiteSpace(id) ? new IndexOperation { Id = id } : new IndexOperation()
+				: !string.IsNullOrWhiteSpace(id) ? new IndexOperation { Index = index, Id = id } : new IndexOperation { Index = index };
+		}
+
+		if (options.OperationMode == OperationMode.Create)
+		{
+			return skipIndexName
+				? !string.IsNullOrWhiteSpace(id) ? new CreateOperation { Id = id } : new CreateOperation()
+				: !string.IsNullOrWhiteSpace(id) ? new CreateOperation { Index = index, Id = id } : new CreateOperation { Index = index };
+		}
+
 		if (!string.IsNullOrWhiteSpace(id) && id != null && (options.BulkUpsertLookup?.Invoke(@event, id) ?? false))
 			return skipIndexName ? new UpdateOperation { Id = id } : new UpdateOperation { Id = id, Index = index };
 
