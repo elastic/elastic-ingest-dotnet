@@ -51,4 +51,9 @@ public class IndexChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEven
 	/// <para>https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-request-body</para>
 	/// </summary>
 	public Func<TEvent, string, bool>? BulkUpsertLookup { get; set; }
+
+	/// <summary>
+	/// Control the operation header for each bulk operation.
+	/// </summary>
+	public OperationMode OperationMode { get; set; }
 }
