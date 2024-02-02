@@ -58,8 +58,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	where TChannelOptions : ChannelOptionsBase<TEvent, TResponse>
 	where TResponse : class, new()
 {
-	private readonly Task _inThread;
-	private readonly Task _outThread;
+	private readonly Task _inTask;
+	private readonly Task _outTask;
 	private readonly SemaphoreSlim _throttleTasks;
 	private readonly CountdownEvent? _signal;
 
@@ -122,13 +122,13 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 		InboundBuffer = new InboundBuffer<TEvent>(maxOut, BufferOptions.OutboundBufferMaxLifetime);
 
-		_outThread = Task.Factory.StartNew(async () =>
+		_outTask = Task.Factory.StartNew(async () =>
 			await ConsumeOutboundEventsAsync().ConfigureAwait(false),
 				CancellationToken.None,
 				TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness,
 				TaskScheduler.Default);
 
-		_inThread = Task.Factory.StartNew(async () =>
+		_inTask = Task.Factory.StartNew(async () =>
 			await ConsumeInboundEventsAsync(maxOut, BufferOptions.OutboundBufferMaxLifetime).ConfigureAwait(false),
 				CancellationToken.None,
 				TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness,
@@ -310,8 +310,21 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 					break;
 			}
 
-			if (InboundBuffer.NoThresholdsHit) continue;
+			if (!InboundBuffer.NoThresholdsHit)
+				await FlushBufferAsync().ConfigureAwait(false);
+		}
 
+		if (InboundBuffer.Count > 0)
+			await FlushBufferAsync().ConfigureAwait(false);
+
+#if DEBUG
+		Console.WriteLine("Exiting consume inbound loop.");
+#endif
+
+		OutChannel.Writer.TryComplete();
+
+		async Task FlushBufferAsync()
+		{
 			var outboundBuffer = new OutboundBuffer<TEvent>(InboundBuffer);
 
 			if (await PublishAsync(outboundBuffer).ConfigureAwait(false))
@@ -319,12 +332,6 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			else
 				_callbacks.PublishToOutboundChannelFailureCallback?.Invoke();
 		}
-
-#if DEBUG
-		Console.WriteLine("Exiting consume inbound loop.");
-#endif
-
-		OutChannel.Writer.TryComplete();
 	}
 
 	private ValueTask<bool> PublishAsync(IOutboundBuffer<TEvent> buffer)
@@ -366,7 +373,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		}
 		try
 		{
-			_inThread.Dispose();
+			_inTask.Dispose();
 		}
 		catch
 		{
@@ -374,7 +381,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		}
 		try
 		{
-			_outThread.Dispose();
+			_outTask.Dispose();
 		}
 		catch
 		{
