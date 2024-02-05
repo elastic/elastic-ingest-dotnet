@@ -297,6 +297,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	private async Task ConsumeInboundEventsAsync(int maxQueuedMessages, TimeSpan maxInterval)
 	{
 		_callbacks.InboundChannelStartedCallback?.Invoke();
+
 		while (await InboundBuffer.WaitToReadAsync(InChannel.Reader).ConfigureAwait(false))
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
@@ -310,16 +311,14 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 					break;
 			}
 
-			if (!InboundBuffer.NoThresholdsHit)
+			if (InboundBuffer.ThresholdsHit)
 				await FlushBufferAsync().ConfigureAwait(false);
 		}
 
+		// It's possible to break out of the above while loop before a threshold was met to flush the buffer.
+		// This ensures we flush if there are any items left in the inbound buffer.
 		if (InboundBuffer.Count > 0)
 			await FlushBufferAsync().ConfigureAwait(false);
-
-#if DEBUG
-		Console.WriteLine("Exiting consume inbound loop.");
-#endif
 
 		OutChannel.Writer.TryComplete();
 
