@@ -21,76 +21,82 @@ jobs:
   test-windows:
     runs-on: windows-latest
     steps:
+    
     - uses: actions/checkout@v4
       with:
           fetch-depth: 1
+          
     - run: |
           git fetch --prune --unshallow --tags
           echo exit code $?
           git tag --list
-    - uses: actions/setup-dotnet@v1
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
       with:
-          dotnet-version: |
-              5.0.x
-              6.0.x
-          source-url: https://nuget.pkg.github.com/elastic/index.json
-      env:
-          NUGET_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
-    - run: build.bat build -s true
+        global-json-file: ./global.json
+
+    - name: Build
+      run: build.bat build -s true
       shell: cmd
-      name: Build
-    - run: build.bat test -s true
+      
+    - name: Test
+      run: build.bat test -s true
       shell: cmd
-      name: Test
 
   build:
     runs-on: ubuntu-latest
     steps:
+
     - uses: actions/checkout@v4
       with:
         fetch-depth: 1
+
     - run: |
         git fetch --prune --unshallow --tags
         echo exit code $?
         git tag --list
-    - uses: actions/setup-dotnet@v1
-      with:
-        dotnet-version: | 
-          5.0.x
-          6.0.x
-        source-url: https://nuget.pkg.github.com/elastic/index.json
-      env:
-        NUGET_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
-        
-    - run: ./build.sh build -s true
-      name: Build
-    - run: ./build.sh test -s true
-      name: Test
-    - run: ./build.sh generatepackages -s true
-      name: Generate local nuget packages
-    - run: ./build.sh validatepackages -s true
-      name: "validate *.npkg files that were created"
-    - run: ./build.sh generateapichanges -s true
-      name: "Inspect public API changes"
 
-    - name: publish canary packages github package repository
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+          global-json-file: ./global.json
+        
+    - name: Build
+      run: ./build.sh build -s true
+
+    - name: Test
+      run: ./build.sh test -s true
+
+    - name: Generate local nuget packages
+      run: ./build.sh generatepackages -s true
+
+    - name: "Validate *.npkg files"
+      run: ./build.sh validatepackages -s true
+
+    - name: "Inspect public API changes"
+      run: ./build.sh generateapichanges -s true
+
+    - name: Publish canary packages to GitHub package repository
       if: github.event_name == 'push' && startswith(github.ref, 'refs/heads')
       shell: bash
       run:  |
+          dotnet nuget add source --username USERNAME --password ${{secrets.GITHUB_TOKEN}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/elastic/index.json"
           until dotnet nuget push 'build/output/*.nupkg' -k ${{secrets.GITHUB_TOKEN}} --skip-duplicate --no-symbols; do echo "Retrying"; sleep 1; done;
 
     # Github packages requires authentication, this is likely going away in the future so for now we publish to feedz.io
-    - run: dotnet nuget push 'build/output/*.nupkg' -k ${{secrets.FEEDZ_IO_API_KEY}} -s https://f.feedz.io/elastic/all/nuget/index.json --skip-duplicate --no-symbols
-      name: publish canary packages to feedz.io
+    - name: Publish canary packages to feedz.io
+      run: dotnet nuget push 'build/output/*.nupkg' -k ${{secrets.FEEDZ_IO_API_KEY}} -s https://f.feedz.io/elastic/all/nuget/index.json --skip-duplicate --no-symbols
       if: github.event_name == 'push' && startswith(github.ref, 'refs/heads')
 
-    - run: ./build.sh generatereleasenotes -s true --token ${{secrets.GITHUB_TOKEN}}
-      name: Generate release notes for tag
+    - name: Generate release notes for tag
+      run: ./build.sh generatereleasenotes -s true --token ${{secrets.GITHUB_TOKEN}}
       if: github.event_name == 'push' && startswith(github.ref, 'refs/tags')
-    - run: ./build.sh createreleaseongithub -s true --token ${{secrets.GITHUB_TOKEN}}
+
+    - name: Create or update release for tag on github
+      run: ./build.sh createreleaseongithub -s true --token ${{secrets.GITHUB_TOKEN}}
       if: github.event_name == 'push' && startswith(github.ref, 'refs/tags')
-      name: Create or update release for tag on github
-          
-    - run: dotnet nuget push 'build/output/*.nupkg' -k ${{secrets.NUGET_ORG_API_KEY}} -s https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols
-      name: release to nuget.org
+
+    - name: Release to nuget.org
+      run: dotnet nuget push 'build/output/*.nupkg' -k ${{secrets.NUGET_ORG_API_KEY}} -s https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols
       if: github.event_name == 'push' && startswith(github.ref, 'refs/tags')
