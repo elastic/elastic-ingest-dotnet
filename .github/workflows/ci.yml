@@ -15,7 +15,7 @@ on:
       - "*.*.*"
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -82,6 +82,7 @@ jobs:
       shell: bash
       timeout-minutes: 2
       continue-on-error: true
+      if: github.event_name == 'push' && startswith(github.ref, 'refs/heads')
       run: |
         until dotnet nuget push 'build/output/*.nupkg' -k ${{secrets.GITHUB_TOKEN}} --skip-duplicate --no-symbols -s https://nuget.pkg.github.com/elastic/index.json; do echo "Retrying"; sleep 1; done;
 
