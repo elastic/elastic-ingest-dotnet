@@ -3,10 +3,11 @@
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Elastic.Clients.Elasticsearch" Version="8.0.4" />
+    <PackageReference Include="Elastic.Clients.Elasticsearch" Version="8.12.1" />
     <PackageReference Include="Elastic.Elasticsearch.Xunit" Version="0.4.3" />
   </ItemGroup>
 

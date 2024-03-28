@@ -64,8 +64,8 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	protected override bool RejectEvent((TEvent, BulkResponseItem) @event) =>
 		@event.Item2.Status < 200 || @event.Item2.Status > 300;
 
-	/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.ExportAsync(Elastic.Transport.HttpTransport,System.ArraySegment{TEvent},System.Threading.CancellationToken)"/>
-	protected override Task<BulkResponse> ExportAsync(HttpTransport transport, ArraySegment<TEvent> page, CancellationToken ctx = default)
+	/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.ExportAsync(Elastic.Transport.ITransport,System.ArraySegment{TEvent},System.Threading.CancellationToken)"/>
+	protected override Task<BulkResponse> ExportAsync(ITransport transport, ArraySegment<TEvent> page, CancellationToken ctx = default)
 	{
 #if NETSTANDARD2_1
 		// Option is obsolete to prevent external users to set it.

@@ -10,7 +10,8 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
 public abstract class IntegrationTestBase : IntegrationTestBase<IngestionCluster>
 {
-	protected IntegrationTestBase(IngestionCluster cluster, ITestOutputHelper output) : base(cluster, output) { }
+	protected IntegrationTestBase(IngestionCluster cluster, ITestOutputHelper output, string? hostName = null)
+		: base(cluster, output, hostName) { }
 }
 public abstract class IntegrationTestBase<TCluster> : IClusterFixture<TCluster>
 	where TCluster : IngestionCluster, new()
@@ -19,9 +20,9 @@ public abstract class IntegrationTestBase<TCluster> : IClusterFixture<TCluster>
 	protected ElasticsearchClient Client { get; }
 
 
-	protected IntegrationTestBase(TCluster cluster, ITestOutputHelper output)
+	protected IntegrationTestBase(TCluster cluster, ITestOutputHelper output, string? hostName = null)
 	{
 		Cluster = cluster;
-		Client = cluster.CreateClient(output);
+		Client = cluster.CreateClient(output, hostName);
 	}
 }

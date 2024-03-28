@@ -11,7 +11,7 @@ namespace Elastic.Ingest.Elasticsearch.Benchmarks;
 public class BulkIngestionBenchmarks
 {
 	private static readonly int MaxExportSize = 5_000;
-	
+
 	private readonly ManualResetEvent _waitHandle = new(false);
 	private StockData[] _data = Array.Empty<StockData>();
 	private IndexChannelOptions<StockData>? _options;
@@ -34,10 +34,10 @@ public class BulkIngestionBenchmarks
 	{
 		_data = StockData.CreateSampleData(DocumentsToIndex);
 
-		var transport = new DefaultHttpTransport(
+		var transport = new DistributedTransport(
 			new TransportConfiguration(
 				new SingleNodePool(new("http://localhost:9200")),
-				new InMemoryConnection(StockData.CreateSampleDataSuccessWithFilterPathResponseBytes(MaxExportSize))));
+				new InMemoryRequestInvoker(StockData.CreateSampleDataSuccessWithFilterPathResponseBytes(MaxExportSize))));
 
 #pragma warning disable CS0618 // Type or member is obsolete
 		_options = new IndexChannelOptions<StockData>(transport)

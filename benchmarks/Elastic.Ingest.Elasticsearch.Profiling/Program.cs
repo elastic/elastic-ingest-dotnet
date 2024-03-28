@@ -29,7 +29,7 @@ MemoryProfiler.CollectAllocations(true);
 var configuration = new TransportConfiguration(cloudId, new BasicAuthentication("elastic", elasticPassword))
 	.ServerCertificateValidationCallback((a,b,c,d) => true); // Trust the local certificate if we're passing through Fiddler with SSL decryption
 
-var transport = new DefaultHttpTransport(configuration);
+var transport = new DistributedTransport(configuration);
 
 MemoryProfiler.GetSnapshot("Before");
 

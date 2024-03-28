@@ -25,7 +25,7 @@ public class BootstrapFailureTests : IntegrationTestBase<SecurityCluster>
 	{
 		var targetDataStream = new DataStreamName("logs", "silent-failure");
 		var slim = new CountdownEvent(1);
-		var transport = new DefaultHttpTransport(new TransportConfiguration(Cluster.NodesUris().First()));
+		var transport = new DistributedTransport(new TransportConfiguration(Cluster.NodesUris().First()));
 		var options = new DataStreamChannelOptions<TimeSeriesDocument>(transport)
 		{
 			DataStream = targetDataStream,
@@ -41,14 +41,14 @@ public class BootstrapFailureTests : IntegrationTestBase<SecurityCluster>
 	{
 		var targetDataStream = new DataStreamName("logs", "exception-failure");
 		var slim = new CountdownEvent(1);
-		var transport = new DefaultHttpTransport(new TransportConfiguration(Cluster.NodesUris().First()));
+		var transport = new DistributedTransport(new TransportConfiguration(Cluster.NodesUris().First()));
 		var options = new DataStreamChannelOptions<TimeSeriesDocument>(transport)
 		{
 			DataStream = targetDataStream,
 			BufferOptions = new BufferOptions { WaitHandle = slim, OutboundBufferMaxSize = 1 }
 		};
 		var channel = new DataStreamChannel<TimeSeriesDocument>(options);
-		Exception caughtException = null;
+		Exception? caughtException = null;
 		try
 		{
 			await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
@@ -59,7 +59,7 @@ public class BootstrapFailureTests : IntegrationTestBase<SecurityCluster>
 		}
 		caughtException.Should().NotBeNull();
 
-		caughtException.Message.Should().StartWith("Failure to create component template `logs-exception-failure-settings` for logs-exception-failure-*:");
+		caughtException!.Message.Should().StartWith("Failure to create component template `logs-exception-failure-settings` for logs-exception-failure-*:");
 		caughtException.Message.Should().Contain("Could not authenticate with the specified node. Try verifying your credentials or check your Shield configuration.");
 		caughtException.Message.Should().Contain("Invalid Elasticsearch response built from a unsuccessful (401) low level call on PUT:");
 	}

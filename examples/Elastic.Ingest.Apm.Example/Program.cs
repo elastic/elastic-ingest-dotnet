@@ -32,7 +32,7 @@ internal class Program
 			.EnableDebugMode()
 			.Authentication(new ApiKey(args[1]));
 		//TODO needs
-		var transport = new DefaultHttpTransport<TransportConfiguration>(config);
+		var transport = new DistributedTransport<TransportConfiguration>(config);
 
 		var numberOfEvents = 800;
 		var maxBufferSize = 200;

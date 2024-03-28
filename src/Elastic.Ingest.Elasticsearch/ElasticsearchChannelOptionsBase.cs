@@ -15,7 +15,7 @@ namespace Elastic.Ingest.Elasticsearch;
 public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem>
 {
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/>
-	protected ElasticsearchChannelOptionsBase(HttpTransport transport) : base(transport) { }
+	protected ElasticsearchChannelOptionsBase(ITransport transport) : base(transport) { }
 
 	/// <summary>
 	/// Export option, Optionally provide a custom write implementation for <typeparamref name="TEvent"/>
