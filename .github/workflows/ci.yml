@@ -77,12 +77,12 @@ jobs:
     - name: "Inspect public API changes"
       run: ./build.sh generateapichanges -s true
 
-    - name: Publish canary packages to GitHub package repository
-      if: github.event_name == 'push' && startswith(github.ref, 'refs/heads')
+    - name: publish canary packages github package repository
       shell: bash
-      run:  |
-          dotnet nuget add source --username USERNAME --password ${{secrets.GITHUB_TOKEN}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/elastic/index.json"
-          until dotnet nuget push 'build/output/*.nupkg' -k ${{secrets.GITHUB_TOKEN}} --skip-duplicate --no-symbols; do echo "Retrying"; sleep 1; done;
+      timeout-minutes: 2
+      continue-on-error: true
+      run: |
+        until dotnet nuget push 'build/output/*.nupkg' -k ${{secrets.GITHUB_TOKEN}} --skip-duplicate --no-symbols -s https://nuget.pkg.github.com/elastic/index.json; do echo "Retrying"; sleep 1; done;
 
     # Github packages requires authentication, this is likely going away in the future so for now we publish to feedz.io
     - name: Publish canary packages to feedz.io
