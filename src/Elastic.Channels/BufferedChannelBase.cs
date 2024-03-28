@@ -262,7 +262,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			if (_signal is { IsSet: true }) break;
 
 			_callbacks.ExportItemsAttemptCallback?.Invoke(i, items.Count);
-			TResponse? response;
+			TResponse? response = null;
+
+			// delay if we still have items and we are not at the end of the max retry cycle
+			var atEndOfRetries = i == maxRetries;
 			try
 			{
 				response = await ExportAsync(items, TokenSource.Token).ConfigureAwait(false);
@@ -271,15 +274,16 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			catch (Exception e)
 			{
 				_callbacks.ExportExceptionCallback?.Invoke(e);
-				break;
+				if (atEndOfRetries)
+					break;
 			}
 
-			items = RetryBuffer(response, items, buffer);
+			items = response == null
+				? EmptyArraySegments<TEvent>.Empty
+				: RetryBuffer(response, items, buffer);
 			if (items.Count > 0 && i == 0)
 				_callbacks.ExportRetryableCountCallback?.Invoke(items.Count);
 
-			// delay if we still have items and we are not at the end of the max retry cycle
-			var atEndOfRetries = i == maxRetries;
 			if (items.Count > 0 && !atEndOfRetries)
 			{
 				await Task.Delay(Options.BufferOptions.ExportBackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);

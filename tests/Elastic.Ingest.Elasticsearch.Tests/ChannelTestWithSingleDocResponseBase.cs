@@ -10,9 +10,9 @@ namespace Elastic.Ingest.Elasticsearch.Tests;
 
 public abstract class ChannelTestWithSingleDocResponseBase
 {
-	protected static readonly HttpTransport _transport = new DefaultHttpTransport<TransportConfiguration>(
+	protected static readonly ITransport _transport = new DistributedTransport<TransportConfiguration>(
 		new TransportConfiguration(new SingleNodePool(new Uri("http://localhost:9200")),
-			new InMemoryConnection(Encoding.UTF8.GetBytes("{\"items\":[{\"create\":{\"status\":201}}]}")))
+			new InMemoryRequestInvoker(Encoding.UTF8.GetBytes("{\"items\":[{\"create\":{\"status\":201}}]}")))
 				.DisablePing()
 				.EnableDebugMode());
 }

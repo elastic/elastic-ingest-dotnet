@@ -12,16 +12,16 @@ public class TimeSeriesDocument
 	public DateTimeOffset Timestamp { get; set; }
 
 	[JsonPropertyName("message")]
-	public string Message { get; set; }
+	public string? Message { get; set; }
 }
 
 public class CatalogDocument
 {
 	[JsonPropertyName("id")]
-	public string Id { get; set; }
+	public string Id { get; set; } = null!;
 
 	[JsonPropertyName("title")]
-	public string Title { get; set; }
+	public string? Title { get; set; }
 
 	[JsonPropertyName("created")]
 	public DateTimeOffset Created { get; set; }

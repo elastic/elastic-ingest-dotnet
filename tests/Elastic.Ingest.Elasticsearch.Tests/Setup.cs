@@ -16,7 +16,7 @@ namespace Elastic.Ingest.Elasticsearch.Tests;
 
 public static class TestSetup
 {
-	public static HttpTransport<TransportConfiguration> CreateClient(Func<VirtualCluster, VirtualCluster> setup)
+	public static DistributedTransport<TransportConfiguration> CreateClient(Func<VirtualCluster, VirtualCluster> setup)
 	{
 		var cluster = Virtual.Elasticsearch.Bootstrap(numberOfNodes: 1).Ping(c=>c.SucceedAlways());
 		var virtualSettings = setup(cluster)
@@ -29,7 +29,7 @@ public static class TestSetup
 		var settings = new TransportConfiguration(virtualSettings.ConnectionPool, virtualSettings.Connection)
 			.DisablePing()
 			.EnableDebugMode();
-		return new DefaultHttpTransport<TransportConfiguration>(settings);
+		return new DistributedTransport<TransportConfiguration>(settings);
 	}
 
 	public static ClientCallRule BulkResponse(this ClientCallRule rule, params int[] statusCodes) =>
@@ -43,7 +43,7 @@ public static class TestSetup
 		private int _retries;
 		private int _maxRetriesExceeded;
 
-		public TestSession(HttpTransport<TransportConfiguration> transport)
+		public TestSession(DistributedTransport<TransportConfiguration> transport)
 		{
 			Transport = transport;
 			BufferOptions = new BufferOptions
@@ -73,13 +73,13 @@ public static class TestSetup
 
 		public IndexChannel<TestDocument> Channel { get; }
 
-		public HttpTransport<TransportConfiguration> Transport { get; }
+		public DistributedTransport<TransportConfiguration> Transport { get; }
 
 		public IndexChannelOptions<TestDocument> ChannelOptions { get; }
 
 		public BufferOptions BufferOptions { get; }
 
-		public CountdownEvent WaitHandle { get; } = new CountdownEvent(1);
+		public CountdownEvent WaitHandle { get; } = new(1);
 
 		public int Rejections => _rejections;
 		public int TotalBulkRequests => _requests;
@@ -101,8 +101,7 @@ public static class TestSetup
 		}
 	}
 
-	public static TestSession CreateTestSession(HttpTransport<TransportConfiguration> transport) =>
-		new TestSession(transport);
+	public static TestSession CreateTestSession(DistributedTransport<TransportConfiguration> transport) => new(transport);
 
 	public static void WriteAndWait(this TestSession session, int events = 1)
 	{

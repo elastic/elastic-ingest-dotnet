@@ -14,8 +14,8 @@ namespace Elastic.Ingest.Transport;
 
 /// <summary>
 /// A <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/> implementation that provides a common base for channels
-/// looking to <see cref="ExportAsync(Elastic.Transport.HttpTransport,System.ArraySegment{TEvent},System.Threading.CancellationToken)"/> data
-/// over <see cref="HttpTransport"/>
+/// looking to <see cref="ExportAsync(Elastic.Transport.ITransport,System.ArraySegment{TEvent},System.Threading.CancellationToken)"/> data
+/// over <see cref="ITransport"/>
 /// </summary>
 public abstract class TransportChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem> :
 	ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem>
@@ -34,7 +34,7 @@ public abstract class TransportChannelBase<TChannelOptions, TEvent, TResponse, T
 	/// <param name="transport"></param>
 	/// <param name="page">Active page of the buffer that needs to be send to the output</param>
 	/// <param name="ctx"></param>
-	protected abstract Task<TResponse> ExportAsync(HttpTransport transport, ArraySegment<TEvent> page, CancellationToken ctx = default);
+	protected abstract Task<TResponse> ExportAsync(ITransport transport, ArraySegment<TEvent> page, CancellationToken ctx = default);
 
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>>
 	protected override Task<TResponse> ExportAsync(ArraySegment<TEvent> buffer, CancellationToken ctx = default) => ExportAsync(Options.Transport, buffer, ctx);

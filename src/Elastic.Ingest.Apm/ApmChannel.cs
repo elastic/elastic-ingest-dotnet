@@ -63,7 +63,7 @@ public class ApmChannel : TransportChannelBase<ApmChannelOptions, IIntakeObject,
 	protected override bool RejectEvent((IIntakeObject, IntakeErrorItem) @event) => false;
 
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>
-	protected override Task<EventIntakeResponse> ExportAsync(HttpTransport transport, ArraySegment<IIntakeObject> page, CancellationToken ctx = default) =>
+	protected override Task<EventIntakeResponse> ExportAsync(ITransport transport, ArraySegment<IIntakeObject> page, CancellationToken ctx = default) =>
 		transport.RequestAsync<EventIntakeResponse>(HttpMethod.POST, "/intake/v2/events",
 			PostData.StreamHandler(page,
 				(_, _) =>

@@ -25,11 +25,11 @@ public class IngestionCluster : XunitClusterBase
 
 	public IngestionCluster(XunitClusterConfiguration xunitClusterConfiguration) : base(xunitClusterConfiguration) { }
 
-	public ElasticsearchClient CreateClient(ITestOutputHelper output) =>
+	public ElasticsearchClient CreateClient(ITestOutputHelper output, string? hostname = null) =>
 		this.GetOrAddClient(cluster =>
 		{
 			var isCi = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI"));
-			var nodes = NodesUris();
+			var nodes = NodesUris(hostname);
 			var connectionPool = new StaticNodePool(nodes);
 			var settings = new ElasticsearchClientSettings(connectionPool)
 				.RequestTimeout(TimeSpan.FromSeconds(5))

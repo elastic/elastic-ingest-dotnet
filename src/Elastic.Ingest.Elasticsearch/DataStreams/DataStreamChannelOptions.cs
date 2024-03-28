@@ -9,7 +9,7 @@ namespace Elastic.Ingest.Elasticsearch.DataStreams;
 public class DataStreamChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEvent>
 {
 	/// <inheritdoc cref="DataStreamChannelOptions{TEvent}"/>
-	public DataStreamChannelOptions(HttpTransport transport) : base(transport) =>
+	public DataStreamChannelOptions(ITransport transport) : base(transport) =>
 		DataStream = new DataStreamName(typeof(TEvent).Name.ToLowerInvariant());
 
 	/// <inheritdoc cref="DataStreamName"/>

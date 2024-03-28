@@ -14,10 +14,10 @@ public abstract class TransportChannelOptionsBase<TEvent, TResponse, TResponseIt
 	: ResponseItemsChannelOptionsBase<TEvent, TResponse, TResponseItem>
 {
 	/// <inheritdoc cref="TransportChannelOptionsBase{TEvent,TResponse,TResponseItem}"/>
-	protected TransportChannelOptionsBase(HttpTransport transport) => Transport = transport;
+	protected TransportChannelOptionsBase(ITransport transport) => Transport = transport;
 
 	/// <summary>
-	/// The <see cref="HttpTransport{TConfiguration}"/> implementation to be used by the channel
+	/// The <see cref="ITransport"/> implementation to be used by the channel
 	/// </summary>
-	public HttpTransport Transport { get; }
+	public ITransport Transport { get; }
 }
