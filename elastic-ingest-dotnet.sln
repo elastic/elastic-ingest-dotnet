@@ -68,6 +68,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Elastic.Ingest.Elasticsearc
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Performance.Common", "benchmarks\Performance.Common\Performance.Common.csproj", "{077B0564-26D1-4FF1-98A5-633EAA9BE051}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "playground", "examples\playground\playground.csproj", "{C0E73713-EA13-403C-BE43-F2164AB6CF73}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -138,6 +140,10 @@ Global
 		{077B0564-26D1-4FF1-98A5-633EAA9BE051}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{077B0564-26D1-4FF1-98A5-633EAA9BE051}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{077B0564-26D1-4FF1-98A5-633EAA9BE051}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C0E73713-EA13-403C-BE43-F2164AB6CF73}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C0E73713-EA13-403C-BE43-F2164AB6CF73}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C0E73713-EA13-403C-BE43-F2164AB6CF73}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C0E73713-EA13-403C-BE43-F2164AB6CF73}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -159,6 +165,7 @@ Global
 		{1609BC01-FEA6-4818-9C86-9DB7B82FCB48} = {1C174D50-20D2-4006-9681-FDDB39351D99}
 		{DE05C98F-C410-4ED0-A77B-36B66C784105} = {1C174D50-20D2-4006-9681-FDDB39351D99}
 		{077B0564-26D1-4FF1-98A5-633EAA9BE051} = {1C174D50-20D2-4006-9681-FDDB39351D99}
+		{C0E73713-EA13-403C-BE43-F2164AB6CF73} = {B67CBB46-74C1-47EB-9E41-D55C5E0E0D85}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {87AD3256-8FD8-4C94-AB66-5ADBAC939722}

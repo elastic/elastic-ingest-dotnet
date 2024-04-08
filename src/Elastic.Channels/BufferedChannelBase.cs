@@ -74,7 +74,9 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
 	protected BufferedChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners)
 	{
-		TokenSource = new CancellationTokenSource();
+		TokenSource = options.CancellationToken.HasValue
+			? CancellationTokenSource.CreateLinkedTokenSource(options.CancellationToken.Value)
+			: new CancellationTokenSource();
 		Options = options;
 
 		var listeners = callbackListeners == null ? new[] { Options } : callbackListeners.Concat(new[] { Options }).ToArray();
@@ -123,16 +125,16 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		InboundBuffer = new InboundBuffer<TEvent>(maxOut, BufferOptions.OutboundBufferMaxLifetime);
 
 		_outTask = Task.Factory.StartNew(async () =>
-			await ConsumeOutboundEventsAsync().ConfigureAwait(false),
-				CancellationToken.None,
-				TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness,
-				TaskScheduler.Default);
+				await ConsumeOutboundEventsAsync().ConfigureAwait(false),
+			CancellationToken.None,
+			TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness,
+			TaskScheduler.Default);
 
 		_inTask = Task.Factory.StartNew(async () =>
-			await ConsumeInboundEventsAsync(maxOut, BufferOptions.OutboundBufferMaxLifetime).ConfigureAwait(false),
-				CancellationToken.None,
-				TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness,
-				TaskScheduler.Default);
+				await ConsumeInboundEventsAsync(maxOut, BufferOptions.OutboundBufferMaxLifetime).ConfigureAwait(false),
+			CancellationToken.None,
+			TaskCreationOptions.LongRunning | TaskCreationOptions.PreferFairness,
+			TaskScheduler.Default);
 	}
 
 	/// <summary>
@@ -144,7 +146,9 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// <summary>The channel options currently in use</summary>
 	public TChannelOptions Options { get; }
 
-	private CancellationTokenSource TokenSource { get; }
+	/// <summary> An overall cancellation token that may be externally provided </summary>
+	protected CancellationTokenSource TokenSource { get; }
+
 	private Channel<IOutboundBuffer<TEvent>> OutChannel { get; }
 	private Channel<TEvent> InChannel { get; }
 	private BufferOptions BufferOptions => Options.BufferOptions;
@@ -173,6 +177,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// <inheritdoc cref="IBufferedChannel{TEvent}.WaitToWriteManyAsync"/>
 	public async Task<bool> WaitToWriteManyAsync(IEnumerable<TEvent> events, CancellationToken ctx = default)
 	{
+		ctx = ctx == default ? TokenSource.Token : ctx;
 		var allWritten = true;
 		foreach (var e in events)
 		{
@@ -187,7 +192,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		var written = true;
 
-		foreach (var @event in  events)
+		foreach (var @event in events)
 		{
 			written = TryWrite(@event);
 		}
@@ -226,7 +231,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var taskList = new List<Task>(maxConsumers);
 
 		while (await OutChannel.Reader.WaitToReadAsync().ConfigureAwait(false))
-		// ReSharper disable once RemoveRedundantBraces
+			// ReSharper disable once RemoveRedundantBraces
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
 			if (_signal is { IsSet: true }) break;
@@ -255,47 +260,50 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	private async Task ExportBufferAsync(ArraySegment<TEvent> items, IOutboundBuffer<TEvent> buffer)
 	{
-		var maxRetries = Options.BufferOptions.ExportMaxRetries;
-		for (var i = 0; i <= maxRetries && items.Count > 0; i++)
+		using (buffer)
 		{
-			if (TokenSource.Token.IsCancellationRequested) break;
-			if (_signal is { IsSet: true }) break;
-
-			_callbacks.ExportItemsAttemptCallback?.Invoke(i, items.Count);
-			TResponse? response = null;
-
-			// delay if we still have items and we are not at the end of the max retry cycle
-			var atEndOfRetries = i == maxRetries;
-			try
+			var maxRetries = Options.BufferOptions.ExportMaxRetries;
+			for (var i = 0; i <= maxRetries && items.Count > 0; i++)
 			{
-				response = await ExportAsync(items, TokenSource.Token).ConfigureAwait(false);
-				_callbacks.ExportResponseCallback?.Invoke(response, buffer);
-			}
-			catch (Exception e)
-			{
-				_callbacks.ExportExceptionCallback?.Invoke(e);
-				if (atEndOfRetries)
-					break;
-			}
+				if (TokenSource.Token.IsCancellationRequested) break;
+				if (_signal is { IsSet: true }) break;
 
-			items = response == null
-				? EmptyArraySegments<TEvent>.Empty
-				: RetryBuffer(response, items, buffer);
-			if (items.Count > 0 && i == 0)
-				_callbacks.ExportRetryableCountCallback?.Invoke(items.Count);
+				_callbacks.ExportItemsAttemptCallback?.Invoke(i, items.Count);
+				TResponse? response = null;
 
-			if (items.Count > 0 && !atEndOfRetries)
-			{
-				await Task.Delay(Options.BufferOptions.ExportBackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
-				_callbacks.ExportRetryCallback?.Invoke(items);
+				// delay if we still have items and we are not at the end of the max retry cycle
+				var atEndOfRetries = i == maxRetries;
+				try
+				{
+					response = await ExportAsync(items, TokenSource.Token).ConfigureAwait(false);
+					_callbacks.ExportResponseCallback?.Invoke(response, buffer);
+				}
+				catch (Exception e)
+				{
+					_callbacks.ExportExceptionCallback?.Invoke(e);
+					if (atEndOfRetries)
+						break;
+				}
+
+				items = response == null
+					? EmptyArraySegments<TEvent>.Empty
+					: RetryBuffer(response, items, buffer);
+				if (items.Count > 0 && i == 0)
+					_callbacks.ExportRetryableCountCallback?.Invoke(items.Count);
+
+				if (items.Count > 0 && !atEndOfRetries)
+				{
+					await Task.Delay(Options.BufferOptions.ExportBackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
+					_callbacks.ExportRetryCallback?.Invoke(items);
+				}
+				// otherwise if retryable items still exist and the user wants to be notified notify the user
+				else if (items.Count > 0 && atEndOfRetries)
+					_callbacks.ExportMaxRetriesCallback?.Invoke(items);
 			}
-			// otherwise if retryable items still exist and the user wants to be notified notify the user
-			else if (items.Count > 0 && atEndOfRetries)
-				_callbacks.ExportMaxRetriesCallback?.Invoke(items);
+			_callbacks.ExportBufferCallback?.Invoke();
+			if (_signal is { IsSet: false })
+				_signal.Signal();
 		}
-		_callbacks.ExportBufferCallback?.Invoke();
-		if (_signal is { IsSet: false })
-			_signal.Signal();
 	}
 
 	private async Task ConsumeInboundEventsAsync(int maxQueuedMessages, TimeSpan maxInterval)

@@ -67,6 +67,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.ExportAsync(Elastic.Transport.ITransport,System.ArraySegment{TEvent},System.Threading.CancellationToken)"/>
 	protected override Task<BulkResponse> ExportAsync(ITransport transport, ArraySegment<TEvent> page, CancellationToken ctx = default)
 	{
+		ctx = ctx == default ? TokenSource.Token : ctx;
 #if NETSTANDARD2_1
 		// Option is obsolete to prevent external users to set it.
 #pragma warning disable CS0618

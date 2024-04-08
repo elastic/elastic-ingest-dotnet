@@ -33,6 +33,8 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	{
 		if (bootstrapMethod == BootstrapMethod.None) return true;
 
+		ctx = ctx == default ? TokenSource.Token : ctx;
+
 		var name = TemplateName;
 		var match = TemplateWildcard;
 		if (await IndexTemplateExistsAsync(name, ctx).ConfigureAwait(false)) return false;
