@@ -238,20 +238,17 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 			while (OutChannel.Reader.TryRead(out var buffer))
 			{
-				using (buffer)
-				{
-					var items = buffer.GetArraySegment();
-					await _throttleTasks.WaitAsync().ConfigureAwait(false);
-					var t = ExportBufferAsync(items, buffer);
-					taskList.Add(t);
+				var items = buffer.GetArraySegment();
+				await _throttleTasks.WaitAsync().ConfigureAwait(false);
+				var t = ExportBufferAsync(items, buffer);
+				taskList.Add(t);
 
-					if (taskList.Count >= maxConsumers)
-					{
-						var completedTask = await Task.WhenAny(taskList).ConfigureAwait(false);
-						taskList.Remove(completedTask);
-					}
-					_throttleTasks.Release();
+				if (taskList.Count >= maxConsumers)
+				{
+					var completedTask = await Task.WhenAny(taskList).ConfigureAwait(false);
+					taskList.Remove(completedTask);
 				}
+				_throttleTasks.Release();
 			}
 		}
 		await Task.WhenAll(taskList).ConfigureAwait(false);
