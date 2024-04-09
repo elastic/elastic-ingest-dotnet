@@ -2,6 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System.Text.Json.Serialization;
 using Elastic.Channels;
 using Elastic.Elasticsearch.Ephemeral;
 using Elastic.Ingest.Elasticsearch;
@@ -72,6 +73,12 @@ DataStreamChannel<EcsDocument> SetupElasticsearchChannel()
 		{
 			BufferOptions = bufferOptions,
 			CancellationToken = ctxs.Token
+			, ExportResponseCallback = (c, t) =>
+			{
+				var error = c.Items.Select(i=>i.Error).FirstOrDefault(e => e != null);
+				if (error == null) return;
+				Console.WriteLine(error.ToString());
+			}
 		});
 
 	return c;
@@ -79,7 +86,10 @@ DataStreamChannel<EcsDocument> SetupElasticsearchChannel()
 
 public class EcsDocument
 {
+	[JsonPropertyName("@timestamp")]
 	public DateTimeOffset Timestamp { init; get; }
+
+	[JsonPropertyName("message")]
 	public string Message { init; get; } = null!;
 }
 
