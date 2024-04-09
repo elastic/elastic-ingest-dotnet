@@ -34,9 +34,14 @@ public class BufferOptions
 
 	/// <summary>
 	/// The maximum number of consumers allowed to poll for new events on the channel.
-	/// <para>Defaults to <c>1</c>, increase to introduce concurrency.</para>
+	/// <para>Defaults to the lesser of:</para>
+	/// <list type="bullet">
+	///		<item><see cref="InboundBufferMaxSize"/>/<see cref="OutboundBufferMaxSize"/></item>
+	///		<item>OR <see cref="Environment.ProcessorCount"/></item>
+	/// </list>
+	/// <para>, increase to introduce concurrency.</para>
 	/// </summary>
-	public int ExportMaxConcurrency { get; set; } = 1;
+	public int? ExportMaxConcurrency { get; set; }
 
 	/// <summary>
 	/// The times to retry an export if <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.RetryBuffer"/> yields items to retry.

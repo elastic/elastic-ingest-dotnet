@@ -60,6 +60,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 {
 	private readonly Task _inTask;
 	private readonly Task _outTask;
+	private readonly int _maxConcurrency;
 	private readonly SemaphoreSlim _throttleTasks;
 	private readonly CountdownEvent? _signal;
 
@@ -92,10 +93,17 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		}
 		_callbacks = new ChannelCallbackInvoker<TEvent, TResponse>(listeners);
 
-		var maxConsumers = Math.Max(1, BufferOptions.ExportMaxConcurrency);
-		_throttleTasks = new SemaphoreSlim(maxConsumers, maxConsumers);
-		_signal = options.BufferOptions.WaitHandle;
 		var maxIn = Math.Max(1, BufferOptions.InboundBufferMaxSize);
+		// The minimum out buffer the max of (1 or OutboundBufferMaxSize) as long as it does not exceed InboundBufferMaxSize
+		var maxOut = Math.Min(BufferOptions.InboundBufferMaxSize, Math.Max(1, BufferOptions.OutboundBufferMaxSize));
+		var defaultMaxConcurrency = (int)Math.Ceiling(maxIn / (double)maxOut);
+		_maxConcurrency =
+			BufferOptions.ExportMaxConcurrency.HasValue
+				? BufferOptions.ExportMaxConcurrency.Value
+				: Math.Min(defaultMaxConcurrency, Environment.ProcessorCount * 2);
+
+		_throttleTasks = new SemaphoreSlim(_maxConcurrency, _maxConcurrency);
+		_signal = options.BufferOptions.WaitHandle;
 		InChannel = Channel.CreateBounded<TEvent>(new BoundedChannelOptions(maxIn)
 		{
 			SingleReader = false,
@@ -107,8 +115,6 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			// DropWrite will make `TryWrite` always return true, which is not what we want.
 			FullMode = BoundedChannelFullMode.Wait
 		});
-		// The minimum out buffer the max of (1 or OutboundBufferMaxSize) as long as it does not exceed InboundBufferMaxSize
-		var maxOut = Math.Min(BufferOptions.InboundBufferMaxSize, Math.Max(1, BufferOptions.OutboundBufferMaxSize));
 		OutChannel = Channel.CreateBounded<IOutboundBuffer<TEvent>>(
 			new BoundedChannelOptions(maxOut)
 			{
@@ -227,8 +233,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		_callbacks.OutboundChannelStartedCallback?.Invoke();
 
-		var maxConsumers = Options.BufferOptions.ExportMaxConcurrency;
-		var taskList = new List<Task>(maxConsumers);
+		var taskList = new List<Task>(_maxConcurrency);
 
 		while (await OutChannel.Reader.WaitToReadAsync().ConfigureAwait(false))
 			// ReSharper disable once RemoveRedundantBraces
@@ -239,11 +244,11 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			while (OutChannel.Reader.TryRead(out var buffer))
 			{
 				var items = buffer.GetArraySegment();
-				await _throttleTasks.WaitAsync().ConfigureAwait(false);
+				await _throttleTasks.WaitAsync(TokenSource.Token).ConfigureAwait(false);
 				var t = ExportBufferAsync(items, buffer);
 				taskList.Add(t);
 
-				if (taskList.Count >= maxConsumers)
+				if (taskList.Count >= _maxConcurrency)
 				{
 					var completedTask = await Task.WhenAny(taskList).ConfigureAwait(false);
 					taskList.Remove(completedTask);
@@ -257,50 +262,48 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	private async Task ExportBufferAsync(ArraySegment<TEvent> items, IOutboundBuffer<TEvent> buffer)
 	{
-		using (buffer)
+		using var outboundBuffer = buffer;
+		var maxRetries = Options.BufferOptions.ExportMaxRetries;
+		for (var i = 0; i <= maxRetries && items.Count > 0; i++)
 		{
-			var maxRetries = Options.BufferOptions.ExportMaxRetries;
-			for (var i = 0; i <= maxRetries && items.Count > 0; i++)
+			if (TokenSource.Token.IsCancellationRequested) break;
+			if (_signal is { IsSet: true }) break;
+
+			_callbacks.ExportItemsAttemptCallback?.Invoke(i, items.Count);
+			TResponse? response = null;
+
+			// delay if we still have items and we are not at the end of the max retry cycle
+			var atEndOfRetries = i == maxRetries;
+			try
 			{
-				if (TokenSource.Token.IsCancellationRequested) break;
-				if (_signal is { IsSet: true }) break;
-
-				_callbacks.ExportItemsAttemptCallback?.Invoke(i, items.Count);
-				TResponse? response = null;
-
-				// delay if we still have items and we are not at the end of the max retry cycle
-				var atEndOfRetries = i == maxRetries;
-				try
-				{
-					response = await ExportAsync(items, TokenSource.Token).ConfigureAwait(false);
-					_callbacks.ExportResponseCallback?.Invoke(response, buffer);
-				}
-				catch (Exception e)
-				{
-					_callbacks.ExportExceptionCallback?.Invoke(e);
-					if (atEndOfRetries)
-						break;
-				}
-
-				items = response == null
-					? EmptyArraySegments<TEvent>.Empty
-					: RetryBuffer(response, items, buffer);
-				if (items.Count > 0 && i == 0)
-					_callbacks.ExportRetryableCountCallback?.Invoke(items.Count);
-
-				if (items.Count > 0 && !atEndOfRetries)
-				{
-					await Task.Delay(Options.BufferOptions.ExportBackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
-					_callbacks.ExportRetryCallback?.Invoke(items);
-				}
-				// otherwise if retryable items still exist and the user wants to be notified notify the user
-				else if (items.Count > 0 && atEndOfRetries)
-					_callbacks.ExportMaxRetriesCallback?.Invoke(items);
+				response = await ExportAsync(items, TokenSource.Token).ConfigureAwait(false);
+				_callbacks.ExportResponseCallback?.Invoke(response, outboundBuffer);
 			}
-			_callbacks.ExportBufferCallback?.Invoke();
-			if (_signal is { IsSet: false })
-				_signal.Signal();
+			catch (Exception e)
+			{
+				_callbacks.ExportExceptionCallback?.Invoke(e);
+				if (atEndOfRetries)
+					break;
+			}
+
+			items = response == null
+				? EmptyArraySegments<TEvent>.Empty
+				: RetryBuffer(response, items, outboundBuffer);
+			if (items.Count > 0 && i == 0)
+				_callbacks.ExportRetryableCountCallback?.Invoke(items.Count);
+
+			if (items.Count > 0 && !atEndOfRetries)
+			{
+				await Task.Delay(Options.BufferOptions.ExportBackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
+				_callbacks.ExportRetryCallback?.Invoke(items);
+			}
+			// otherwise if retryable items still exist and the user wants to be notified notify the user
+			else if (items.Count > 0 && atEndOfRetries)
+				_callbacks.ExportMaxRetriesCallback?.Invoke(items);
 		}
+		_callbacks.ExportBufferCallback?.Invoke();
+		if (_signal is { IsSet: false })
+			_signal.Signal();
 	}
 
 	private async Task ConsumeInboundEventsAsync(int maxQueuedMessages, TimeSpan maxInterval)
