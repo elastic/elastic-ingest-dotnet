@@ -19,3 +19,9 @@ public interface IWriteTrackingBuffer
 	/// </summary>
 	TimeSpan? DurationSinceFirstWrite { get; }
 }
+
+internal class WriteTrackingBufferEventData : IWriteTrackingBuffer
+{
+	public int Count { get; set; }
+	public TimeSpan? DurationSinceFirstWrite { get; set; }
+}

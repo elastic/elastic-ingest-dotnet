@@ -277,7 +277,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			try
 			{
 				response = await ExportAsync(items, TokenSource.Token).ConfigureAwait(false);
-				_callbacks.ExportResponseCallback?.Invoke(response, outboundBuffer);
+				_callbacks.ExportResponseCallback?.Invoke(response,
+					new WriteTrackingBufferEventData { Count = outboundBuffer.Count, DurationSinceFirstWrite =  outboundBuffer.DurationSinceFirstWrite });
 			}
 			catch (Exception e)
 			{
