@@ -113,10 +113,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			AllowSynchronousContinuations = true,
 			// wait does not block it simply signals that Writer.TryWrite should return false and be retried
 			// DropWrite will make `TryWrite` always return true, which is not what we want.
-			FullMode = BoundedChannelFullMode.Wait
+			FullMode = options.BufferOptions.BoundedChannelFullMode
 		});
 		OutChannel = Channel.CreateBounded<IOutboundBuffer<TEvent>>(
-			new BoundedChannelOptions(maxOut)
+			new BoundedChannelOptions(_maxConcurrency * 2)
 			{
 				SingleReader = false,
 				SingleWriter = true,

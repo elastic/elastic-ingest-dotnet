@@ -4,6 +4,7 @@
 
 using System;
 using System.Threading;
+using System.Threading.Channels;
 
 namespace Elastic.Channels;
 
@@ -62,4 +63,13 @@ public class BufferOptions
 	/// Allows you to inject a <see cref="CountdownEvent"/> to wait for N number of buffers to flush.
 	/// </summary>
 	public CountdownEvent? WaitHandle { get; set; }
+
+	/// <summary>
+	/// <inheritdoc cref="BoundedChannelFullMode" path="summary" />
+	/// <para>Defaults to <see cref="BoundedChannelFullMode.Wait"/>, this will use more memory as overproducing will need to wait to enqueue data</para>
+	/// <para>Use <see cref="BoundedChannelFullMode.DropWrite"/> to minimize memory consumption at the expense of more  likely to drop data</para>
+	/// <para>You might need to tweak <see cref="InboundBufferMaxSize"/> and <see cref="OutboundBufferMaxSize"/> to ensure sufficient allocations are available </para>
+	/// <para>The defaults for both <see cref="InboundBufferMaxSize"/> adn <see cref="OutboundBufferMaxSize"/> are quite liberal already though.</para>
+	/// </summary>
+	public BoundedChannelFullMode BoundedChannelFullMode { get; set; } = BoundedChannelFullMode.Wait;
 }
