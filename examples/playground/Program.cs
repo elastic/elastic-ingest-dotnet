@@ -61,7 +61,6 @@ async Task PushToChannel(DataStreamChannel<EcsDocument> c)
 			return;
 
 		Console.WriteLine("Failed To write");
-		await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
 	}
 }
 
