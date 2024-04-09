@@ -5,6 +5,12 @@
 using Elastic.Channels;
 using Elastic.Channels.Diagnostics;
 
+var ctxs = new CancellationTokenSource();
+Console.CancelKeyPress += (sender, eventArgs) => {
+	ctxs.Cancel();
+	eventArgs.Cancel = true;
+};
+
 var options = new NoopBufferedChannel.NoopChannelOptions
 {
 	BufferOptions = new BufferOptions()
@@ -19,19 +25,18 @@ var options = new NoopBufferedChannel.NoopChannelOptions
 
 };
 var channel = new DiagnosticsBufferedChannel(options);
-for (long i = 0; i < long.MaxValue; i++)
+await Parallel.ForEachAsync(Enumerable.Range(0, int.MaxValue), new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount, CancellationToken = ctxs.Token }, async (i, ctx) =>
 {
 	var e = new NoopBufferedChannel.NoopEvent { Id = i };
 	var written = false;
-	var ready = await channel.WaitToWriteAsync();
+	//Console.Write('.');
+	var ready = await channel.WaitToWriteAsync(ctx);
 	if (ready) written = channel.TryWrite(e);
-	if (!written || channel.BufferMismatches > 0)
+	if (!written)
 	{
 		Console.WriteLine();
 		Console.WriteLine(channel);
 		Console.WriteLine(i);
 		Environment.Exit(1);
 	}
-
-}
-
+});

@@ -29,6 +29,9 @@ public abstract class ChannelOptionsBase<TEvent, TResponse> : IChannelCallbacks<
 	/// </summary>
 	public bool DisableDiagnostics { get; set; }
 
+	/// <summary> Provide an external cancellation token </summary>
+	public CancellationToken? CancellationToken { get; set; }
+
 	/// <summary>
 	/// Optionally provides a custom write implementation to a channel. Concrete channel implementations are not required to adhere to this config
 	/// </summary>
