@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System.Text.Json.Serialization;
+using System.Threading.Channels;
 using Elastic.Channels;
 using Elastic.Elasticsearch.Ephemeral;
 using Elastic.Ingest.Elasticsearch;
@@ -13,7 +14,7 @@ var random = new Random();
 var ctxs = new CancellationTokenSource();
 var parallelOpts = new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount, CancellationToken = ctxs.Token };
 const int numDocs = 1_000_000;
-var bufferOptions = new BufferOptions { InboundBufferMaxSize = numDocs, OutboundBufferMaxSize = 10_000 };
+var bufferOptions = new BufferOptions { InboundBufferMaxSize = 1000, OutboundBufferMaxSize = 100, ExportMaxConcurrency = 1, BoundedChannelFullMode = BoundedChannelFullMode.Wait };
 var config = new EphemeralClusterConfiguration("8.13.0");
 using var cluster = new EphemeralCluster(config);
 using var channel = SetupElasticsearchChannel();
@@ -48,10 +49,15 @@ async Task PushToChannel(DataStreamChannel<EcsDocument> c)
 	if (c == null) throw new ArgumentNullException(nameof(c));
 
 	await c.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
+
+	foreach (var i in Enumerable.Range(0, numDocs))
+		await DoChannelWrite(i, ctxs.Token);
+
+	/*
 	await Parallel.ForEachAsync(Enumerable.Range(0, numDocs), parallelOpts, async (i, ctx) =>
 	{
 		await DoChannelWrite(i, ctx);
-	});
+	});*/
 
 	async Task DoChannelWrite(int i, CancellationToken cancellationToken)
 	{
