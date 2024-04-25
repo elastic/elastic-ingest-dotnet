@@ -10,7 +10,8 @@ on:
       - 'README.md'
       - '.editorconfig'
     branches:
-      - main 
+      - main
+      - test-provenance
     tags:
       - "*.*.*"
 
