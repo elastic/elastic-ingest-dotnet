@@ -102,7 +102,7 @@ jobs:
         name: build
         path: build/output
 
-    - uses: github-early-access/generate-build-provenance@main
+    - uses: actions/attest-build-provenance@951c0c5f8e375ad4efad33405ab77f7ded2358e4  # v1.1.1
       with:
         subject-path: '${{ github.workspace }}/${{ env.ARTIFACTS }}'
 
@@ -143,7 +143,7 @@ jobs:
     - name: Create or update release for tag on github
       run: ./build.sh createreleaseongithub -s true --token ${{secrets.GITHUB_TOKEN}}
 
-    - uses: github-early-access/generate-build-provenance@main
+    - uses: actions/attest-build-provenance@951c0c5f8e375ad4efad33405ab77f7ded2358e4  # v1.1.1
       with:
         subject-path: '${{ github.workspace }}/${{ env.ARTIFACTS }}'
 
