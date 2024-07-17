@@ -241,12 +241,13 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		while (await OutChannel.Reader.WaitToReadAsync().ConfigureAwait(false))
 		// ReSharper disable once RemoveRedundantBraces
 		{
+			if (TokenSource.Token.IsCancellationRequested) break;
 			if (_signal is { IsSet: true }) break;
 
 			while (OutChannel.Reader.TryRead(out var buffer))
 			{
 				var items = buffer.GetArraySegment();
-				await _throttleTasks.WaitAsync().ConfigureAwait(false);
+				await _throttleTasks.WaitAsync(TokenSource.Token).ConfigureAwait(false);
 				var t = ExportBufferAsync(items, buffer);
 				taskList.Add(t);
 
@@ -269,6 +270,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var maxRetries = Options.BufferOptions.ExportMaxRetries;
 		for (var i = 0; i <= maxRetries && items.Count > 0; i++)
 		{
+			if (TokenSource.Token.IsCancellationRequested) break;
 			if (_signal is { IsSet: true }) break;
 
 			_callbacks.ExportItemsAttemptCallback?.Invoke(i, items.Count);
@@ -315,6 +317,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 		while (await InboundBuffer.WaitToReadAsync(InChannel.Reader).ConfigureAwait(false))
 		{
+			if (TokenSource.Token.IsCancellationRequested) break;
 			if (_signal is { IsSet: true }) break;
 
 			while (InboundBuffer.Count < maxQueuedMessages && InChannel.Reader.TryRead(out var item))
