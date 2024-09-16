@@ -155,6 +155,9 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// <summary> An overall cancellation token that may be externally provided </summary>
 	protected CancellationTokenSource TokenSource { get; }
 
+	/// <summary>Internal cancellation token for signalling that all publishing activity has completed.</summary>
+	private readonly CancellationTokenSource _exitCancelSource = new CancellationTokenSource();
+
 	private Channel<IOutboundBuffer<TEvent>> OutChannel { get; }
 	private Channel<TEvent> InChannel { get; }
 	private BufferOptions BufferOptions => Options.BufferOptions;
@@ -236,7 +239,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var taskList = new List<Task>(_maxConcurrency);
 
 		while (await OutChannel.Reader.WaitToReadAsync().ConfigureAwait(false))
-			// ReSharper disable once RemoveRedundantBraces
+		// ReSharper disable once RemoveRedundantBraces
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
 			if (_signal is { IsSet: true }) break;
@@ -257,6 +260,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			}
 		}
 		await Task.WhenAll(taskList).ConfigureAwait(false);
+		_exitCancelSource.Cancel();
 		_callbacks.OutboundChannelExitedCallback?.Invoke();
 	}
 
@@ -278,7 +282,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			{
 				response = await ExportAsync(items, TokenSource.Token).ConfigureAwait(false);
 				_callbacks.ExportResponseCallback?.Invoke(response,
-					new WriteTrackingBufferEventData { Count = outboundBuffer.Count, DurationSinceFirstWrite =  outboundBuffer.DurationSinceFirstWrite });
+					new WriteTrackingBufferEventData { Count = outboundBuffer.Count, DurationSinceFirstWrite = outboundBuffer.DurationSinceFirstWrite });
 			}
 			catch (Exception e)
 			{
@@ -372,12 +376,21 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// <inheritdoc cref="IDisposable.Dispose"/>
 	public virtual void Dispose()
 	{
-		InboundBuffer.Dispose();
 		try
 		{
-			TokenSource.Cancel();
+			// Mark inchannel completed to flush buffer and end task, signalling end to outchannel
 			InChannel.Writer.TryComplete();
-			OutChannel.Writer.TryComplete();
+			// Wait a reasonable duration for the outchannel to complete before disposing the rest
+			if (!_exitCancelSource.IsCancellationRequested)
+			{
+				// Allow one retry before we exit
+				var maxwait = Options.BufferOptions.ExportBackoffPeriod(1);
+				_exitCancelSource.Token.WaitHandle.WaitOne(maxwait);
+			}
+			_exitCancelSource.Dispose();
+			InboundBuffer.Dispose();
+			TokenSource.Cancel();
+			TokenSource.Dispose();
 		}
 		catch
 		{
