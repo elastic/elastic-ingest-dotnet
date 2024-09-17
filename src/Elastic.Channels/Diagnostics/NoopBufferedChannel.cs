@@ -67,7 +67,7 @@ public class NoopBufferedChannel
 		if (!Options.TrackConcurrency) return new NoopResponse();
 
 		var max = Interlocked.Increment(ref _currentMax);
-		await Task.Delay(TimeSpan.FromMilliseconds(1), ctx).ConfigureAwait(false);
+		await Task.Delay(TimeSpan.FromMilliseconds(100), ctx).ConfigureAwait(false);
 		Interlocked.Decrement(ref _currentMax);
 		if (max > ObservedConcurrency) ObservedConcurrency = max;
 		return new NoopResponse();

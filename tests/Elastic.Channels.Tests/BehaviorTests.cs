@@ -15,7 +15,13 @@ namespace Elastic.Channels.Tests;
 
 public class BehaviorTests : IDisposable
 {
-	public BehaviorTests(ITestOutputHelper testOutput) => XunitContext.Register(testOutput);
+	private readonly ITestOutputHelper _testOutput;
+
+	public BehaviorTests(ITestOutputHelper testOutput)
+	{
+		_testOutput = testOutput;
+		XunitContext.Register(testOutput);
+	}
 
 	void IDisposable.Dispose() => XunitContext.Flush();
 
@@ -74,7 +80,7 @@ public class BehaviorTests : IDisposable
 
 	[Fact] public async Task ConcurrencyIsApplied()
 	{
-		int totalEvents = 5_000, maxInFlight = 5_000, bufferSize = 500;
+		int totalEvents = 50_000, maxInFlight = 50_000, bufferSize = 5000;
 		var expectedPages = totalEvents / bufferSize;
 		var bufferOptions = new BufferOptions
 		{
@@ -85,7 +91,9 @@ public class BehaviorTests : IDisposable
 		};
 
 		var channel = new NoopBufferedChannel(bufferOptions, observeConcurrency: true);
+		channel.MaxConcurrency.Should().BeGreaterThan(1);
 
+		_testOutput.WriteLine($"{channel.MaxConcurrency}");
 		var written = 0;
 		for (var i = 0; i < totalEvents; i++)
 		{
