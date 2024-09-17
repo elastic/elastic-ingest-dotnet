@@ -192,7 +192,6 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		if (BufferOptions.BoundedChannelFullMode == BoundedChannelFullMode.Wait
 			&& OngoingExportOperations >= MaxConcurrency)
 			await _throttleOutboundPublishes.WaitAsync(TokenSource.Token).ConfigureAwait(false);
-			//_throttleExportTasks.AvailableWaitHandle.WaitOne(TimeSpan.FromSeconds(1));
 
 		return await InChannel.Writer.WaitToWriteAsync(ctx).ConfigureAwait(false);
 	}
