@@ -14,7 +14,7 @@ Console.CancelKeyPress += (sender, eventArgs) => {
 
 var options = new NoopBufferedChannel.NoopChannelOptions
 {
-	BufferOptions = new BufferOptions()
+	BufferOptions = new BufferOptions
 	{
 		OutboundBufferMaxLifetime = TimeSpan.Zero
 	},
@@ -29,5 +29,5 @@ await Parallel.ForEachAsync(Enumerable.Range(0, int.MaxValue), new ParallelOptio
 {
 	var e = new NoopBufferedChannel.NoopEvent { Id = i };
 	if (!await channel.WaitToWriteAsync(e))
-		Console.WriteLine(channel.OutstandingOperations);
+		Console.WriteLine($" {channel.MaxConcurrency} {channel.OngoingExportOperations} -> {channel.OutstandingOperations}");
 });

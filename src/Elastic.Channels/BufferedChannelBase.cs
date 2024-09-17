@@ -61,7 +61,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	private readonly Task _inTask;
 	private readonly Task _outTask;
 	private readonly int _maxConcurrency;
-	private readonly SemaphoreSlim _throttleTasks;
+	private readonly SemaphoreSlim _throttleExportTasks;
+	private readonly SemaphoreSlim _throttleOutboundPublishes;
 	private readonly CountdownEvent? _signal;
 
 	private readonly ChannelCallbackInvoker<TEvent, TResponse> _callbacks;
@@ -102,7 +103,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 				? BufferOptions.ExportMaxConcurrency.Value
 				: Math.Min(defaultMaxConcurrency, Environment.ProcessorCount * 2);
 
-		_throttleTasks = new SemaphoreSlim(_maxConcurrency, _maxConcurrency);
+		_throttleOutboundPublishes = new SemaphoreSlim(_maxConcurrency, _maxConcurrency);
+		_throttleExportTasks = new SemaphoreSlim(_maxConcurrency, _maxConcurrency);
 		_signal = options.BufferOptions.WaitHandle;
 		InChannel = Channel.CreateBounded<TEvent>(new BoundedChannelOptions(maxIn)
 		{
@@ -162,16 +164,38 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	private Channel<TEvent> InChannel { get; }
 	private BufferOptions BufferOptions => Options.BufferOptions;
 
-	private long _outstandingOperations = 0;
+	private long _outstandingOperations;
+
 	/// <summary>
 	///
 	/// </summary>
 	public long OutstandingOperations => _outstandingOperations;
 
+	/// <summary>
+	/// The effective concurrency.
+	/// <para>Either the  configured concurrency <see cref="Channels.BufferOptions.ExportMaxConcurrency"/>
+	/// or the calculated concurrency.</para>
+	/// </summary>
+	public int MaxConcurrency => _maxConcurrency;
+
+	/// <summary> Outstanding export operations </summary>
+	public int OngoingExportOperations => _throttleExportTasks.CurrentCount;
+
 	internal InboundBuffer<TEvent> InboundBuffer { get; }
 
 	/// <inheritdoc cref="ChannelWriter{T}.WaitToWriteAsync"/>
-	public override ValueTask<bool> WaitToWriteAsync(CancellationToken ctx = default) => InChannel.Writer.WaitToWriteAsync(ctx);
+	public override async ValueTask<bool> WaitToWriteAsync(CancellationToken ctx = default)
+	{
+		//provides an interop allowing sufficient drain of export tasks in cases where
+		//data is produced in a tight loop and might otherwise thread steal from
+		//export tasks
+		if (BufferOptions.BoundedChannelFullMode == BoundedChannelFullMode.Wait
+			&& OngoingExportOperations >= MaxConcurrency)
+			await _throttleOutboundPublishes.WaitAsync(TokenSource.Token).ConfigureAwait(false);
+			//_throttleExportTasks.AvailableWaitHandle.WaitOne(TimeSpan.FromSeconds(1));
+
+		return await InChannel.Writer.WaitToWriteAsync(ctx).ConfigureAwait(false);
+	}
 
 	/// <inheritdoc cref="ChannelWriter{T}.TryComplete"/>
 	public override bool TryComplete(Exception? error = null) => InChannel.Writer.TryComplete(error);
@@ -222,12 +246,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		ctx = ctx == default ? TokenSource.Token : ctx;
 
-		// small interop to protect inbound task from cpu stealing
-		if (_outstandingOperations % BufferOptions.OutboundBufferMaxSize / 10 == 0)
-			await Task.Delay(TimeSpan.FromMilliseconds(1), ctx).ConfigureAwait(false);
-
-		if (await InChannel.Writer.WaitToWriteAsync(ctx).ConfigureAwait(false) &&
-			InChannel.Writer.TryWrite(item))
+		if (await WaitToWriteAsync(ctx).ConfigureAwait(false) && InChannel.Writer.TryWrite(item))
 		{
 			Interlocked.Increment(ref _outstandingOperations);
 			_callbacks.PublishToInboundChannelCallback?.Invoke();
@@ -254,7 +273,6 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var taskList = new List<Task>(_maxConcurrency);
 
 		while (await OutChannel.Reader.WaitToReadAsync().ConfigureAwait(false))
-		// ReSharper disable once RemoveRedundantBraces
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
 			if (_signal is { IsSet: true }) break;
@@ -262,7 +280,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			while (OutChannel.Reader.TryRead(out var buffer))
 			{
 				var items = buffer.GetArraySegment();
-				await _throttleTasks.WaitAsync(TokenSource.Token).ConfigureAwait(false);
+				await _throttleExportTasks.WaitAsync(TokenSource.Token).ConfigureAwait(false);
 				var t = ExportBufferAsync(items, buffer);
 				taskList.Add(t);
 
@@ -271,7 +289,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 					var completedTask = await Task.WhenAny(taskList).ConfigureAwait(false);
 					taskList.Remove(completedTask);
 				}
-				_throttleTasks.Release();
+				_throttleExportTasks.Release();
 			}
 		}
 		await Task.WhenAll(taskList).ConfigureAwait(false);
@@ -344,6 +362,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 					break;
 			}
 
+			_throttleOutboundPublishes.Release();
+
 			if (InboundBuffer.ThresholdsHit)
 				await FlushBufferAsync().ConfigureAwait(false);
 		}
@@ -373,10 +393,9 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			var maxRetries = Options.BufferOptions.ExportMaxRetries;
 			for (var i = 0; i <= maxRetries; i++)
 				while (await OutChannel.Writer.WaitToWriteAsync().ConfigureAwait(false))
-				{
 					if (OutChannel.Writer.TryWrite(b))
 						return true;
-				}
+
 			return false;
 		}
 
