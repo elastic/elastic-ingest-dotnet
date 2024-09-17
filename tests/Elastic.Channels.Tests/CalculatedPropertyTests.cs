@@ -48,7 +48,7 @@ public class CalculatedPropertyTests : IDisposable
 		else
 			channel.BatchExportSize.Should().Be(maxInFlight / expectedConcurrency);
 
-		// drain size is max'ed out at 100_000
+		// drain size is maxed out at 100_000
 		channel.DrainSize.Should().Be(Math.Min(100_000, drainSize));
 
 	}
