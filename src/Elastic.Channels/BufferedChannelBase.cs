@@ -424,9 +424,9 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// <inheritdoc cref="object.ToString"/>>
 	public override string ToString()
 	{
+		if (DiagnosticsListener == null) return base.ToString();
 		var sb = new StringBuilder();
-		if (DiagnosticsListener != null)
-			sb.AppendLine(DiagnosticsListener.ToString());
+		sb.AppendLine(DiagnosticsListener.ToString());
 		sb.AppendLine($"{nameof(InflightEvents)}: {InflightEvents:N0}");
 		sb.AppendLine($"{nameof(BufferOptions.InboundBufferMaxSize)}: {BufferOptions.InboundBufferMaxSize:N0}");
 		sb.AppendLine($"{nameof(BatchExportOperations)}: {BatchExportOperations:N0}");

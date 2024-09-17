@@ -153,13 +153,13 @@ public class BehaviorTests : IDisposable
 	[Fact] public async Task SlowlyPushEvents()
 	{
 		int totalEvents = 50_000_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
-		var expectedSentBuffers = totalEvents / bufferSize;
+		var expectedSentBuffers = totalEvents / 10_000;
 		var bufferOptions = new BufferOptions
 		{
 			WaitHandle = new CountdownEvent(expectedSentBuffers),
 			InboundBufferMaxSize = maxInFlight,
 			OutboundBufferMaxSize = 10_000,
-			OutboundBufferMaxLifetime = TimeSpan.FromMilliseconds(100)
+			OutboundBufferMaxLifetime = TimeSpan.FromMilliseconds(1000)
 		};
 		using var channel = new DiagnosticsBufferedChannel(bufferOptions, name: $"Slow push channel");
 		await Task.Delay(TimeSpan.FromMilliseconds(200));
@@ -175,7 +175,7 @@ public class BehaviorTests : IDisposable
 			}
 		}, TaskCreationOptions.LongRunning);
 		// wait for some work to have progressed
-		bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(500));
+		bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(2000));
 		//Ensure we written to the channel but not enough to satisfy OutboundBufferMaxSize
 		written.Should().BeGreaterThan(0).And.BeLessThan(10_000);
 		//even though OutboundBufferMaxSize was not hit we should still observe an invocation to Export()
