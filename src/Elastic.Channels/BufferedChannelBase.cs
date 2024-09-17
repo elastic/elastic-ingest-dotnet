@@ -162,6 +162,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	private Channel<TEvent> InChannel { get; }
 	private BufferOptions BufferOptions => Options.BufferOptions;
 
+	private long _outstandingOperations = 0;
+	/// <summary>
+	///
+	/// </summary>
+	public long OutstandingOperations => _outstandingOperations;
+
 	internal InboundBuffer<TEvent> InboundBuffer { get; }
 
 	/// <inheritdoc cref="ChannelWriter{T}.WaitToWriteAsync"/>
@@ -175,6 +181,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		if (InChannel.Writer.TryWrite(item))
 		{
+			Interlocked.Increment(ref _outstandingOperations);
 			_callbacks.PublishToInboundChannelCallback?.Invoke();
 			return true;
 		}
@@ -199,26 +206,34 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// <inheritdoc cref="IBufferedChannel{TEvent}.TryWriteMany"/>
 	public bool TryWriteMany(IEnumerable<TEvent> events)
 	{
-		var written = true;
+		var allWritten = true;
 
 		foreach (var @event in events)
 		{
-			written = TryWrite(@event);
+			var written = TryWrite(@event);
+			if (!written) allWritten = written;
 		}
 
-		return written;
+		return allWritten;
 	}
 
 	/// <inheritdoc cref="ChannelWriter{T}.WaitToWriteAsync"/>
 	public virtual async Task<bool> WaitToWriteAsync(TEvent item, CancellationToken ctx = default)
 	{
 		ctx = ctx == default ? TokenSource.Token : ctx;
+
+		// small interop to protect inbound task from cpu stealing
+		if (_outstandingOperations % BufferOptions.OutboundBufferMaxSize / 10 == 0)
+			await Task.Delay(TimeSpan.FromMilliseconds(1), ctx).ConfigureAwait(false);
+
 		if (await InChannel.Writer.WaitToWriteAsync(ctx).ConfigureAwait(false) &&
 			InChannel.Writer.TryWrite(item))
 		{
+			Interlocked.Increment(ref _outstandingOperations);
 			_callbacks.PublishToInboundChannelCallback?.Invoke();
 			return true;
 		}
+
 		_callbacks.PublishToInboundChannelFailureCallback?.Invoke();
 		return false;
 	}
@@ -323,6 +338,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			while (InboundBuffer.Count < maxQueuedMessages && InChannel.Reader.TryRead(out var item))
 			{
 				InboundBuffer.Add(item);
+				Interlocked.Decrement(ref _outstandingOperations);
 
 				if (InboundBuffer.DurationSinceFirstWaitToRead >= maxInterval)
 					break;

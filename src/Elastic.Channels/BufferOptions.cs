@@ -25,13 +25,22 @@ public class BufferOptions
 	/// </summary>
 	public int OutboundBufferMaxSize { get; set; } = 1_000;
 
+	private TimeSpan _outboundBufferMaxLifetime = TimeSpan.FromSeconds(5);
+	private readonly TimeSpan _outboundBufferMinLifetime = TimeSpan.FromSeconds(1);
+
+
 	/// <summary>
 	/// The maximum lifetime of a buffer to export to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>.
 	/// If a buffer is older then the configured <see cref="OutboundBufferMaxLifetime"/> it will be flushed to
 	/// <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/> regardless of it's current size
 	/// <para>Defaults to <c>5 seconds</c></para>
+	/// <para>Any value less than <c>1 second</c> will be rounded back up to <c>1 second</c></para>
 	/// </summary>
-	public TimeSpan OutboundBufferMaxLifetime { get; set; } = TimeSpan.FromSeconds(5);
+	public TimeSpan OutboundBufferMaxLifetime
+	{
+		get => _outboundBufferMaxLifetime;
+		set => _outboundBufferMaxLifetime = value >= _outboundBufferMinLifetime ? value : _outboundBufferMaxLifetime;
+	}
 
 	/// <summary>
 	/// The maximum number of consumers allowed to poll for new events on the channel.
