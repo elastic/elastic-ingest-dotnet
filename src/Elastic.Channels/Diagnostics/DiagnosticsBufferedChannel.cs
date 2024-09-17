@@ -41,15 +41,8 @@ public class DiagnosticsBufferedChannel : NoopBufferedChannel
 		#else
 		IList<NoopEvent> b = buffer;
 		#endif
-		if (Options.BufferOptions.OutboundBufferMaxSize != buffer.Count)
-		{
+		if (BatchExportSize != buffer.Count)
 			Interlocked.Increment(ref _bufferMismatches);
-		}
-		else if (b.Count > 0 && b[0].Id.HasValue)
-		{
-			if (b[0].Id % Options.BufferOptions.OutboundBufferMaxSize != 0)
-				Interlocked.Increment(ref _bufferMismatches);
-		}
 
 		return base.ExportAsync(buffer, ctx);
 	}

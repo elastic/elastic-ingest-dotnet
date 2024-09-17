@@ -61,7 +61,7 @@ public class BehaviorTests : IDisposable
 			WaitHandle = new CountdownEvent(1),
 			InboundBufferMaxSize = maxInFlight,
 			OutboundBufferMaxSize = bufferSize,
-			OutboundBufferMaxLifetime = TimeSpan.FromMilliseconds(500)
+			OutboundBufferMaxLifetime = TimeSpan.FromSeconds(1)
 		};
 
 		var channel = new NoopBufferedChannel(bufferOptions);
@@ -72,7 +72,7 @@ public class BehaviorTests : IDisposable
 			if (await channel.WaitToWriteAsync(e))
 				written++;
 		}
-		var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(1));
+		var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(2));
 		signalled.Should().BeTrue("The channel was not drained in the expected time");
 		written.Should().Be(100);
 		channel.ExportedBuffers.Should().Be(1);

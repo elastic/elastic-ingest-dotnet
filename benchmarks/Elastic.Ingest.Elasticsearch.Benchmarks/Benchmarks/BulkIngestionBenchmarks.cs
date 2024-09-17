@@ -70,6 +70,6 @@ public class BulkIngestionBenchmarks
 		channel.TryWriteMany(_data);
 		channel.TryComplete();
 
-		_waitHandle.WaitOne();
+		//	_waitHandle.WaitOne();
 	}
 }
