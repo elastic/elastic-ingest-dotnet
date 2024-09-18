@@ -47,7 +47,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	/// <summary>
 	/// The URL for the bulk request.
 	/// </summary>
-	protected virtual string BulkUrl => "/_bulk";
+	protected virtual string BulkUrl => "_bulk";
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryAllItems"/>
 	protected override bool RetryAllItems(BulkResponse response) => response.ApiCallDetails.HttpStatusCode == 429;
