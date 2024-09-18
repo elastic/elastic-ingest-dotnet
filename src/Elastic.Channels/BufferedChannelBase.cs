@@ -209,7 +209,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	public override async ValueTask<bool> WaitToWriteAsync(CancellationToken ctx = default)
 	{
 		if (BufferOptions.BoundedChannelFullMode == BoundedChannelFullMode.Wait && _inflightEvents >= BufferOptions.InboundBufferMaxSize - DrainSize)
-			while (_inflightEvents >= (BufferOptions.InboundBufferMaxSize - DrainSize))
+			for (var i = 0; i < 10 && _inflightEvents >= BufferOptions.InboundBufferMaxSize - DrainSize; i++)
 				await Task.Delay(TimeSpan.FromMilliseconds(100), ctx).ConfigureAwait(false);
 		return await InChannel.Writer.WaitToWriteAsync(ctx).ConfigureAwait(false);
 	}
