@@ -2,6 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System.Threading.Channels;
 using Elastic.Channels;
 using Elastic.Channels.Diagnostics;
 
@@ -13,30 +14,31 @@ Console.CancelKeyPress += (sender, eventArgs) => {
 
 var options = new NoopBufferedChannel.NoopChannelOptions
 {
-	BufferOptions = new BufferOptions()
+	//TrackConcurrency = true,
+	BufferOptions = new BufferOptions
 	{
-		OutboundBufferMaxSize = 10_000,
-		InboundBufferMaxSize = 10_000_000,
+		OutboundBufferMaxLifetime = TimeSpan.Zero,
+		InboundBufferMaxSize = 1_000_000,
+		OutboundBufferMaxSize = 1_000_000
 	},
 	ExportBufferCallback = () => Console.Write("."),
-	ExportExceptionCallback = e => Console.Write("!"),
-	PublishToInboundChannelFailureCallback  = () => Console.Write("I"),
-	PublishToOutboundChannelFailureCallback  = () => Console.Write("O"),
+	ExportExceptionCallback = e => Console.Write("!")
 
 };
+Console.WriteLine("2");
 var channel = new DiagnosticsBufferedChannel(options);
+Console.WriteLine($"Begin: ({channel.OutboundStarted}) {channel.MaxConcurrency} {channel.BatchExportOperations} -> {channel.InflightEvents}");
 await Parallel.ForEachAsync(Enumerable.Range(0, int.MaxValue), new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount, CancellationToken = ctxs.Token }, async (i, ctx) =>
 {
 	var e = new NoopBufferedChannel.NoopEvent { Id = i };
-	var written = false;
-	//Console.Write('.');
-	var ready = await channel.WaitToWriteAsync(ctx);
-	if (ready) written = channel.TryWrite(e);
-	if (!written)
+	if (await channel.WaitToWriteAsync(e))
 	{
-		Console.WriteLine();
+
+	}
+
+	if (i % 10_000 == 0)
+	{
+		Console.Clear();
 		Console.WriteLine(channel);
-		Console.WriteLine(i);
-		Environment.Exit(1);
 	}
 });

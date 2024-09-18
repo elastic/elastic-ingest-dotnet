@@ -19,7 +19,7 @@ using Elastic.Ingest.Elasticsearch.Benchmarks.Benchmarks;
 
 //var bm = new BulkIngestion();
 //bm.Setup();
-//await bm.BulkAllAsync();
+//await bm.BulkAllAsync()
 //Console.WriteLine("DONE");
 
 var bm = new BulkRequestCreationWithFixedIndexNameBenchmarks();

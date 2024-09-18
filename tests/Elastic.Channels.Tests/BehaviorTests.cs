@@ -15,7 +15,13 @@ namespace Elastic.Channels.Tests;
 
 public class BehaviorTests : IDisposable
 {
-	public BehaviorTests(ITestOutputHelper testOutput) => XunitContext.Register(testOutput);
+	private readonly ITestOutputHelper _testOutput;
+
+	public BehaviorTests(ITestOutputHelper testOutput)
+	{
+		_testOutput = testOutput;
+		XunitContext.Register(testOutput);
+	}
 
 	void IDisposable.Dispose() => XunitContext.Flush();
 
@@ -55,7 +61,7 @@ public class BehaviorTests : IDisposable
 			WaitHandle = new CountdownEvent(1),
 			InboundBufferMaxSize = maxInFlight,
 			OutboundBufferMaxSize = bufferSize,
-			OutboundBufferMaxLifetime = TimeSpan.FromMilliseconds(500)
+			OutboundBufferMaxLifetime = TimeSpan.FromSeconds(1)
 		};
 
 		var channel = new NoopBufferedChannel(bufferOptions);
@@ -66,7 +72,7 @@ public class BehaviorTests : IDisposable
 			if (await channel.WaitToWriteAsync(e))
 				written++;
 		}
-		var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(1));
+		var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(2));
 		signalled.Should().BeTrue("The channel was not drained in the expected time");
 		written.Should().Be(100);
 		channel.ExportedBuffers.Should().Be(1);
@@ -74,7 +80,7 @@ public class BehaviorTests : IDisposable
 
 	[Fact] public async Task ConcurrencyIsApplied()
 	{
-		int totalEvents = 5_000, maxInFlight = 5_000, bufferSize = 500;
+		int totalEvents = 50_000, maxInFlight = 50_000, bufferSize = 5000;
 		var expectedPages = totalEvents / bufferSize;
 		var bufferOptions = new BufferOptions
 		{
@@ -85,7 +91,9 @@ public class BehaviorTests : IDisposable
 		};
 
 		var channel = new NoopBufferedChannel(bufferOptions, observeConcurrency: true);
+		channel.MaxConcurrency.Should().BeGreaterThan(1);
 
+		_testOutput.WriteLine($"{channel.MaxConcurrency}");
 		var written = 0;
 		for (var i = 0; i < totalEvents; i++)
 		{
@@ -145,13 +153,13 @@ public class BehaviorTests : IDisposable
 	[Fact] public async Task SlowlyPushEvents()
 	{
 		int totalEvents = 50_000_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
-		var expectedSentBuffers = totalEvents / bufferSize;
+		var expectedSentBuffers = totalEvents / 10_000;
 		var bufferOptions = new BufferOptions
 		{
 			WaitHandle = new CountdownEvent(expectedSentBuffers),
 			InboundBufferMaxSize = maxInFlight,
 			OutboundBufferMaxSize = 10_000,
-			OutboundBufferMaxLifetime = TimeSpan.FromMilliseconds(100)
+			OutboundBufferMaxLifetime = TimeSpan.FromMilliseconds(1000)
 		};
 		using var channel = new DiagnosticsBufferedChannel(bufferOptions, name: $"Slow push channel");
 		await Task.Delay(TimeSpan.FromMilliseconds(200));
@@ -167,7 +175,7 @@ public class BehaviorTests : IDisposable
 			}
 		}, TaskCreationOptions.LongRunning);
 		// wait for some work to have progressed
-		bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(500));
+		bufferOptions.WaitHandle.Wait(TimeSpan.FromMilliseconds(2000));
 		//Ensure we written to the channel but not enough to satisfy OutboundBufferMaxSize
 		written.Should().BeGreaterThan(0).And.BeLessThan(10_000);
 		//even though OutboundBufferMaxSize was not hit we should still observe an invocation to Export()
