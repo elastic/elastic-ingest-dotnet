@@ -20,7 +20,7 @@ public class DataStreamChannelTests : ChannelTestWithSingleDocResponseBase
 
 		var wait = new ManualResetEvent(false);
 
-		using var channel = new DataStreamChannel<TestDocument>(new DataStreamChannelOptions<TestDocument>(_transport)
+		using var channel = new DataStreamChannel<TestDocument>(new DataStreamChannelOptions<TestDocument>(Transport)
 		{
 			BufferOptions = new()
 			{
