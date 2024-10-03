@@ -4,9 +4,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading;
-using System.Threading.Tasks;
 using Elastic.Channels.Buffers;
 using Elastic.Channels.Diagnostics;
 
@@ -31,11 +29,6 @@ public abstract class ChannelOptionsBase<TEvent, TResponse> : IChannelCallbacks<
 
 	/// <summary> Provide an external cancellation token </summary>
 	public CancellationToken? CancellationToken { get; set; }
-
-	/// <summary>
-	/// Optionally provides a custom write implementation to a channel. Concrete channel implementations are not required to adhere to this config
-	/// </summary>
-	public Func<Stream, CancellationToken, TEvent, Task>? WriteEvent { get; set; } = null;
 
 	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.ExportExceptionCallback"/>
 	public Action<Exception>? ExportExceptionCallback { get; set; }
