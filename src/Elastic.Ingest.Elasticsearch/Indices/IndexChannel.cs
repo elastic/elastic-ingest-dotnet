@@ -15,7 +15,7 @@ namespace Elastic.Ingest.Elasticsearch.Indices;
 /// </summary>
 public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChannelOptions<TEvent>>
 {
-	//private readonly bool _skipIndexNameOnOperations = false;
+	private readonly bool _skipIndexName;
 	private readonly string _url;
 
 	/// <inheritdoc cref="IndexChannel{TEvent}"/>
@@ -31,7 +31,7 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 		if (string.Format(Options.IndexFormat, DateTimeOffset.Now).Equals(Options.IndexFormat, StringComparison.Ordinal))
 		{
 			_url = $"{Options.IndexFormat}/{base.BulkUrl}";
-			//_skipIndexNameOnOperations = true;
+			_skipIndexName = true;
 		}
 
 		TemplateName = string.Format(Options.IndexFormat, "template");
@@ -41,13 +41,37 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkUrl"/>
 	protected override string BulkUrl => _url;
 
-	// TODO implement
-
 	/// <inheritdoc cref="GetIndexOp"/>
-	protected override IndexOp GetIndexOp(TEvent @event) => IndexOp.IndexNoParams;
+	protected override IndexOp GetIndexOp(TEvent @event)
+	{
+		var indexTime = Options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
+		if (Options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(Options.IndexOffset.Value);
+
+		var index = _skipIndexName ? string.Empty : string.Format(Options.IndexFormat, indexTime);
+
+		var id = Options.BulkOperationIdLookup?.Invoke(@event);
+		if (string.IsNullOrWhiteSpace(index) && string.IsNullOrWhiteSpace(id))
+			return Options.OperationMode == OperationMode.Index
+				? IndexOp.IndexNoParams
+				: IndexOp.CreateNoParams;
+
+		return Options.OperationMode == OperationMode.Index
+			? IndexOp.Index
+			: IndexOp.Create;
+	}
 
 	/// <inheritdoc cref="MutateHeader"/>
-	protected override void MutateHeader(ref readonly BulkHeader header) => throw new NotImplementedException();
+	protected override void MutateHeader(TEvent @event, ref BulkHeader header)
+	{
+		var indexTime = Options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
+		if (Options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(Options.IndexOffset.Value);
+
+		var index = _skipIndexName ? string.Empty : string.Format(Options.IndexFormat, indexTime);
+		header.Index = index;
+
+		var id = Options.BulkOperationIdLookup?.Invoke(@event);
+		header.Id = id;
+	}
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName { get; }

@@ -6,18 +6,13 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Elastic.Channels;
-using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
-using Elastic.Transport;
-using Elastic.Transport.Products.Elasticsearch;
 using static Elastic.Ingest.Elasticsearch.ElasticsearchChannelStatics;
 
 namespace Elastic.Ingest.Elasticsearch;
@@ -40,9 +35,14 @@ public enum IndexOp
 }
 
 /// <summary> TODO </summary>
-public readonly struct BulkHeader
+public struct BulkHeader
 {
 
+	/// <summary> TODO </summary>
+	public string Index { get; set; }
+
+	/// <summary> TODO </summary>
+	public string? Id { get; set; }
 }
 
 /// <summary>
@@ -50,66 +50,15 @@ public readonly struct BulkHeader
 /// <para>Coordinates most of the sending to- and bootstrapping of Elasticsearch</para>
 /// </summary>
 public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
-	: TransportChannelBase<TChannelOptions, TEvent, BulkResponse, BulkResponseItem>
 	where TChannelOptions : ElasticsearchChannelOptionsBase<TEvent>
 {
-
-#if NETSTANDARD2_1_OR_GREATER
-	/// <summary>
-	/// Get the NDJSON request body bytes for a page of <typeparamref name="TEvent"/> events.
-	/// </summary>
-	/// <param name="page">A page of <typeparamref name="TEvent"/> events.</param>
-	/// <param name="options">The <see cref="ElasticsearchChannelOptionsBase{TEvent}"/> for the channel where the request will be written.</param>
-	/// <param name="createHeaderFactory">A function which takes an instance of <typeparamref name="TEvent"/> and produces the operation header containing the action and optional meta data.</param>
-	/// <returns>A <see cref="ReadOnlyMemory{T}"/> of <see cref="byte"/> representing the entire request body in NDJSON format.</returns>
-	public ReadOnlyMemory<byte> GetBytes(ArraySegment<TEvent> page,
-		ElasticsearchChannelOptionsBase<TEvent> options, Func<TEvent, BulkOperationHeader> createHeaderFactory)
-	{
-		// ArrayBufferWriter inserts comma's when serializing multiple times
-		// Hence the multiple writer.Resets() as advised on this feature request
-		// https://github.com/dotnet/runtime/issues/82314
-		var bufferWriter = new ArrayBufferWriter<byte>();
-		using var writer = new Utf8JsonWriter(bufferWriter, WriterOptions);
-		foreach (var @event in page.AsSpan())
-		{
-			var indexHeader = createHeaderFactory(@event);
-			JsonSerializer.Serialize(writer, indexHeader, indexHeader.GetType(), SerializerOptions);
-			bufferWriter.Write(LineFeed);
-			writer.Reset();
-
-			if (indexHeader is UpdateOperation)
-			{
-				bufferWriter.Write(DocUpdateHeaderStart);
-				writer.Reset();
-			}
-
-			if (options.EventWriter?.WriteToArrayBuffer != null)
-				options.EventWriter.WriteToArrayBuffer(bufferWriter, @event);
-			else
-				JsonSerializer.Serialize(writer, @event, SerializerOptions);
-			writer.Reset();
-
-			if (indexHeader is UpdateOperation)
-			{
-				bufferWriter.Write(DocUpdateHeaderEnd);
-				writer.Reset();
-			}
-
-			bufferWriter.Write(LineFeed);
-			writer.Reset();
-		}
-		return bufferWriter.WrittenMemory;
-	}
-#endif
-
 	/// <summary> TODO </summary>
 	protected abstract IndexOp GetIndexOp(TEvent @event);
 
-	/// <summary>
-	///
-	/// </summary>
+	/// <summary> </summary>
+	/// <param name="event"></param>
 	/// <param name="header"></param>
-	protected abstract void MutateHeader(ref readonly BulkHeader header);
+	protected abstract void MutateHeader(TEvent @event, ref BulkHeader header);
 
 	/// <summary>
 	/// Asynchronously write the NDJSON request body for a page of <typeparamref name="TEvent"/> events to <see cref="Stream"/>.
@@ -150,7 +99,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 				case IndexOp.Delete:
 				case IndexOp.Update:
 					var header = new BulkHeader();
-					MutateHeader(ref header);
+					MutateHeader(@event, ref header);
 					await SerializeHeaderAsync(stream, ref header, SerializerOptions, ctx).ConfigureAwait(false);
 					break;
 			}

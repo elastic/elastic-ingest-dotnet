@@ -33,7 +33,7 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 	protected override IndexOp GetIndexOp(TEvent @event) => IndexOp.CreateNoParams;
 
 	/// <inheritdoc cref="MutateHeader"/>
-	protected override void MutateHeader(ref readonly BulkHeader header) { }
+	protected override void MutateHeader(TEvent @event, ref BulkHeader header) { }
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName => Options.DataStream.GetTemplateName();

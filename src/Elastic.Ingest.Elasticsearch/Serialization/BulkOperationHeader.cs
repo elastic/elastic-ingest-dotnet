@@ -8,13 +8,6 @@ using System.Text.Json.Serialization;
 
 namespace Elastic.Ingest.Elasticsearch.Serialization;
 
-/// <summary>
-///
-/// </summary>
-public struct BulkOperationHeader2
-{
-}
-
 /// <summary> Represents the _bulk operation meta header </summary>
 public abstract class BulkOperationHeader
 {
