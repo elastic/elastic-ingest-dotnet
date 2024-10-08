@@ -3,6 +3,8 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
 using Elastic.Transport;
@@ -21,5 +23,9 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 	/// Export option, Optionally provide a custom write implementation for <typeparamref name="TEvent"/>
 	/// </summary>
 	public IElasticsearchEventWriter<TEvent>? EventWriter { get; set; }
+
+	/// <summary> Optionally set dynamic templates for event</summary>
+	public Func<TEvent, IDictionary<string, string>>? DynamicTemplates { get; set; }
+
 
 }

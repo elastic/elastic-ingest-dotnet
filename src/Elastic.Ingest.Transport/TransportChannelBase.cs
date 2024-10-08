@@ -23,12 +23,12 @@ public abstract class TransportChannelBase<TChannelOptions, TEvent, TResponse, T
 	where TResponse : TransportResponse, new()
 {
 	/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
-	protected TransportChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners)
-		: base(options, callbackListeners) { }
+	protected TransportChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners, string diagnosticsName)
+		: base(options, callbackListeners, diagnosticsName) { }
 
 	/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
-	protected TransportChannelBase(TChannelOptions options)
-		: base(options) { }
+	protected TransportChannelBase(TChannelOptions options, string diagnosticsName)
+		: base(options, diagnosticsName) { }
 
 	/// <summary> Implement sending the current <paramref name="page"/> of the buffer to the output. </summary>
 	/// <param name="transport"></param>

@@ -10,7 +10,6 @@ using System.Threading.Tasks;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Serialization;
-using Elastic.Ingest.Transport;
 
 namespace Elastic.Ingest.Elasticsearch;
 
@@ -19,7 +18,6 @@ namespace Elastic.Ingest.Elasticsearch;
 /// <para>Coordinates most of the sending to- and bootstrapping of Elasticsearch</para>
 /// </summary>
 public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
-	: TransportChannelBase<TChannelOptions, TEvent, BulkResponse, BulkResponseItem>
 	where TChannelOptions : ElasticsearchChannelOptionsBase<TEvent>
 {
 	private static ReadOnlySpan<byte> PlainIndexBytesSpan => """

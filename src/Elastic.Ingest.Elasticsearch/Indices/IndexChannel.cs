@@ -22,7 +22,8 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 	public IndexChannel(IndexChannelOptions<TEvent> options) : this(options, null) { }
 
 	/// <inheritdoc cref="IndexChannel{TEvent}"/>
-	public IndexChannel(IndexChannelOptions<TEvent> options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners) : base(options, callbackListeners)
+	public IndexChannel(IndexChannelOptions<TEvent> options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners, string? diagnosticsName = null)
+		: base(options, callbackListeners, diagnosticsName ?? nameof(IndexChannel<TEvent>))
 	{
 		_url = base.BulkUrl;
 

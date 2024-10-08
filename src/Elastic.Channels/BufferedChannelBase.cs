@@ -122,26 +122,26 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	internal InboundBuffer<TEvent> InboundBuffer { get; }
 
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
-	protected BufferedChannelBase(TChannelOptions options) : this(options, null) { }
+	protected BufferedChannelBase(TChannelOptions options, string diagnosticsName) : this(options, null, diagnosticsName) { }
 
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
-	protected BufferedChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners)
+	protected BufferedChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners, string diagnosticsName)
 	{
 		TokenSource = options.CancellationToken.HasValue
 			? CancellationTokenSource.CreateLinkedTokenSource(options.CancellationToken.Value)
 			: new CancellationTokenSource();
 		Options = options;
 
-		var listeners = callbackListeners == null ? new[] { Options } : callbackListeners.Concat(new[] { Options }).ToArray();
+		var listeners = callbackListeners == null ? [Options] : callbackListeners.Concat([Options]).ToArray();
 		DiagnosticsListener = listeners
-			.Select(l => (l is IChannelDiagnosticsListener c) ? c : null)
-			.FirstOrDefault(e => e != null);
+			.OfType<IChannelDiagnosticsListener?>()
+			.FirstOrDefault();
 		if (DiagnosticsListener == null && !options.DisableDiagnostics)
 		{
 			// if no debug listener was already provided but was requested explicitly create one.
-			var l = new ChannelDiagnosticsListener<TEvent, TResponse>(GetType().Name);
+			var l = new ChannelDiagnosticsListener<TEvent, TResponse>(diagnosticsName);
 			DiagnosticsListener = l;
-			listeners = listeners.Concat(new[] { l }).ToArray();
+			listeners = listeners.Concat([l]).ToArray();
 		}
 		_callbacks = new ChannelCallbackInvoker<TEvent, TResponse>(listeners);
 

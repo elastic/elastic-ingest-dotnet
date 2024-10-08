@@ -29,11 +29,17 @@ public class SubPathTests : ChannelTestWithSingleDocResponseBase
 		ApiCallDetails callDetails = null;
 		var wait = new ManualResetEvent(false);
 
+		Exception exception = null;
 		var options = new IndexChannelOptions<TestDocument>(Transport)
 		{
 			BufferOptions = new()
 			{
 				OutboundBufferMaxSize = 1
+			},
+			ExportExceptionCallback = e =>
+			{
+				exception = e;
+				wait.Set();
 			},
 			ExportResponseCallback = (response, _) =>
 			{
@@ -51,7 +57,9 @@ public class SubPathTests : ChannelTestWithSingleDocResponseBase
 		using var channel = new IndexChannel<TestDocument>(options);
 
 		channel.TryWrite(new TestDocument());
-		wait.WaitOne();
+		var signalled = wait.WaitOne(TimeSpan.FromSeconds(5));
+		signalled.Should().BeTrue("because ExportResponseCallback should have been called");
+		exception.Should().BeNull();
 
 		callDetails.Should().NotBeNull();
 		callDetails.Uri.AbsolutePath.Should().Be(expectedUrl);

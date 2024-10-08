@@ -10,7 +10,6 @@ namespace Elastic.Ingest.Elasticsearch.Serialization;
 /// <summary> TODO </summary>
 public struct BulkHeader
 {
-
 	/// <summary> The index to write to, never set when writing using <see cref="DataStreamChannel{TEvent}"/> </summary>
 	public string? Index { get; set; }
 
