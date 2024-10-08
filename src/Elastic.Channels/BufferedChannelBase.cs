@@ -310,7 +310,11 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			}
 		}
 		await Task.WhenAll(_taskList).ConfigureAwait(false);
+#if NET8_0_OR_GREATER
+		await _exitCancelSource.CancelAsync().ConfigureAwait(false);
+#else
 		_exitCancelSource.Cancel();
+#endif
 		_callbacks.OutboundChannelExitedCallback?.Invoke();
 	}
 
@@ -422,7 +426,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	}
 
 	/// <inheritdoc cref="object.ToString"/>>
-	public override string ToString()
+	public override string? ToString()
 	{
 		if (DiagnosticsListener == null) return base.ToString();
 		var sb = new StringBuilder();

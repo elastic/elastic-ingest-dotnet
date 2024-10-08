@@ -140,7 +140,10 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 			switch (op)
 			{
 				case IndexOp.IndexNoParams:
-					await SerializePlainIndexHeaderAsync(stream, ctx).ConfigureAwait(false);
+					await ElasticsearchChannelBase<TEvent, TChannelOptions>.SerializePlainIndexHeaderAsync(stream, ctx).ConfigureAwait(false);
+					break;
+				case IndexOp.CreateNoParams:
+					await SerializePlainCreateHeaderAsync(stream, ctx).ConfigureAwait(false);
 					break;
 				case IndexOp.Index:
 				case IndexOp.Create:
@@ -150,8 +153,6 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 					MutateHeader(ref header);
 					await SerializeHeaderAsync(stream, ref header, SerializerOptions, ctx).ConfigureAwait(false);
 					break;
-
-
 			}
 
 			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
