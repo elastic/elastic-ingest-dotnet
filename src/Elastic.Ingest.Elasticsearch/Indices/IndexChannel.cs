@@ -15,7 +15,7 @@ namespace Elastic.Ingest.Elasticsearch.Indices;
 /// </summary>
 public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChannelOptions<TEvent>>
 {
-	private readonly bool _skipIndexNameOnOperations = false;
+	//private readonly bool _skipIndexNameOnOperations = false;
 	private readonly string _url;
 
 	/// <inheritdoc cref="IndexChannel{TEvent}"/>
@@ -31,7 +31,7 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 		if (string.Format(Options.IndexFormat, DateTimeOffset.Now).Equals(Options.IndexFormat, StringComparison.Ordinal))
 		{
 			_url = $"{Options.IndexFormat}/{base.BulkUrl}";
-			_skipIndexNameOnOperations = true;
+			//_skipIndexNameOnOperations = true;
 		}
 
 		TemplateName = string.Format(Options.IndexFormat, "template");
@@ -41,8 +41,13 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkUrl"/>
 	protected override string BulkUrl => _url;
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
-	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent @event) => BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(@event, Options, _skipIndexNameOnOperations);
+	// TODO implement
+
+	/// <inheritdoc cref="GetIndexOp"/>
+	protected override IndexOp GetIndexOp(TEvent @event) => IndexOp.IndexNoParams;
+
+	/// <inheritdoc cref="MutateHeader"/>
+	protected override void MutateHeader(ref readonly BulkHeader header) => throw new NotImplementedException();
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName { get; }

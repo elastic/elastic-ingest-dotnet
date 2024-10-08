@@ -2,36 +2,67 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
-#if NETSTANDARD2_1_OR_GREATER
-using System.Buffers;
-#else
-using System.Collections.Generic;
-#endif
 using System;
+using System.Buffers;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Elastic.Channels;
+using Elastic.Channels.Diagnostics;
+using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Indices;
+using Elastic.Ingest.Elasticsearch.Serialization;
+using Elastic.Ingest.Transport;
+using Elastic.Transport;
+using Elastic.Transport.Products.Elasticsearch;
 using static Elastic.Ingest.Elasticsearch.ElasticsearchChannelStatics;
 
-namespace Elastic.Ingest.Elasticsearch.Serialization;
+namespace Elastic.Ingest.Elasticsearch;
+
+/// <summary> TODO </summary>
+public enum IndexOp
+{
+	/// <summary> </summary>
+	Index,
+	/// <summary> </summary>
+	IndexNoParams,
+	/// <summary> </summary>
+	Create,
+	/// <summary> </summary>
+	CreateNoParams,
+	/// <summary> </summary>
+	Delete,
+	/// <summary> </summary>
+	Update,
+}
+
+/// <summary> TODO </summary>
+public readonly struct BulkHeader
+{
+
+}
 
 /// <summary>
-/// Provides static factory methods from producing request data for bulk requests.
+/// An abstract base class for both <see cref="DataStreamChannel{TEvent}"/> and <see cref="IndexChannel{TEvent}"/>
+/// <para>Coordinates most of the sending to- and bootstrapping of Elasticsearch</para>
 /// </summary>
-public static class BulkRequestDataFactory
+public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
+	: TransportChannelBase<TChannelOptions, TEvent, BulkResponse, BulkResponseItem>
+	where TChannelOptions : ElasticsearchChannelOptionsBase<TEvent>
 {
+
 #if NETSTANDARD2_1_OR_GREATER
 	/// <summary>
 	/// Get the NDJSON request body bytes for a page of <typeparamref name="TEvent"/> events.
 	/// </summary>
-	/// <typeparam name="TEvent">The type for the event being ingested.</typeparam>
 	/// <param name="page">A page of <typeparamref name="TEvent"/> events.</param>
 	/// <param name="options">The <see cref="ElasticsearchChannelOptionsBase{TEvent}"/> for the channel where the request will be written.</param>
 	/// <param name="createHeaderFactory">A function which takes an instance of <typeparamref name="TEvent"/> and produces the operation header containing the action and optional meta data.</param>
 	/// <returns>A <see cref="ReadOnlyMemory{T}"/> of <see cref="byte"/> representing the entire request body in NDJSON format.</returns>
-	public static ReadOnlyMemory<byte> GetBytes<TEvent>(ArraySegment<TEvent> page,
+	public ReadOnlyMemory<byte> GetBytes(ArraySegment<TEvent> page,
 		ElasticsearchChannelOptionsBase<TEvent> options, Func<TEvent, BulkOperationHeader> createHeaderFactory)
 	{
 		// ArrayBufferWriter inserts comma's when serializing multiple times
@@ -71,19 +102,25 @@ public static class BulkRequestDataFactory
 	}
 #endif
 
+	/// <summary> TODO </summary>
+	protected abstract IndexOp GetIndexOp(TEvent @event);
+
+	/// <summary>
+	///
+	/// </summary>
+	/// <param name="header"></param>
+	protected abstract void MutateHeader(ref readonly BulkHeader header);
+
 	/// <summary>
 	/// Asynchronously write the NDJSON request body for a page of <typeparamref name="TEvent"/> events to <see cref="Stream"/>.
 	/// </summary>
-	/// <typeparam name="TEvent">The type for the event being ingested.</typeparam>
 	/// <param name="page">A page of <typeparamref name="TEvent"/> events.</param>
 	/// <param name="stream">The target <see cref="Stream"/> for the request.</param>
 	/// <param name="options">The <see cref="ElasticsearchChannelOptionsBase{TEvent}"/> for the channel where the request will be written.</param>
-	/// <param name="createHeaderFactory">A function which takes an instance of <typeparamref name="TEvent"/> and produces the operation header containing the action and optional meta data.</param>
 	/// <param name="ctx">The cancellation token to cancel operation.</param>
 	/// <returns></returns>
-	public static async Task WriteBufferToStreamAsync<TEvent>(ArraySegment<TEvent> page, Stream stream,
-		ElasticsearchChannelOptionsBase<TEvent> options, Func<TEvent, BulkOperationHeader> createHeaderFactory,
-		CancellationToken ctx = default)
+	public async Task WriteBufferToStreamAsync(
+		ArraySegment<TEvent> page, Stream stream, ElasticsearchChannelOptionsBase<TEvent> options, CancellationToken ctx = default)
 	{
 #if NETSTANDARD2_1_OR_GREATER
 		var items = page;
@@ -99,12 +136,27 @@ public static class BulkRequestDataFactory
 			var @event = items[i];
 			if (@event == null) continue;
 
-			var indexHeader = createHeaderFactory(@event);
-			await JsonSerializer.SerializeAsync(stream, indexHeader, indexHeader.GetType(), SerializerOptions, ctx)
-				.ConfigureAwait(false);
+			var op = GetIndexOp(@event);
+			switch (op)
+			{
+				case IndexOp.IndexNoParams:
+					await SerializePlainIndexHeaderAsync(stream, ctx).ConfigureAwait(false);
+					break;
+				case IndexOp.Index:
+				case IndexOp.Create:
+				case IndexOp.Delete:
+				case IndexOp.Update:
+					var header = new BulkHeader();
+					MutateHeader(ref header);
+					await SerializeHeaderAsync(stream, ref header, SerializerOptions, ctx).ConfigureAwait(false);
+					break;
+
+
+			}
+
 			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
 
-			if (indexHeader is UpdateOperation)
+			if (op == IndexOp.Update)
 				await stream.WriteAsync(DocUpdateHeaderStart, 0, DocUpdateHeaderStart.Length, ctx).ConfigureAwait(false);
 
 			if (options.EventWriter?.WriteToStreamAsync != null)
@@ -113,7 +165,7 @@ public static class BulkRequestDataFactory
 				await JsonSerializer.SerializeAsync(stream, @event, SerializerOptions, ctx)
 					.ConfigureAwait(false);
 
-			if (indexHeader is UpdateOperation)
+			if (op == IndexOp.Update)
 				await stream.WriteAsync(DocUpdateHeaderEnd, 0, DocUpdateHeaderEnd.Length, ctx).ConfigureAwait(false);
 
 			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
@@ -123,12 +175,11 @@ public static class BulkRequestDataFactory
 	/// <summary>
 	/// Create the bulk operation header with the appropriate action and meta data for a bulk request targeting an index.
 	/// </summary>
-	/// <typeparam name="TEvent">The type for the event being ingested.</typeparam>
 	/// <param name="event">The <typeparamref name="TEvent"/> for which the header will be produced.</param>
 	/// <param name="options">The <see cref="IndexChannelOptions{TEvent}"/> for the channel.</param>
 	/// <param name="skipIndexName">Control whether the index name is included in the meta data for the operation.</param>
 	/// <returns>A <see cref="BulkOperationHeader"/> instance.</returns>
-	public static BulkOperationHeader CreateBulkOperationHeaderForIndex<TEvent>(TEvent @event, IndexChannelOptions<TEvent> options,
+	public static BulkOperationHeader CreateBulkOperationHeaderForIndex(TEvent @event, IndexChannelOptions<TEvent> options,
 		bool skipIndexName = false)
 	{
 		var indexTime = options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
@@ -161,4 +212,3 @@ public static class BulkRequestDataFactory
 				: skipIndexName ? new CreateOperation() : new CreateOperation { Index = index };
 	}
 }
-
