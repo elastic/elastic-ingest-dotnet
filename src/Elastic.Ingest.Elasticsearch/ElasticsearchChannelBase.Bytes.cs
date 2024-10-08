@@ -17,34 +17,6 @@ using static Elastic.Ingest.Elasticsearch.ElasticsearchChannelStatics;
 
 namespace Elastic.Ingest.Elasticsearch;
 
-/// <summary> TODO </summary>
-public enum IndexOp
-{
-	/// <summary> </summary>
-	Index,
-	/// <summary> </summary>
-	IndexNoParams,
-	/// <summary> </summary>
-	Create,
-	/// <summary> </summary>
-	CreateNoParams,
-	/// <summary> </summary>
-	Delete,
-	/// <summary> </summary>
-	Update,
-}
-
-/// <summary> TODO </summary>
-public struct BulkHeader
-{
-
-	/// <summary> TODO </summary>
-	public string Index { get; set; }
-
-	/// <summary> TODO </summary>
-	public string? Id { get; set; }
-}
-
 /// <summary>
 /// An abstract base class for both <see cref="DataStreamChannel{TEvent}"/> and <see cref="IndexChannel{TEvent}"/>
 /// <para>Coordinates most of the sending to- and bootstrapping of Elasticsearch</para>
@@ -53,7 +25,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	where TChannelOptions : ElasticsearchChannelOptionsBase<TEvent>
 {
 	/// <summary> TODO </summary>
-	protected abstract IndexOp GetIndexOp(TEvent @event);
+	protected abstract HeaderSerialization GetIndexOp(TEvent @event);
 
 	/// <summary> </summary>
 	/// <param name="event"></param>
@@ -88,16 +60,16 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 			var op = GetIndexOp(@event);
 			switch (op)
 			{
-				case IndexOp.IndexNoParams:
-					await ElasticsearchChannelBase<TEvent, TChannelOptions>.SerializePlainIndexHeaderAsync(stream, ctx).ConfigureAwait(false);
+				case HeaderSerialization.IndexNoParams:
+					await SerializePlainIndexHeaderAsync(stream, ctx).ConfigureAwait(false);
 					break;
-				case IndexOp.CreateNoParams:
+				case HeaderSerialization.CreateNoParams:
 					await SerializePlainCreateHeaderAsync(stream, ctx).ConfigureAwait(false);
 					break;
-				case IndexOp.Index:
-				case IndexOp.Create:
-				case IndexOp.Delete:
-				case IndexOp.Update:
+				case HeaderSerialization.Index:
+				case HeaderSerialization.Create:
+				case HeaderSerialization.Delete:
+				case HeaderSerialization.Update:
 					var header = new BulkHeader();
 					MutateHeader(@event, ref header);
 					await SerializeHeaderAsync(stream, ref header, SerializerOptions, ctx).ConfigureAwait(false);
@@ -106,7 +78,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 
 			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
 
-			if (op == IndexOp.Update)
+			if (op == HeaderSerialization.Update)
 				await stream.WriteAsync(DocUpdateHeaderStart, 0, DocUpdateHeaderStart.Length, ctx).ConfigureAwait(false);
 
 			if (options.EventWriter?.WriteToStreamAsync != null)
@@ -115,50 +87,10 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 				await JsonSerializer.SerializeAsync(stream, @event, SerializerOptions, ctx)
 					.ConfigureAwait(false);
 
-			if (op == IndexOp.Update)
+			if (op == HeaderSerialization.Update)
 				await stream.WriteAsync(DocUpdateHeaderEnd, 0, DocUpdateHeaderEnd.Length, ctx).ConfigureAwait(false);
 
 			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
 		}
-	}
-
-	/// <summary>
-	/// Create the bulk operation header with the appropriate action and meta data for a bulk request targeting an index.
-	/// </summary>
-	/// <param name="event">The <typeparamref name="TEvent"/> for which the header will be produced.</param>
-	/// <param name="options">The <see cref="IndexChannelOptions{TEvent}"/> for the channel.</param>
-	/// <param name="skipIndexName">Control whether the index name is included in the meta data for the operation.</param>
-	/// <returns>A <see cref="BulkOperationHeader"/> instance.</returns>
-	public static BulkOperationHeader CreateBulkOperationHeaderForIndex(TEvent @event, IndexChannelOptions<TEvent> options,
-		bool skipIndexName = false)
-	{
-		var indexTime = options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
-		if (options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(options.IndexOffset.Value);
-
-		var index = skipIndexName ? string.Empty : string.Format(options.IndexFormat, indexTime);
-
-		var id = options.BulkOperationIdLookup?.Invoke(@event);
-
-		if (options.OperationMode == OperationMode.Index)
-		{
-			return skipIndexName
-				? !string.IsNullOrWhiteSpace(id) ? new IndexOperation { Id = id } : new IndexOperation()
-				: !string.IsNullOrWhiteSpace(id) ? new IndexOperation { Index = index, Id = id } : new IndexOperation { Index = index };
-		}
-
-		if (options.OperationMode == OperationMode.Create)
-		{
-			return skipIndexName
-				? !string.IsNullOrWhiteSpace(id) ? new CreateOperation { Id = id } : new CreateOperation()
-				: !string.IsNullOrWhiteSpace(id) ? new CreateOperation { Index = index, Id = id } : new CreateOperation { Index = index };
-		}
-
-		if (!string.IsNullOrWhiteSpace(id) && id != null && (options.BulkUpsertLookup?.Invoke(@event, id) ?? false))
-			return skipIndexName ? new UpdateOperation { Id = id } : new UpdateOperation { Id = id, Index = index };
-
-		return
-			!string.IsNullOrWhiteSpace(id)
-				? skipIndexName ? new IndexOperation { Id = id } : new IndexOperation { Index = index, Id = id }
-				: skipIndexName ? new CreateOperation() : new CreateOperation { Index = index };
 	}
 }

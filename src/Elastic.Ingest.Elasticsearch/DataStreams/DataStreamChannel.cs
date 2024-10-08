@@ -13,7 +13,6 @@ namespace Elastic.Ingest.Elasticsearch.DataStreams;
 /// <summary> A channel to push messages to Elasticsearch data streams </summary>
 public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataStreamChannelOptions<TEvent>>
 {
-	private readonly CreateOperation _fixedHeader;
 	private readonly string _url;
 
 	/// <inheritdoc cref="DataStreamChannel{TEvent}"/>
@@ -25,12 +24,10 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 		var dataStream = Options.DataStream.ToString();
 
 		_url = $"{dataStream}/{base.BulkUrl}";
-
-		_fixedHeader = new CreateOperation();
 	}
 
 	/// <inheritdoc cref="GetIndexOp"/>
-	protected override IndexOp GetIndexOp(TEvent @event) => IndexOp.CreateNoParams;
+	protected override HeaderSerialization GetIndexOp(TEvent @event) => HeaderSerialization.CreateNoParams;
 
 	/// <inheritdoc cref="MutateHeader"/>
 	protected override void MutateHeader(TEvent @event, ref BulkHeader header) { }

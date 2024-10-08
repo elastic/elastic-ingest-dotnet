@@ -18,7 +18,6 @@ public class BulkRequestCreationForDataStreamBenchmarks
 	private ITransport? _transport;
 	private TransportConfiguration? _transportConfiguration;
 	private StockData[] _data = Array.Empty<StockData>();
-	private readonly BulkOperationHeader _bulkOperationHeader = new CreateOperation();
 
 	public Stream MemoryStream { get; } = new MemoryStream();
 

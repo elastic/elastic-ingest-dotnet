@@ -42,7 +42,7 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 	protected override string BulkUrl => _url;
 
 	/// <inheritdoc cref="GetIndexOp"/>
-	protected override IndexOp GetIndexOp(TEvent @event)
+	protected override HeaderSerialization GetIndexOp(TEvent @event)
 	{
 		var indexTime = Options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
 		if (Options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(Options.IndexOffset.Value);
@@ -52,12 +52,12 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 		var id = Options.BulkOperationIdLookup?.Invoke(@event);
 		if (string.IsNullOrWhiteSpace(index) && string.IsNullOrWhiteSpace(id))
 			return Options.OperationMode == OperationMode.Index
-				? IndexOp.IndexNoParams
-				: IndexOp.CreateNoParams;
+				? HeaderSerialization.IndexNoParams
+				: HeaderSerialization.CreateNoParams;
 
 		return Options.OperationMode == OperationMode.Index
-			? IndexOp.Index
-			: IndexOp.Create;
+			? HeaderSerialization.Index
+			: HeaderSerialization.Create;
 	}
 
 	/// <inheritdoc cref="MutateHeader"/>
