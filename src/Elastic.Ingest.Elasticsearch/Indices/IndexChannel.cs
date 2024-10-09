@@ -7,6 +7,7 @@ using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
+using static Elastic.Ingest.Elasticsearch.Serialization.HeaderSerializationStrategy;
 
 namespace Elastic.Ingest.Elasticsearch.Indices;
 
@@ -42,36 +43,38 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkUrl"/>
 	protected override string BulkUrl => _url;
 
-	/// <inheritdoc cref="GetIndexOp"/>
-	protected override HeaderSerialization GetIndexOp(TEvent @event)
+	/// <inheritdoc cref="EventIndexStrategy"/>
+	protected override (HeaderSerializationStrategy, BulkHeader?) EventIndexStrategy(TEvent @event)
 	{
 		var indexTime = Options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
 		if (Options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(Options.IndexOffset.Value);
 
 		var index = _skipIndexName ? string.Empty : string.Format(Options.IndexFormat, indexTime);
-
 		var id = Options.BulkOperationIdLookup?.Invoke(@event);
-		if (string.IsNullOrWhiteSpace(index) && string.IsNullOrWhiteSpace(id))
+		var templates = Options.DynamicTemplateLookup?.Invoke(@event);
+		var requireAlias = Options.RequireAlias?.Invoke(@event);
+		var listExecutedPipelines = Options.ListExecutedPipelines?.Invoke(@event);
+		if (string.IsNullOrWhiteSpace(index)
+			&& string.IsNullOrWhiteSpace(id)
+			&& templates is null
+			&& requireAlias is null
+			&& listExecutedPipelines is null)
 			return Options.OperationMode == OperationMode.Index
-				? HeaderSerialization.IndexNoParams
-				: HeaderSerialization.CreateNoParams;
+				? (IndexNoParams, null)
+				: (CreateNoParams, null);
 
-		return Options.OperationMode == OperationMode.Index
-			? HeaderSerialization.Index
-			: HeaderSerialization.Create;
-	}
+		var header = new BulkHeader
+		{
+			Id = id,
+			Index = index,
+			DynamicTemplates = templates,
+			RequireAlias = requireAlias,
+			ListExecutedPipelines = listExecutedPipelines
+		};
 
-	/// <inheritdoc cref="MutateHeader"/>
-	protected override void MutateHeader(TEvent @event, ref BulkHeader header)
-	{
-		var indexTime = Options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
-		if (Options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(Options.IndexOffset.Value);
-
-		var index = _skipIndexName ? string.Empty : string.Format(Options.IndexFormat, indexTime);
-		header.Index = index;
-
-		var id = Options.BulkOperationIdLookup?.Invoke(@event);
-		header.Id = id;
+		return (Options.OperationMode == OperationMode.Index
+			? HeaderSerializationStrategy.Index
+			: Create, header);
 	}
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>

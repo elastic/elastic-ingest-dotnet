@@ -29,7 +29,7 @@ public class DataStreamIngestionTests : IntegrationTestBase
 		var options = new DataStreamChannelOptions<TimeSeriesDocument>(Client.Transport)
 		{
 			DataStream = targetDataStream,
-			BufferOptions = new BufferOptions { WaitHandle = slim, OutboundBufferMaxSize = 1 }
+			BufferOptions = new BufferOptions { WaitHandle = slim, OutboundBufferMaxSize = 1 },
 		};
 		var channel = new DataStreamChannel<TimeSeriesDocument>(options);
 

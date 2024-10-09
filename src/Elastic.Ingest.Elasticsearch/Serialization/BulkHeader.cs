@@ -8,17 +8,24 @@ using Elastic.Ingest.Elasticsearch.DataStreams;
 namespace Elastic.Ingest.Elasticsearch.Serialization;
 
 /// <summary> TODO </summary>
-public struct BulkHeader
+public readonly struct BulkHeader
 {
 	/// <summary> The index to write to, never set when writing using <see cref="DataStreamChannel{TEvent}"/> </summary>
-	public string? Index { get; set; }
+	public string? Index { get; init; }
 
 	/// <summary> The id of the object being written, never set when writing using <see cref="DataStreamChannel{TEvent}"/>  </summary>
-	public string? Id { get; set; }
+	public string? Id { get; init; }
 
 	/// <summary> Require <see cref="Index"/> to point to an alias, never set when writing using <see cref="DataStreamChannel{TEvent}"/> </summary>
-	public bool? RequireAlias { get; set; }
+	public bool? RequireAlias { get; init; }
 
-	/// <summary> TODO </summary>
-	public Dictionary<string, string>? DynamicTemplates { get; init; }
+	/// <summary>
+	/// A map from the full name of fields to the name of dynamic templates. Defaults to an empty map. If a name matches a dynamic template,
+	/// then that template will be applied regardless of other match predicates defined in the template. And if a field is already defined
+	/// in the mapping, then this parameter won’t be used.
+	/// </summary>
+	public IDictionary<string, string>? DynamicTemplates { get; init; }
+
+	/// <summary> If true, the response will include the ingest pipelines that were executed. Defaults to false. </summary>
+	public bool? ListExecutedPipelines { get; init; }
 }

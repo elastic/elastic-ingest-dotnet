@@ -37,7 +37,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	private static byte[] PlainCreateBytes => PlainCreateBytesSpan.ToArray();
 #endif
 
-	private Task SerializeHeaderAsync(Stream stream, ref readonly BulkHeader header, JsonSerializerOptions serializerOptions, CancellationToken ctx) =>
+	private Task SerializeHeaderAsync(Stream stream, ref readonly BulkHeader? header, JsonSerializerOptions serializerOptions, CancellationToken ctx) =>
 		throw new NotImplementedException();
 
 

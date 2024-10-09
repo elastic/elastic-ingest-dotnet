@@ -5,7 +5,7 @@
 namespace Elastic.Ingest.Elasticsearch.Serialization;
 
 /// <summary> TODO </summary>
-public enum HeaderSerialization
+public enum HeaderSerializationStrategy
 {
 	/// <summary> </summary>
 	Index,

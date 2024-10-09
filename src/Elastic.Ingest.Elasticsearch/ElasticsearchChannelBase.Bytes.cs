@@ -25,12 +25,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	where TChannelOptions : ElasticsearchChannelOptionsBase<TEvent>
 {
 	/// <summary> TODO </summary>
-	protected abstract HeaderSerialization GetIndexOp(TEvent @event);
-
-	/// <summary> </summary>
-	/// <param name="event"></param>
-	/// <param name="header"></param>
-	protected abstract void MutateHeader(TEvent @event, ref BulkHeader header);
+	protected abstract (HeaderSerializationStrategy, BulkHeader?) EventIndexStrategy(TEvent @event);
 
 	/// <summary>
 	/// Asynchronously write the NDJSON request body for a page of <typeparamref name="TEvent"/> events to <see cref="Stream"/>.
@@ -57,28 +52,26 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 			var @event = items[i];
 			if (@event == null) continue;
 
-			var op = GetIndexOp(@event);
+			var (op, header) = EventIndexStrategy(@event);
 			switch (op)
 			{
-				case HeaderSerialization.IndexNoParams:
+				case HeaderSerializationStrategy.IndexNoParams:
 					await SerializePlainIndexHeaderAsync(stream, ctx).ConfigureAwait(false);
 					break;
-				case HeaderSerialization.CreateNoParams:
+				case HeaderSerializationStrategy.CreateNoParams:
 					await SerializePlainCreateHeaderAsync(stream, ctx).ConfigureAwait(false);
 					break;
-				case HeaderSerialization.Index:
-				case HeaderSerialization.Create:
-				case HeaderSerialization.Delete:
-				case HeaderSerialization.Update:
-					var header = new BulkHeader();
-					MutateHeader(@event, ref header);
+				case HeaderSerializationStrategy.Index:
+				case HeaderSerializationStrategy.Create:
+				case HeaderSerializationStrategy.Delete:
+				case HeaderSerializationStrategy.Update:
 					await SerializeHeaderAsync(stream, ref header, SerializerOptions, ctx).ConfigureAwait(false);
 					break;
 			}
 
 			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
 
-			if (op == HeaderSerialization.Update)
+			if (op == HeaderSerializationStrategy.Update)
 				await stream.WriteAsync(DocUpdateHeaderStart, 0, DocUpdateHeaderStart.Length, ctx).ConfigureAwait(false);
 
 			if (options.EventWriter?.WriteToStreamAsync != null)
@@ -87,7 +80,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 				await JsonSerializer.SerializeAsync(stream, @event, SerializerOptions, ctx)
 					.ConfigureAwait(false);
 
-			if (op == HeaderSerialization.Update)
+			if (op == HeaderSerializationStrategy.Update)
 				await stream.WriteAsync(DocUpdateHeaderEnd, 0, DocUpdateHeaderEnd.Length, ctx).ConfigureAwait(false);
 
 			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);

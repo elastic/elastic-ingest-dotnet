@@ -25,7 +25,9 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 	public IElasticsearchEventWriter<TEvent>? EventWriter { get; set; }
 
 	/// <summary> Optionally set dynamic templates for event</summary>
-	public Func<TEvent, IDictionary<string, string>>? DynamicTemplates { get; set; }
+	public Func<TEvent, IDictionary<string, string>?>? DynamicTemplateLookup { get; set; }
 
+	/// <summary> If true, the response will include the ingest pipelines that were executed. Defaults to false. </summary>
+	public Func<TEvent, bool>? ListExecutedPipelines { get; set; }
 
 }

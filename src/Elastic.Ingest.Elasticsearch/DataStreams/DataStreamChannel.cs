@@ -27,11 +27,22 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 		_url = $"{dataStream}/{base.BulkUrl}";
 	}
 
-	/// <inheritdoc cref="GetIndexOp"/>
-	protected override HeaderSerialization GetIndexOp(TEvent @event) => HeaderSerialization.CreateNoParams;
+	/// <inheritdoc cref="EventIndexStrategy"/>
+	protected override (HeaderSerializationStrategy, BulkHeader?) EventIndexStrategy(TEvent @event)
+	{
 
-	/// <inheritdoc cref="MutateHeader"/>
-	protected override void MutateHeader(TEvent @event, ref BulkHeader header) { }
+		var listExecutedPipelines = Options.ListExecutedPipelines?.Invoke(@event);
+		var templates = Options.DynamicTemplateLookup?.Invoke(@event);
+		if (templates is null && listExecutedPipelines is null)
+			return (HeaderSerializationStrategy.CreateNoParams, null);
+
+		var header = new BulkHeader
+		{
+			DynamicTemplates = templates,
+			ListExecutedPipelines = listExecutedPipelines
+		};
+		return (HeaderSerializationStrategy.Create, header);
+	}
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName => Options.DataStream.GetTemplateName();
