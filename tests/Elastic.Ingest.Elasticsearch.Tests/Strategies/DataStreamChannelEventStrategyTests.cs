@@ -4,12 +4,9 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading;
-using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.DataStreams;
-using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Transport;
 using FluentAssertions;
