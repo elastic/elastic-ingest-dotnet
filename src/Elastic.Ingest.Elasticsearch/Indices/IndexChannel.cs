@@ -54,11 +54,13 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 		var templates = Options.DynamicTemplateLookup?.Invoke(@event);
 		var requireAlias = Options.RequireAlias?.Invoke(@event);
 		var listExecutedPipelines = Options.ListExecutedPipelines?.Invoke(@event);
+		var isUpsert = Options.BulkUpsertLookup?.Invoke(@event, index) is true;
 		if (string.IsNullOrWhiteSpace(index)
 			&& string.IsNullOrWhiteSpace(id)
 			&& templates is null
-			&& requireAlias is null
-			&& listExecutedPipelines is null)
+			&& isUpsert is false
+			&& requireAlias is null or false
+			&& listExecutedPipelines is null or false)
 			return Options.OperationMode == OperationMode.Index
 				? (IndexNoParams, null)
 				: (CreateNoParams, null);
@@ -71,10 +73,13 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 			RequireAlias = requireAlias,
 			ListExecutedPipelines = listExecutedPipelines
 		};
-
-		return (Options.OperationMode == OperationMode.Index
+		var op = Options.OperationMode == OperationMode.Index
 			? HeaderSerializationStrategy.Index
-			: Create, header);
+			: Create;
+		if (isUpsert)
+			op = Update;
+
+		return (op, header);
 	}
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>

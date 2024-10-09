@@ -30,10 +30,9 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 	/// <inheritdoc cref="EventIndexStrategy"/>
 	protected override (HeaderSerializationStrategy, BulkHeader?) EventIndexStrategy(TEvent @event)
 	{
-
 		var listExecutedPipelines = Options.ListExecutedPipelines?.Invoke(@event);
 		var templates = Options.DynamicTemplateLookup?.Invoke(@event);
-		if (templates is null && listExecutedPipelines is null)
+		if (templates is null && listExecutedPipelines is null or false)
 			return (HeaderSerializationStrategy.CreateNoParams, null);
 
 		var header = new BulkHeader
