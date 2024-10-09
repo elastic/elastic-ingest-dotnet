@@ -34,7 +34,6 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 		var templates = Options.DynamicTemplateLookup?.Invoke(@event);
 		if (templates is null && listExecutedPipelines is null or false)
 			return (HeaderSerializationStrategy.CreateNoParams, null);
-
 		var header = new BulkHeader
 		{
 			DynamicTemplates = templates,

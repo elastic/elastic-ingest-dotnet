@@ -41,8 +41,8 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 #if NETSTANDARD2_1_OR_GREATER
 		var items = page;
 #else
-			// needs cast prior to netstandard2.0
-			IReadOnlyList<TEvent> items = page;
+		// needs cast prior to netstandard2.0
+		IReadOnlyList<TEvent> items = page;
 #endif
 		// for is okay on ArraySegment, foreach performs bad:
 		// https://antao-almada.medium.com/how-to-use-span-t-and-memory-t-c0b126aae652
@@ -65,7 +65,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 				case HeaderSerializationStrategy.Create:
 				case HeaderSerializationStrategy.Delete:
 				case HeaderSerializationStrategy.Update:
-					await SerializeHeaderAsync(stream, ref header, SerializerOptions, ctx).ConfigureAwait(false);
+					await SerializeHeaderAsync(stream, op, ref header, ctx).ConfigureAwait(false);
 					break;
 			}
 

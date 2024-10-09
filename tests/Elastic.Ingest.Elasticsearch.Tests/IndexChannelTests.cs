@@ -3,6 +3,8 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using Elastic.Ingest.Elasticsearch.Indices;
@@ -22,7 +24,18 @@ public class IndexChannelTests : ChannelTestWithSingleDocResponseBase
 	public void IndexChannel_WithDynamicIndexName_UsesCorrectUrlAndOperationHeader() =>
 		ExecuteAndAssert("/_bulk", "{\"create\":{\"_index\":\"dotnet-2023.07.29\"}}");
 
-	private void ExecuteAndAssert(string expectedUrl, string expectedOperationHeader, string indexName = null)
+	[Fact]
+	public void IndexChannel_UsesOperationAndId() =>
+		ExecuteAndAssert("/_bulk", "{\"index\":{\"_index\":\"dotnet-2023.07.29\",\"_id\":\"mydocid\"}}", id: "mydocid", operationMode: OperationMode.Index);
+
+	[Fact]
+	public void IndexChannel_WritesCorrectHeaderWithAllOptions() =>
+	ExecuteAndAssert("/fixed-index/_bulk", "{\"create\":{\"_id\":\"mydocid\",\"require_alias\":true,\"list_executed_pipelines\":true,\"dynamic_templates\":[{\"key1\":\"value1\"}]}}", "fixed-index", id: "mydocid", operationMode: OperationMode.Create,
+		requiresAlias: true, listExecutedPipelines: true, dynamicTemplates: new Dictionary<string, string> { { "key1", "value1"} });
+
+	private void ExecuteAndAssert(string expectedUrl, string expectedOperationHeader,
+		string indexName = null, string id = null, OperationMode? operationMode = null, bool? requiresAlias = null,
+		bool? listExecutedPipelines = null, IDictionary<string, string> dynamicTemplates = null)
 	{
 		ApiCallDetails callDetails = null;
 
@@ -47,6 +60,21 @@ public class IndexChannelTests : ChannelTestWithSingleDocResponseBase
 			},
 			TimestampLookup = _ => new DateTimeOffset(2023, 07, 29, 20, 00, 00, TimeSpan.Zero),
 		};
+
+		if (operationMode.HasValue)
+			options.OperationMode = operationMode.Value;
+
+		if (!string.IsNullOrEmpty(id))
+			options.BulkOperationIdLookup = _ => id;
+
+		if (requiresAlias.HasValue)
+			options.RequireAlias = _ => requiresAlias.Value;
+
+		if (dynamicTemplates is not null)
+			options.DynamicTemplateLookup = _ => dynamicTemplates;
+
+		if (listExecutedPipelines.HasValue)
+			options.ListExecutedPipelines = _ => listExecutedPipelines.Value;
 
 		if (indexName is not null)
 		{

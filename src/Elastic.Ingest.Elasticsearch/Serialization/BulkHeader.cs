@@ -22,7 +22,7 @@ public readonly struct BulkHeader
 	/// <summary>
 	/// A map from the full name of fields to the name of dynamic templates. Defaults to an empty map. If a name matches a dynamic template,
 	/// then that template will be applied regardless of other match predicates defined in the template. And if a field is already defined
-	/// in the mapping, then this parameter won’t be used.
+	/// in the mapping, then this parameter won't be used.
 	/// </summary>
 	public IDictionary<string, string>? DynamicTemplates { get; init; }
 
