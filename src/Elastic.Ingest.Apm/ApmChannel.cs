@@ -40,7 +40,7 @@ internal static class ApmChannelStatics
 public class ApmChannel : TransportChannelBase<ApmChannelOptions, IIntakeObject, EventIntakeResponse, IntakeErrorItem>
 {
 	/// <inheritdoc cref="ApmChannel"/>
-	public ApmChannel(ApmChannelOptions options) : base(options) { }
+	public ApmChannel(ApmChannelOptions options) : base(options, nameof(ApmChannel)) { }
 
 	//retry if APM server returns 429
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Retry"/>

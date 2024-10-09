@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;netstandard2.1</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;netstandard2.1;net8.0</TargetFrameworks>
     <Description>Provides components to build a buffer-backed channel that flushes batches of data in a controlled (Max N || Max Duration) manner.</Description>
     <PackageTags>elastic, channels, buffer</PackageTags>
     <LangVersion>latest</LangVersion>

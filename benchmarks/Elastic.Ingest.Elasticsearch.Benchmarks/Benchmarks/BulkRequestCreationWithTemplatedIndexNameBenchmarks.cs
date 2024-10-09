@@ -40,15 +40,15 @@ public class BulkRequestCreationWithTemplatedIndexNameBenchmarks
 		_data = StockData.CreateSampleData(DocumentsToIndex);
 	}
 
-	[Benchmark(Baseline = true)]
-	public async Task DynamicIndexName_WriteToStreamAsync()
-	{
-		MemoryStream.Position = 0;
-		var bytes = BulkRequestDataFactory.GetBytes(_data, _options!, e => BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(e, _options!, false));
-		var requestData = new RequestData(
-			POST, "/_bulk", PostData.ReadOnlyMemory(bytes),
-			_transportConfiguration!, null!, ((ITransportConfiguration)_transportConfiguration!).MemoryStreamFactory, new OpenTelemetryData()
-		);
-		await requestData.PostData.WriteAsync(MemoryStream, _transportConfiguration!, CancellationToken.None);
-	}
+	// [Benchmark(Baseline = true)]
+	// public async Task DynamicIndexName_WriteToStreamAsync()
+	// {
+	// 	MemoryStream.Position = 0;
+	// 	var bytes = BulkRequestDataFactory.GetBytes(_data, _options!, e => BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(e, _options!, false));
+	// 	var requestData = new RequestData(
+	// 		POST, "/_bulk", PostData.ReadOnlyMemory(bytes),
+	// 		_transportConfiguration!, null!, ((ITransportConfiguration)_transportConfiguration!).MemoryStreamFactory, new OpenTelemetryData()
+	// 	);
+	// 	await requestData.PostData.WriteAsync(MemoryStream, _transportConfiguration!, CancellationToken.None);
+	// }
 }

@@ -2,6 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System;
 using System.IO;
 using System.Threading;
 using Elastic.Ingest.Elasticsearch.DataStreams;
@@ -20,6 +21,7 @@ public class DataStreamChannelTests : ChannelTestWithSingleDocResponseBase
 
 		var wait = new ManualResetEvent(false);
 
+		Exception exception = null;
 		using var channel = new DataStreamChannel<TestDocument>(new DataStreamChannelOptions<TestDocument>(Transport)
 		{
 			BufferOptions = new()
@@ -27,6 +29,11 @@ public class DataStreamChannelTests : ChannelTestWithSingleDocResponseBase
 				OutboundBufferMaxSize = 1
 			},
 			DataStream = new("type"),
+			ExportExceptionCallback = e =>
+			{
+				exception = e;
+				wait.Set();
+			},
 			ExportResponseCallback = (response, _) =>
 			{
 				callDetails = response.ApiCallDetails;
@@ -35,7 +42,9 @@ public class DataStreamChannelTests : ChannelTestWithSingleDocResponseBase
 		});
 
 		channel.TryWrite(new TestDocument());
-		wait.WaitOne();
+		var signalled = wait.WaitOne(TimeSpan.FromSeconds(5));
+		signalled.Should().BeTrue("because ExportResponseCallback should have been called");
+		exception.Should().BeNull();
 
 		callDetails.Uri.AbsolutePath.Should().Be("/type-generic-default/_bulk");
 

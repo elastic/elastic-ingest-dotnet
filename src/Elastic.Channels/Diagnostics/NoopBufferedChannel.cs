@@ -38,14 +38,14 @@ public class NoopBufferedChannel
 	public NoopBufferedChannel(
 		NoopChannelOptions options,
 		ICollection<IChannelCallbacks<NoopEvent, NoopResponse>>? channelListeners = null
-	) : base(options, channelListeners) { }
+	) : base(options, channelListeners, nameof(NoopBufferedChannel)) { }
 
 	/// <inheritdoc cref="NoopBufferedChannel"/>
 	public NoopBufferedChannel(
 		BufferOptions options,
 		ICollection<IChannelCallbacks<NoopEvent, NoopResponse>>? channelListeners = null,
 		bool observeConcurrency = false
-	) : base(new NoopChannelOptions { BufferOptions = options, TrackConcurrency = observeConcurrency }, channelListeners)
+	) : base(new NoopChannelOptions { BufferOptions = options, TrackConcurrency = observeConcurrency }, channelListeners, nameof(NoopBufferedChannel))
 	{
 
 	}
