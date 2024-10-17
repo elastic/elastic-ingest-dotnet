@@ -20,6 +20,10 @@ public abstract class ChannelOptionsBase<TEvent, TResponse> : IChannelCallbacks<
 	/// <inheritdoc cref="BufferOptions"/>
 	public BufferOptions BufferOptions { get; set; } = new();
 
+	/// <summary>
+	/// TBD
+	/// </summary>
+	public Action<TEvent>? BufferItemDropped { get; set; }
 
 	/// <summary>
 	/// Ensures a <see cref="ChannelDiagnosticsListener{TEvent,TResponse}"/> gets registered so this <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
