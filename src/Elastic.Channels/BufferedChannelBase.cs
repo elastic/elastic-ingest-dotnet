@@ -405,7 +405,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	private ValueTask<bool> PublishAsync(IOutboundBuffer<TEvent> buffer)
 	{
-		async Task<bool> AsyncSlowPath(IOutboundBuffer<TEvent> b)
+		async Task<bool> AsyncSlowPathAsync(IOutboundBuffer<TEvent> b)
 		{
 			var maxRetries = Options.BufferOptions.ExportMaxRetries;
 			for (var i = 0; i <= maxRetries; i++)
@@ -418,7 +418,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 		return OutChannel.Writer.TryWrite(buffer)
 			? new ValueTask<bool>(true)
-			: new ValueTask<bool>(AsyncSlowPath(buffer));
+			: new ValueTask<bool>(AsyncSlowPathAsync(buffer));
 	}
 
 	/// <inheritdoc cref="object.ToString"/>>

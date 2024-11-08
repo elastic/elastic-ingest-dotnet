@@ -16,7 +16,7 @@ namespace Elastic.Ingest.Elasticsearch.Tests;
 
 public static class TestSetup
 {
-	public static DistributedTransport<TransportConfiguration> CreateClient(Func<VirtualCluster, VirtualCluster> setup)
+	public static DistributedTransport<ITransportConfiguration> CreateClient(Func<VirtualCluster, VirtualCluster> setup)
 	{
 		var cluster = Virtual.Elasticsearch.Bootstrap(numberOfNodes: 1).Ping(c=>c.SucceedAlways());
 		var virtualSettings = setup(cluster)
@@ -26,10 +26,11 @@ public static class TestSetup
 		//var audit = new Auditor(() => virtualSettings);
 		//audit.VisualizeCalls(cluster.ClientCallRules.Count);
 
-		var settings = new TransportConfiguration(virtualSettings.ConnectionPool, virtualSettings.Connection)
+		var settings = new TransportConfigurationDescriptor(virtualSettings.ConnectionPool, virtualSettings.Connection)
 			.DisablePing()
 			.EnableDebugMode();
-		return new DistributedTransport<TransportConfiguration>(settings);
+
+		return new DistributedTransport(settings);
 	}
 
 	public static ClientCallRule BulkResponse(this ClientCallRule rule, params int[] statusCodes) =>
@@ -43,7 +44,7 @@ public static class TestSetup
 		private int _retries;
 		private int _maxRetriesExceeded;
 
-		public TestSession(DistributedTransport<TransportConfiguration> transport)
+		public TestSession(DistributedTransport<ITransportConfiguration> transport)
 		{
 			Transport = transport;
 			BufferOptions = new BufferOptions
@@ -73,7 +74,7 @@ public static class TestSetup
 
 		public IndexChannel<TestDocument> Channel { get; }
 
-		public DistributedTransport<TransportConfiguration> Transport { get; }
+		public DistributedTransport<ITransportConfiguration> Transport { get; }
 
 		public IndexChannelOptions<TestDocument> ChannelOptions { get; }
 
@@ -101,7 +102,7 @@ public static class TestSetup
 		}
 	}
 
-	public static TestSession CreateTestSession(DistributedTransport<TransportConfiguration> transport) => new(transport);
+	public static TestSession CreateTestSession(DistributedTransport<ITransportConfiguration> transport) => new(transport);
 
 	public static void WriteAndWait(this TestSession session, int events = 1)
 	{

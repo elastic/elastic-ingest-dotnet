@@ -24,7 +24,7 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 	{
 		var dataStream = Options.DataStream.ToString();
 
-		_url = $"{dataStream}/{base.BulkUrl}";
+		_url = $"{dataStream}/{base.BulkPathAndQuery}";
 
 		_fixedHeader = new CreateOperation();
 	}
@@ -37,8 +37,8 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateWildcard"/>
 	protected override string TemplateWildcard => Options.DataStream.GetNamespaceWildcard();
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkUrl"/>
-	protected override string BulkUrl => _url;
+	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
+	protected override string BulkPathAndQuery => _url;
 
 	/// <summary>
 	/// Gets a default index template for the current <see cref="DataStreamChannel{TEvent}"/>

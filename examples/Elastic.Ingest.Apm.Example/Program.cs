@@ -29,10 +29,12 @@ internal class Program
 		}
 
 		var config = new TransportConfiguration(new Uri(args[0]))
-			.EnableDebugMode()
-			.Authentication(new ApiKey(args[1]));
-		//TODO needs
-		var transport = new DistributedTransport<TransportConfiguration>(config);
+		{
+			DebugMode = true,
+			Authentication = new ApiKey(args[1])
+		};
+
+		var transport = new DistributedTransport(config);
 
 		var numberOfEvents = 800;
 		var maxBufferSize = 200;
@@ -48,6 +50,7 @@ internal class Program
 				ExportMaxRetries = 3,
 				ExportBackoffPeriod = times => TimeSpan.FromMilliseconds(1),
 			};
+
 		var channelOptions = new ApmChannelOptions(transport)
 		{
 			BufferOptions = options,
@@ -63,9 +66,11 @@ internal class Program
 			ExportRetryCallback = (list) => Interlocked.Increment(ref _retries),
 			ExportExceptionCallback = (e) => _exception = e
 		};
+
 		var channel = new ApmChannel(channelOptions);
 
-		string Id() => RandomGenerator.GenerateRandomBytesAsString(8);
+		static string Id() => RandomGenerator.GenerateRandomBytesAsString(8);
+
 		var random = new Random();
 		for (var i = 0; i < numberOfEvents; i++)
 		{

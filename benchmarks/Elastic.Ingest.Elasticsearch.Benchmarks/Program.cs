@@ -13,6 +13,7 @@ using BenchmarkDotNet.Reports;
 using BenchmarkDotNet.Running;
 using System.Globalization;
 using Elastic.Ingest.Elasticsearch.Benchmarks.Benchmarks;
+using Perfolizer.Metrology;
 
 #if DEBUG
 // MANUALLY RUN A BENCHMARKED METHOD DURING DEBUGGING
@@ -35,7 +36,7 @@ var json = sr.ReadToEnd();
 Console.ReadKey();
 #else
 var config = ManualConfig.Create(DefaultConfig.Instance);
-config.SummaryStyle = new SummaryStyle(CultureInfo.CurrentCulture, true, BenchmarkDotNet.Columns.SizeUnit.B, null!, ratioStyle: BenchmarkDotNet.Columns.RatioStyle.Percentage);
+config.SummaryStyle = new SummaryStyle(CultureInfo.CurrentCulture, true, SizeUnit.B, null!, ratioStyle: BenchmarkDotNet.Columns.RatioStyle.Percentage);
 config.AddDiagnoser(MemoryDiagnoser.Default);
 
 BenchmarkRunner.Run<BulkRequestCreationWithTemplatedIndexNameBenchmarks>(config);
