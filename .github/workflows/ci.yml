@@ -148,4 +148,4 @@ jobs:
         subject-path: '${{ github.workspace }}/${{ env.ARTIFACTS }}'
 
     - name: Release to nuget.org
-      run: dotnet nuget push '${{ env.ARTIFACTS }}' -k ${{secrets.NUGET_ORG_API_KEY}} -s https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols
+      run: dotnet nuget push '${{ env.ARTIFACTS }}' -k ${{secrets.NUGET_API_KEY}} -s https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols
