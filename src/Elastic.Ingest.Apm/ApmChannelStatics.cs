@@ -1,4 +1,4 @@
-﻿// Licensed to Elasticsearch B.V under one or more agreements.
+// Licensed to Elasticsearch B.V under one or more agreements.
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
@@ -11,7 +11,7 @@ namespace Elastic.Ingest.Apm;
 
 internal static class ApmChannelStatics
 {
-	public static readonly byte[] LineFeed = { (byte)'\n' };
+	public static readonly byte[] LineFeed = [(byte)'\n'];
 
 	public static readonly RequestConfiguration RequestConfig = new() { ContentType = "application/x-ndjson" };
 
