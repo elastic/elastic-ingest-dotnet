@@ -7,20 +7,15 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Elastic.Transport;
 
 namespace Elastic.Ingest.Elasticsearch;
 
-internal class ElasticsearchRequestParameters : RequestParameters { }
 internal static class ElasticsearchChannelStatics
 {
 	public static readonly byte[] LineFeed = { (byte)'\n' };
 
 	public static readonly byte[] DocUpdateHeaderStart = Encoding.UTF8.GetBytes("{\"doc_as_upsert\": true, \"doc\": ");
 	public static readonly byte[] DocUpdateHeaderEnd = Encoding.UTF8.GetBytes(" }");
-
-	public static readonly ElasticsearchRequestParameters RequestParams =
-		new() { QueryString = { { "filter_path", "error, items.*.status,items.*.error" } } };
 
 	public static readonly HashSet<int> RetryStatusCodes = new(new[] { 502, 503, 504, 429 });
 

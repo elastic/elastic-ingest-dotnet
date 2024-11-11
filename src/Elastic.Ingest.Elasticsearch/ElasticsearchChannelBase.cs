@@ -47,7 +47,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	/// <summary>
 	/// The URL for the bulk request.
 	/// </summary>
-	protected virtual string BulkUrl => "_bulk";
+	protected virtual string BulkPathAndQuery => "_bulk?filter_path=error,items.*.status,items.*.error";
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryAllItems"/>
 	protected override bool RetryAllItems(BulkResponse response) => response.ApiCallDetails.HttpStatusCode == 429;
@@ -75,18 +75,18 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 #pragma warning restore CS0618
 		{
 			var bytes = BulkRequestDataFactory.GetBytes(page, Options, CreateBulkOperationHeader);
-			return transport.RequestAsync<BulkResponse>(HttpMethod.POST, BulkUrl, PostData.ReadOnlyMemory(bytes), RequestParams, ctx);
+			return transport.RequestAsync<BulkResponse>(HttpMethod.POST, BulkPathAndQuery, PostData.ReadOnlyMemory(bytes), ctx);
 		}
 #endif
 #pragma warning disable IDE0022 // Use expression body for method
-		return transport.RequestAsync<BulkResponse>(HttpMethod.POST, BulkUrl,
+		return transport.RequestAsync<BulkResponse>(new (HttpMethod.POST, BulkPathAndQuery),
 			PostData.StreamHandler(page,
 				(_, _) =>
 				{
 					/* NOT USED */
 				},
 				async (b, stream, ctx) => { await BulkRequestDataFactory.WriteBufferToStreamAsync(b, stream, Options, CreateBulkOperationHeader, ctx).ConfigureAwait(false); })
-			, RequestParams, ctx);
+			, ctx);
 #pragma warning restore IDE0022 // Use expression body for method
 	}
 

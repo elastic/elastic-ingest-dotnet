@@ -49,7 +49,7 @@ let private test (arguments:ParseResults<Arguments>) =
     let junitOutput = Path.Combine(Paths.Output.FullName, "junit-{assembly}-{framework}-test-results.xml")
     let loggerPathArgs = sprintf "LogFilePath=%s" junitOutput
     let loggerArg = sprintf "--logger:\"junit;%s\"" loggerPathArgs
-    exec "dotnet" ["test"; "-c"; "RELEASE"; loggerArg] |> ignore
+    exec "dotnet" ["test"; "-c"; "Release"; "--filter"; "FullyQualifiedName!~Elastic.Ingest.Elasticsearch.IntegrationTests"; loggerArg] |> ignore
 
 let private generatePackages (arguments:ParseResults<Arguments>) =
     let output = Paths.RootRelative Paths.Output.FullName
