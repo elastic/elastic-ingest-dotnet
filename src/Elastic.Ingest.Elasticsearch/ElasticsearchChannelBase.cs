@@ -26,6 +26,7 @@ namespace Elastic.Ingest.Elasticsearch;
 public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	: TransportChannelBase<TChannelOptions, TEvent, BulkResponse, BulkResponseItem>
 	where TChannelOptions : ElasticsearchChannelOptionsBase<TEvent>
+	where TEvent : class
 {
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/>
 	protected ElasticsearchChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners)

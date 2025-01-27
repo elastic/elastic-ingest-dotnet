@@ -10,6 +10,8 @@ using Elastic.Transport;
 namespace Elastic.Ingest.Elasticsearch;
 
 public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
+	where TChannelOptions : ElasticsearchChannelOptionsBase<TEvent>
+	where TEvent : class
 {
 	/// <summary> The index template name <see cref="BootstrapElasticsearch"/> should register.</summary>
 	protected abstract string TemplateName { get; }

@@ -21,6 +21,7 @@ public abstract class TransportChannelBase<TChannelOptions, TEvent, TResponse, T
 	ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem>
 	where TChannelOptions : TransportChannelOptionsBase<TEvent, TResponse, TBulkResponseItem>
 	where TResponse : TransportResponse, new()
+	where TEvent : class
 {
 	/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
 	protected TransportChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners)

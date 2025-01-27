@@ -14,6 +14,7 @@ namespace Elastic.Ingest.Elasticsearch.Indices;
 /// <para>If unsure prefer to use <see cref="DataStreamChannel{TEvent}"/></para>
 /// </summary>
 public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChannelOptions<TEvent>>
+	where TEvent : class
 {
 	private readonly bool _skipIndexNameOnOperations = false;
 	private readonly string _url;
