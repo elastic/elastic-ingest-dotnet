@@ -182,7 +182,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		};
 		InChannel = Channel.CreateBounded<TEvent?>(new BoundedChannelOptions(maxIn)
 		{
-			SingleReader = false,
+			SingleReader = true,
 			SingleWriter = false,
 			// Stephen Toub comment: https://github.com/dotnet/runtime/issues/26338#issuecomment-393720727
 			// AFAICT this is fine since we run in a dedicated long running task.
