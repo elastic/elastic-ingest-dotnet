@@ -12,6 +12,7 @@ namespace Elastic.Ingest.Elasticsearch.DataStreams;
 
 /// <summary> A channel to push messages to Elasticsearch data streams </summary>
 public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataStreamChannelOptions<TEvent>>
+	where TEvent : class
 {
 	private readonly CreateOperation _fixedHeader;
 	private readonly string _url;

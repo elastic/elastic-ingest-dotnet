@@ -58,6 +58,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	: ChannelWriter<TEvent>, IBufferedChannel<TEvent>
 	where TChannelOptions : ChannelOptionsBase<TEvent, TResponse>
 	where TResponse : class, new()
+	where TEvent : class
 {
 	private readonly Task _inTask;
 	private readonly Task _outTask;
@@ -79,7 +80,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	private readonly CancellationTokenSource _exitCancelSource = new();
 
 	private Channel<IOutboundBuffer<TEvent>> OutChannel { get; }
-	private Channel<TEvent> InChannel { get; }
+	private Channel<TEvent?> InChannel { get; }
 	private BufferOptions BufferOptions => Options.BufferOptions;
 
 	private long _inflightEvents;
@@ -172,7 +173,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 				// DropWrite will make `TryWrite` always return true, which is not what we want.
 				FullMode = BoundedChannelFullMode.Wait
 			});
-		InChannel = Channel.CreateBounded<TEvent>(new BoundedChannelOptions(maxIn)
+		InChannel = Channel.CreateBounded<TEvent?>(new BoundedChannelOptions(maxIn)
 		{
 			SingleReader = false,
 			SingleWriter = false,
@@ -363,17 +364,37 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			_signal.Signal();
 	}
 
+	private int _seenTimeouts;
+
 	private async Task ConsumeInboundEventsAsync(int maxQueuedMessages, TimeSpan maxInterval)
 	{
 		_callbacks.InboundChannelStartedCallback?.Invoke();
 
-		while (await InboundBuffer.WaitToReadAsync(InChannel.Reader).ConfigureAwait(false))
+		WaitToReadResult result;
+		while ((result = await InboundBuffer.WaitToReadAsync(InChannel.Reader).ConfigureAwait(false)) != WaitToReadResult.Completed)
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
 			if (_signal is { IsSet: true }) break;
 
+			if (result == WaitToReadResult.Timeout)
+			{
+				var timeouts = Interlocked.Increment(ref _seenTimeouts);
+				if (timeouts % 10 == 0)
+				{
+					// this should free up tasks blocking on WaitToReadAsync() within InBoundBuffer.WaitToReadAsync()
+					// read the comments in InBoundBuffer.WaitToReadAsync() to understand more.
+					// https://github.com/dotnet/runtime/issues/761
+					InChannel.Writer.TryWrite(null);
+					Interlocked.Exchange(ref _inflightEvents, 0);
+					continue;
+				}
+			}
+
 			while (InboundBuffer.Count < maxQueuedMessages && InChannel.Reader.TryRead(out var item))
 			{
+				if (item is null)
+					continue;
+
 				InboundBuffer.Add(item);
 				Interlocked.Decrement(ref _inflightEvents);
 
