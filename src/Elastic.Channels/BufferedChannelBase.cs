@@ -183,7 +183,11 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			// wait does not block it simply signals that Writer.TryWrite should return false and be retried
 			// DropWrite will make `TryWrite` always return true, which is not what we want.
 			FullMode = options.BufferOptions.BoundedChannelFullMode
-		}, options.BufferItemDropped);
+		}, options.BufferItemDropped is null ? null : e =>
+		{
+			if (e is not null)
+				options.BufferItemDropped?.Invoke(e);
+		});
 
 		InboundBuffer = new InboundBuffer<TEvent>(BatchExportSize, BufferOptions.OutboundBufferMaxLifetime);
 
