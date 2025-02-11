@@ -38,6 +38,9 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         global-json-file: ./global.json
+        dotnet-version: |
+            6.x
+            8.x
 
     - name: Build
       run: build.bat build -s true
