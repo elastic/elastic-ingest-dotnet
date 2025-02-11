@@ -21,7 +21,7 @@ public abstract class ChannelOptionsBase<TEvent, TResponse> : IChannelCallbacks<
 	public BufferOptions BufferOptions { get; set; } = new();
 
 	/// <summary>
-	/// TBD
+    /// Delegate that will be called when item is being dropped from channel. See <see cref="BufferOptions.BoundedChannelFullMode"/>.
 	/// </summary>
 	public Action<TEvent>? BufferItemDropped { get; set; }
 
