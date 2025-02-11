@@ -79,7 +79,7 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 	/// <see cref="_forceFlushAfter"/>. This tries to avoid allocation too many <see cref="CancellationTokenSource"/>'s
 	/// needlessly and reuses them if possible.
 	/// </summary>
-	public async Task<bool> WaitToReadAsync(ChannelReader<TEvent> reader)
+	public async Task<WaitToReadResult> WaitToReadAsync(ChannelReader<TEvent?> reader)
 	{
 		TimeOfFirstWaitToRead ??= DateTimeOffset.UtcNow;
 		if (_breaker.IsCancellationRequested)
@@ -90,23 +90,50 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 
 		try
 		{
+			// https://github.com/dotnet/runtime/issues/761
+			// cancellation tokens may not be unrooted properly by design if cancellation occurs.
+			// by checking explicitly which task ends up being completed we can uncover when
+
+			// We accept the possibility of several pending tasks blocking on WaitToReadAsync()
+			// These will all unblock and free up when a new message gets pushed.
+			// To aid with cleaning these tasks up we write `default` to the channel when this task returns TimeOut
+
 			_breaker.CancelAfter(Wait);
-			var result = await reader.WaitToReadAsync(_breaker.Token).ConfigureAwait(false);
+			var readTask = reader.WaitToReadAsync().AsTask();
+			var delayTask = Task.Delay(Timeout.Infinite, _breaker.Token);
+			var completedTask = await Task.WhenAny(readTask, delayTask).ConfigureAwait(false);
+
+			if (completedTask == delayTask)
+				throw new OperationCanceledException(_breaker.Token);
+
 			_breaker.CancelAfter(-1);
-			return result;
+			return await readTask.ConfigureAwait(false) ? WaitToReadResult.Read : WaitToReadResult.Completed;
 		}
 		catch (Exception) when (_breaker.IsCancellationRequested)
 		{
 			_breaker.Dispose();
 			_breaker = new CancellationTokenSource();
-			return true;
+			return WaitToReadResult.Timeout;
 		}
 		catch (Exception)
 		{
 			_breaker.CancelAfter(Wait);
-			return true;
+			return WaitToReadResult.Read;
 		}
 	}
 
 	public void Dispose() => _breaker.Dispose();
+}
+
+/// <summary>
+/// Signals to consumer the result of a call to <see cref="ChannelReader{T}.WaitToReadAsync"/> that may have been cancelled.
+/// </summary>
+public enum WaitToReadResult
+{
+	/// the wait resulted in data
+	Read,
+	/// the wait can no longer receive any data ever
+	Completed,
+	///
+	Timeout
 }
