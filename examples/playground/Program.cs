@@ -14,7 +14,7 @@ var random = new Random();
 var ctxs = new CancellationTokenSource();
 var parallelOpts = new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount, CancellationToken = ctxs.Token };
 const int numDocs = 1_000_000;
-var bufferOptions = new BufferOptions { InboundBufferMaxSize = 1000, OutboundBufferMaxSize = 100, ExportMaxConcurrency = 1, BoundedChannelFullMode = BoundedChannelFullMode.Wait };
+var bufferOptions = new BufferOptions { BoundedChannelFullMode = BoundedChannelFullMode.Wait };
 var config = new EphemeralClusterConfiguration("8.13.0");
 using var cluster = new EphemeralCluster(config);
 using var channel = SetupElasticsearchChannel();

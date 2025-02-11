@@ -30,6 +30,7 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 	: BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	where TChannelOptions : ResponseItemsChannelOptionsBase<TEvent, TResponse, TBulkResponseItem>
 	where TResponse : class, new()
+	where TEvent : class
 {
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
 	protected ResponseItemsBufferedChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners, string diagnosticsName)

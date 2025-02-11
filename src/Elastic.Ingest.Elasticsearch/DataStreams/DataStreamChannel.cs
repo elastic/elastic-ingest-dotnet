@@ -12,6 +12,7 @@ namespace Elastic.Ingest.Elasticsearch.DataStreams;
 
 /// <summary> A channel to push messages to Elasticsearch data streams </summary>
 public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataStreamChannelOptions<TEvent>>
+	where TEvent : class
 {
 	private readonly string _url;
 
@@ -24,7 +25,7 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 	{
 		var dataStream = Options.DataStream.ToString();
 
-		_url = $"{dataStream}/{base.BulkUrl}";
+		_url = $"{dataStream}/{base.BulkPathAndQuery}";
 	}
 
 	/// <inheritdoc cref="EventIndexStrategy"/>
@@ -47,8 +48,8 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateWildcard"/>
 	protected override string TemplateWildcard => Options.DataStream.GetNamespaceWildcard();
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkUrl"/>
-	protected override string BulkUrl => _url;
+	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
+	protected override string BulkPathAndQuery => _url;
 
 	/// <summary>
 	/// Gets a default index template for the current <see cref="DataStreamChannel{TEvent}"/>

@@ -24,6 +24,7 @@ namespace Elastic.Ingest.Elasticsearch;
 /// </summary>
 public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	where TChannelOptions : ElasticsearchChannelOptionsBase<TEvent>
+	where TEvent : class
 {
 #if NET8_0_OR_GREATER
 	private static ReadOnlySpan<byte> IndexPrefixBytesSpan => """{"index":{"""u8;
@@ -136,7 +137,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		{
 			WriteFalse(ListExecutedPipelinesPropertyPrefixBytesSpan, stream, ref propertyCount);
 		}
-		
+
 		if (headerValue.DynamicTemplates is not null && headerValue.DynamicTemplates.Count > 0)
 		{
 			if (propertyCount > 0)

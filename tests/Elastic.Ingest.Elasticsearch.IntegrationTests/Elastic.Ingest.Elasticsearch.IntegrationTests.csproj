@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Elastic.Clients.Elasticsearch" Version="8.12.1" />
+    <PackageReference Include="Elastic.Clients.Elasticsearch" Version="8.16.1" />
     <PackageReference Include="Elastic.Elasticsearch.Xunit" Version="0.5.0" />
   </ItemGroup>
 

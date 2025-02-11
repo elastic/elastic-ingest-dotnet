@@ -102,7 +102,7 @@ jobs:
         name: build
         path: build/output
 
-    - uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c  # v1.4.3
+    - uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4  # v2.2.0
       with:
         subject-path: '${{ github.workspace }}/${{ env.ARTIFACTS }}'
 
@@ -143,9 +143,9 @@ jobs:
     - name: Create or update release for tag on github
       run: ./build.sh createreleaseongithub -s true --token ${{secrets.GITHUB_TOKEN}}
 
-    - uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c  # v1.4.3
+    - uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4  # v2.2.0
       with:
         subject-path: '${{ github.workspace }}/${{ env.ARTIFACTS }}'
 
     - name: Release to nuget.org
-      run: dotnet nuget push '${{ env.ARTIFACTS }}' -k ${{secrets.NUGET_ORG_API_KEY}} -s https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols
+      run: dotnet nuget push '${{ env.ARTIFACTS }}' -k ${{secrets.NUGET_API_KEY}} -s https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols

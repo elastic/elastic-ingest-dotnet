@@ -14,8 +14,7 @@ public abstract class ChannelTestWithSingleDocResponseBase
 		Transport = new DistributedTransport<TransportConfiguration>(
 			new TransportConfiguration(new SingleNodePool(new Uri(url)),
 					new InMemoryRequestInvoker(Encoding.UTF8.GetBytes("{\"items\":[{\"create\":{\"status\":201}}]}")))
-				.DisablePing()
-				.EnableDebugMode());
+			{ DisablePings = true, DebugMode = true });
 
 	protected ITransport Transport { get; }
 }

@@ -6,9 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels;
@@ -17,21 +15,6 @@ using Elastic.Ingest.Transport;
 using Elastic.Transport;
 
 namespace Elastic.Ingest.Apm;
-
-internal static class ApmChannelStatics
-{
-	public static readonly byte[] LineFeed = { (byte)'\n' };
-
-	public static readonly DefaultRequestParameters RequestParams = new()
-	{
-		RequestConfiguration = new RequestConfiguration { ContentType = "application/x-ndjson" }
-	};
-
-	public static readonly JsonSerializerOptions SerializerOptions = new()
-	{
-		DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, MaxDepth = 64, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-	};
-}
 
 /// <summary>
 /// An <see cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/> implementation that sends V2 intake API data
@@ -64,14 +47,14 @@ public class ApmChannel : TransportChannelBase<ApmChannelOptions, IIntakeObject,
 
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>
 	protected override Task<EventIntakeResponse> ExportAsync(ITransport transport, ArraySegment<IIntakeObject> page, CancellationToken ctx = default) =>
-		transport.RequestAsync<EventIntakeResponse>(HttpMethod.POST, "/intake/v2/events",
+		transport.RequestAsync<EventIntakeResponse>(new EndpointPath(HttpMethod.POST, "/intake/v2/events"),
 			PostData.StreamHandler(page,
 				(_, _) =>
 				{
 					/* NOT USED */
 				},
 				async (b, stream, ctx) => { await WriteBufferToStreamAsync(b, stream, ctx).ConfigureAwait(false); })
-			, ApmChannelStatics.RequestParams, ctx);
+			, default, ApmChannelStatics.RequestConfig, ctx);
 
 	private async Task WriteStanzaToStreamAsync(Stream stream, CancellationToken ctx)
 	{
@@ -113,7 +96,6 @@ public class ApmChannel : TransportChannelBase<ApmChannelOptions, IIntakeObject,
 				_ => "unknown"
 			};
 			var dictionary = new Dictionary<string, object>() { { type, @event } };
-
 
 			await JsonSerializer.SerializeAsync(stream, dictionary, dictionary.GetType(), ApmChannelStatics.SerializerOptions, ctx)
 				.ConfigureAwait(false);

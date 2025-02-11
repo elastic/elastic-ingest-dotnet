@@ -23,6 +23,7 @@ namespace Elastic.Ingest.Elasticsearch;
 /// </summary>
 public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	where TChannelOptions : ElasticsearchChannelOptionsBase<TEvent>
+	where TEvent : class
 {
 	/// <summary> TODO </summary>
 	protected abstract (HeaderSerializationStrategy, BulkHeader?) EventIndexStrategy(TEvent @event);

@@ -37,7 +37,6 @@ public class CustomOtlpTraceExporter : OtlpTraceExporter
 	}
 }
 
-
 /// <summary> </summary>
 public class TraceChannelOptions : ChannelOptionsBase<Activity, TraceExportResult>
 {
@@ -67,7 +66,7 @@ public class TraceChannel : BufferedChannelBase<TraceChannelOptions, Activity, T
 		: base(options, callbackListeners, nameof(TraceChannel)) {
 		var o = new OtlpExporterOptions
 		{
-			Endpoint = options.Endpoint,
+			Endpoint = options.Endpoint ?? new Uri("http://localhost:4317"),
 			Headers = $"Authorization=Bearer {options.SecretToken}"
 		};
 		TraceExporter = new CustomOtlpTraceExporter(o, options);
@@ -92,7 +91,6 @@ public class TraceChannel : BufferedChannelBase<TraceChannelOptions, Activity, T
 			var batch = (Batch<Activity>)batchConstructor.Invoke(new[] {buffer, options.BufferOptions.OutboundBufferMaxSize });
 			return batch;
 		};
-
 	}
 
 	private Func<IReadOnlyCollection<Activity>, Batch<Activity>> BatchCreator { get; }

@@ -19,8 +19,6 @@ using static Elastic.Ingest.Elasticsearch.ElasticsearchChannelStatics;
 
 namespace Elastic.Ingest.Elasticsearch;
 
-
-
 /// <summary>
 /// An abstract base class for both <see cref="DataStreamChannel{TEvent}"/> and <see cref="IndexChannel{TEvent}"/>
 /// <para>Coordinates most of the sending to- and bootstrapping of Elasticsearch</para>
@@ -28,6 +26,7 @@ namespace Elastic.Ingest.Elasticsearch;
 public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	: TransportChannelBase<TChannelOptions, TEvent, BulkResponse, BulkResponseItem>
 	where TChannelOptions : ElasticsearchChannelOptionsBase<TEvent>
+	where TEvent : class
 {
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/>
 	protected ElasticsearchChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners, string diagnosticsName)
@@ -49,7 +48,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	/// <summary>
 	/// The URL for the bulk request.
 	/// </summary>
-	protected virtual string BulkUrl => "_bulk";
+	protected virtual string BulkPathAndQuery => "_bulk?filter_path=error,items.*.status,items.*.error";
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryAllItems"/>
 	protected override bool RetryAllItems(BulkResponse response) => response.ApiCallDetails.HttpStatusCode == 429;
@@ -70,14 +69,14 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	protected override Task<BulkResponse> ExportAsync(ITransport transport, ArraySegment<TEvent> page, CancellationToken ctx = default)
 	{
 		ctx = ctx == default ? TokenSource.Token : ctx;
-		return transport.RequestAsync<BulkResponse>(HttpMethod.POST, BulkUrl,
+		return transport.RequestAsync<BulkResponse>(HttpMethod.POST, BulkPathAndQuery,
 			PostData.StreamHandler(page,
 				(_, _) =>
 				{
 					/* Synchronous code path never called */
 				},
 				async (b, stream, t) => await WriteBufferToStreamAsync(b, stream, Options, t).ConfigureAwait(false))
-			, RequestParams, ctx);
+			, ctx);
 	}
 
 	/// <summary>  </summary>

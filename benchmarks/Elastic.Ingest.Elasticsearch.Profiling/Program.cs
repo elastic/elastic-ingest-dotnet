@@ -26,7 +26,7 @@ if (string.IsNullOrEmpty(cloudId) || string.IsNullOrEmpty(elasticPassword))
 MemoryProfiler.ForceGc();
 MemoryProfiler.CollectAllocations(true);
 
-var configuration = new TransportConfiguration(cloudId, new BasicAuthentication("elastic", elasticPassword))
+var configuration = new TransportConfigurationDescriptor(cloudId, new BasicAuthentication("elastic", elasticPassword))
 	.ServerCertificateValidationCallback((a,b,c,d) => true); // Trust the local certificate if we're passing through Fiddler with SSL decryption
 
 var transport = new DistributedTransport(configuration);

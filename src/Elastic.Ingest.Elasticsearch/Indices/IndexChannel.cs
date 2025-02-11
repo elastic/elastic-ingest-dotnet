@@ -15,8 +15,9 @@ namespace Elastic.Ingest.Elasticsearch.Indices;
 /// <para>If unsure prefer to use <see cref="DataStreamChannel{TEvent}"/></para>
 /// </summary>
 public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChannelOptions<TEvent>>
+	where TEvent : class
 {
-	private readonly bool _skipIndexName;
+	private readonly bool _skipIndexNameOnOperations = false;
 	private readonly string _url;
 
 	/// <inheritdoc cref="IndexChannel{TEvent}"/>
@@ -26,22 +27,22 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 	public IndexChannel(IndexChannelOptions<TEvent> options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners, string? diagnosticsName = null)
 		: base(options, callbackListeners, diagnosticsName ?? nameof(IndexChannel<TEvent>))
 	{
-		_url = base.BulkUrl;
+		_url = base.BulkPathAndQuery;
 
 		// When the configured index format represents a fixed index name, we can optimize by providing a URL with the target index specified.
 		// We can later avoid the overhead of calculating and adding the index name to the operation headers.
 		if (string.Format(Options.IndexFormat, DateTimeOffset.Now).Equals(Options.IndexFormat, StringComparison.Ordinal))
 		{
-			_url = $"{Options.IndexFormat}/{base.BulkUrl}";
-			_skipIndexName = true;
+			_url = $"{Options.IndexFormat}/{base.BulkPathAndQuery}";
+			_skipIndexNameOnOperations = true;
 		}
 
 		TemplateName = string.Format(Options.IndexFormat, "template");
 		TemplateWildcard = string.Format(Options.IndexFormat, "*");
 	}
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkUrl"/>
-	protected override string BulkUrl => _url;
+	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
+	protected override string BulkPathAndQuery => _url;
 
 	/// <inheritdoc cref="EventIndexStrategy"/>
 	protected override (HeaderSerializationStrategy, BulkHeader?) EventIndexStrategy(TEvent @event)
@@ -49,7 +50,7 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 		var indexTime = Options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
 		if (Options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(Options.IndexOffset.Value);
 
-		var index = _skipIndexName ? string.Empty : string.Format(Options.IndexFormat, indexTime);
+		var index = _skipIndexNameOnOperations ? string.Empty : string.Format(Options.IndexFormat, indexTime);
 		var id = Options.BulkOperationIdLookup?.Invoke(@event);
 		var templates = Options.DynamicTemplateLookup?.Invoke(@event);
 		var requireAlias = Options.RequireAlias?.Invoke(@event);

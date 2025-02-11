@@ -1,11 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0;net8.0</TargetFrameworks> <!-- We target net6.0 to test netstandard targets -->
+    <TargetFramework>net8.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Elastic.Transport.VirtualizedCluster" Version="0.4.18" />
+    <PackageReference Include="Elastic.Transport.VirtualizedCluster" Version="0.5.5" />
   </ItemGroup>
 
   <ItemGroup>
