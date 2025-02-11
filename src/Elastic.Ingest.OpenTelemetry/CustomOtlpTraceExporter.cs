@@ -63,7 +63,7 @@ public class TraceChannel : BufferedChannelBase<TraceChannelOptions, Activity, T
 
 	/// <summary> </summary>
 	public TraceChannel(TraceChannelOptions options, ICollection<IChannelCallbacks<Activity, TraceExportResult>>? callbackListeners)
-		: base(options, callbackListeners) {
+		: base(options, callbackListeners, nameof(TraceChannel)) {
 		var o = new OtlpExporterOptions
 		{
 			Endpoint = options.Endpoint ?? new Uri("http://localhost:4317"),

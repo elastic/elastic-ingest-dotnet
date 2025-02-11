@@ -25,7 +25,7 @@ using Perfolizer.Metrology;
 
 var bm = new BulkRequestCreationWithFixedIndexNameBenchmarks();
 bm.Setup();
-await bm.WriteToStreamAsync();
+//await bm.WriteToStreamAsync();
 
 var length = bm.MemoryStream.Length;
 
