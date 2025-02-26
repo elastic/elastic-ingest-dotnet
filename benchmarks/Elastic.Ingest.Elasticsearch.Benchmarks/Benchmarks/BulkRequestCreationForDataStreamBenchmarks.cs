@@ -16,7 +16,6 @@ public class BulkRequestCreationForDataStreamBenchmarks
 	private ITransport? _transport;
 	private TransportConfiguration? _transportConfiguration;
 	private StockData[] _data = Array.Empty<StockData>();
-	private readonly BulkOperationHeader _bulkOperationHeader = new CreateOperation();
 
 	public Stream MemoryStream { get; } = new MemoryStream();
 
@@ -40,12 +39,12 @@ public class BulkRequestCreationForDataStreamBenchmarks
 		_data = StockData.CreateSampleData(DocumentsToIndex);
 	}
 
-	[Benchmark(Baseline = true)]
-	public async Task WriteToStreamAsync()
-	{
-		MemoryStream.Position = 0;
-		var bytes = BulkRequestDataFactory.GetBytes(_data, _options!, _ => _bulkOperationHeader);
-		var postData = PostData.ReadOnlyMemory(bytes);
-		await postData.WriteAsync(MemoryStream, _transportConfiguration!, false, CancellationToken.None);
-	}
+	//[Benchmark(Baseline = true)]
+	//public async Task WriteToStreamAsync()
+	//{
+	//	MemoryStream.Position = 0;
+	//	var bytes = BulkRequestDataFactory.GetBytes(_data, _options!, _ => _bulkOperationHeader);
+	//	var postData = PostData.ReadOnlyMemory(bytes);
+	//	await postData.WriteAsync(MemoryStream, _transportConfiguration!, false, CancellationToken.None);
+	//}
 }
