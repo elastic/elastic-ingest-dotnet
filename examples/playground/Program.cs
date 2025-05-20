@@ -82,7 +82,7 @@ DataStreamChannel<EcsDocument> SetupElasticsearchChannel()
 	var apiKey = Environment.GetEnvironmentVariable("ELASTIC_API_KEY") ?? throw new Exception();
 	var url = Environment.GetEnvironmentVariable("ELASTIC_URL") ?? throw new Exception();
 
-	var configuration = new TransportConfiguration(new Uri(url), new ApiKey(apiKey), ElasticsearchProductRegistration.Default);
+	var configuration = new ElasticsearchConfiguration(new Uri(url), new ApiKey(apiKey));
 	var transport = new DistributedTransport(configuration);
 	var c = new DataStreamChannel<EcsDocument>(
 		new DataStreamChannelOptions<EcsDocument>(transport)

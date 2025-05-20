@@ -10,6 +10,7 @@ using System.Text.Json.Serialization.Metadata;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
 using Elastic.Transport;
+using Elastic.Transport.Products.Elasticsearch;
 
 namespace Elastic.Ingest.Elasticsearch;
 
@@ -49,7 +50,7 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 		{
 			_serializerContext = JsonTypeInfoResolver.Combine(
 				IngestSerializationContext.Default,
-				Elastic.Transport.Products.Elasticsearch.ErrorSerializerContext.Default,
+				ElasticsearchTransportSerializerContext.Default,
 				value
 			);
 			_serializerOptions = new JsonSerializerOptions

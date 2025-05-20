@@ -47,7 +47,7 @@ internal class ItemConverter : JsonConverter<BulkResponseItem>
 					break;
 				case "error":
 					reader.Read();
-					error = JsonSerializer.Deserialize<ErrorCause>(ref reader, ErrorSerializerContext.Default.ErrorCause);
+					error = JsonSerializer.Deserialize<ErrorCause>(ref reader, ElasticsearchTransportSerializerContext.Default.ErrorCause);
 					break;
 			}
 		}
@@ -74,7 +74,7 @@ internal class ItemConverter : JsonConverter<BulkResponseItem>
 		if (value.Error != null)
 		{
 			writer.WritePropertyName("error");
-			JsonSerializer.Serialize(writer, value.Error, ErrorSerializerContext.Default.ErrorCause);
+			JsonSerializer.Serialize(writer, value.Error, ElasticsearchTransportSerializerContext.Default.ErrorCause);
 		}
 
 		writer.WriteNumber("status", value.Status);
