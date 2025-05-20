@@ -30,6 +30,9 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 		_fixedHeader = new CreateOperation();
 	}
 
+	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
+	protected override string RefreshTargets => Options.DataStream.ToString();
+
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
 	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent @event) => _fixedHeader;
 

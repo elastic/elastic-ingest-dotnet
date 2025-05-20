@@ -104,4 +104,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 
 	/// <summary>  </summary>
 	protected class PutComponentTemplateResponse : ElasticsearchResponse { }
+
+	/// <summary>  </summary>
+	protected class RefreshResponse : ElasticsearchResponse { }
 }

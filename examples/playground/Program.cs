@@ -5,33 +5,30 @@
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Elastic.Channels;
-using Elastic.Elasticsearch.Ephemeral;
 using Elastic.Ingest.Elasticsearch;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Transport;
+using Elastic.Transport.Products.Elasticsearch;
 
-var random = new Random();
-var ctxs = new CancellationTokenSource();
-var parallelOpts = new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount, CancellationToken = ctxs.Token };
-const int numDocs = 1_000_000;
-var bufferOptions = new BufferOptions { BoundedChannelFullMode = BoundedChannelFullMode.Wait };
-var config = new EphemeralClusterConfiguration("8.13.0");
-using var cluster = new EphemeralCluster(config);
-using var channel = SetupElasticsearchChannel();
-
+var cancellationTokenSource = new CancellationTokenSource();
 Console.CancelKeyPress += (sender, eventArgs) =>
 {
-	ctxs.Cancel();
-	cluster.Dispose();
+	cancellationTokenSource.Cancel();
 	eventArgs.Cancel = true;
 };
 
-
-using var started = cluster.Start();
+const int numDocs = 1_000_000;
+var bufferOptions = new BufferOptions
+{
+	InboundBufferMaxSize = 1_000_000,
+	OutboundBufferMaxSize = 5_000,
+	ExportMaxConcurrency = Environment.ProcessorCount,
+	BoundedChannelFullMode = BoundedChannelFullMode.Wait
+};
 
 var memoryBefore = GC.GetTotalMemory(false);
 
-await PushToChannel(channel);
+await DoWork();
 
 // This is not really indicative because the channel is still draining at this point in time
 var memoryAfter = GC.GetTotalMemory(false);
@@ -39,25 +36,35 @@ Console.WriteLine($"Memory before: {memoryBefore} bytes");
 Console.WriteLine($"Memory after: {memoryAfter} bytes");
 var memoryUsed = memoryAfter - memoryBefore;
 Console.WriteLine($"Memory used: {memoryUsed} bytes");
+GC.Collect();
+var memoryAfterCollect = GC.GetTotalMemory(false);
+Console.WriteLine($"Memory used after collect: {memoryAfterCollect} bytes");
 
-Console.WriteLine($"Press any key...");
-Console.ReadKey();
+async Task DoWork()
+{
+	using var channel = SetupElasticsearchChannel();
+
+	await PushToChannel(channel);
+}
 
 
 async Task PushToChannel(DataStreamChannel<EcsDocument> c)
 {
+	var random = new Random();
 	if (c == null) throw new ArgumentNullException(nameof(c));
 
 	await c.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 
 	foreach (var i in Enumerable.Range(0, numDocs))
-		await DoChannelWrite(i, ctxs.Token);
+		await DoChannelWrite(i, cancellationTokenSource.Token);
 
-	/*
-	await Parallel.ForEachAsync(Enumerable.Range(0, numDocs), parallelOpts, async (i, ctx) =>
-	{
-		await DoChannelWrite(i, ctx);
-	});*/
+	Console.WriteLine("---> Wrote all documents");
+
+	var drained = await c.WaitForDrainAsync();
+	Console.WriteLine(!drained
+		? $"---> Failed to drain channel {c.InflightExportOperations} pending buffers."
+		: $"---> Drained channel {c.InflightEvents} pending buffers.");
+	await c.RefreshAsync();
 
 	async Task DoChannelWrite(int i, CancellationToken cancellationToken)
 	{
@@ -72,17 +79,20 @@ async Task PushToChannel(DataStreamChannel<EcsDocument> c)
 
 DataStreamChannel<EcsDocument> SetupElasticsearchChannel()
 {
-	var transportConfiguration = new TransportConfiguration(new Uri("http://localhost:9200"));
+	var apiKey = Environment.GetEnvironmentVariable("ELASTIC_API_KEY") ?? throw new Exception();
+	var url = Environment.GetEnvironmentVariable("ELASTIC_URL") ?? throw new Exception();
+
+	var configuration = new TransportConfiguration(new Uri(url), new ApiKey(apiKey), ElasticsearchProductRegistration.Default);
+	var transport = new DistributedTransport(configuration);
 	var c = new DataStreamChannel<EcsDocument>(
-		new DataStreamChannelOptions<EcsDocument>(new DistributedTransport(transportConfiguration))
+		new DataStreamChannelOptions<EcsDocument>(transport)
 		{
 			BufferOptions = bufferOptions,
-			CancellationToken = ctxs.Token
-			, ExportResponseCallback = (c, t) =>
+			CancellationToken = cancellationTokenSource.Token,
+			SerializerContext = ExampleJsonSerializerContext.Default,
+			ExportResponseCallback = (c, t) =>
 			{
-				var error = c.Items.Select(i=>i.Error).FirstOrDefault(e => e != null);
-				if (error == null) return;
-				Console.WriteLine(error.ToString());
+				Console.WriteLine($"{c.ApiCallDetails.HttpMethod} Response: {c.ApiCallDetails.HttpStatusCode}");
 			}
 		});
 
@@ -97,4 +107,7 @@ public class EcsDocument
 	[JsonPropertyName("message")]
 	public string Message { init; get; } = null!;
 }
+
+[JsonSerializable(typeof(EcsDocument))]
+internal partial class ExampleJsonSerializerContext : JsonSerializerContext;
 

@@ -14,10 +14,10 @@ internal static class ElasticsearchChannelStatics
 {
 	public static readonly byte[] LineFeed = { (byte)'\n' };
 
-	public static readonly byte[] DocUpdateHeaderStart = Encoding.UTF8.GetBytes("{\"doc_as_upsert\": true, \"doc\": ");
-	public static readonly byte[] DocUpdateHeaderEnd = Encoding.UTF8.GetBytes(" }");
+	public static readonly byte[] DocUpdateHeaderStart = "{\"doc_as_upsert\": true, \"doc\": "u8.ToArray();
+	public static readonly byte[] DocUpdateHeaderEnd = " }"u8.ToArray();
 
-	public static readonly HashSet<int> RetryStatusCodes = new(new[] { 502, 503, 504, 429 });
+	public static readonly HashSet<int> RetryStatusCodes = [502, 503, 504, 429];
 
 	public static readonly JsonSerializerOptions SerializerOptions = new ()
 	{
