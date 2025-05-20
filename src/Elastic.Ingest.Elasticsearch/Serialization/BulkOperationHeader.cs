@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Elastic.Transport.Products.Elasticsearch;
 
 namespace Elastic.Ingest.Elasticsearch.Serialization;
 
@@ -93,6 +94,6 @@ internal class BulkOperationHeaderConverter<THeader> : JsonConverter<THeader>
 		if (templates is not { Count: > 0 }) return;
 
 		writer.WritePropertyName("dynamic_templates");
-		JsonSerializer.Serialize(writer, templates, options);
+		JsonSerializer.Serialize(writer, templates, IngestSerializationContext.Default.DictionaryStringString);
 	}
 }

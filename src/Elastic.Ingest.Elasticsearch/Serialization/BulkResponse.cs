@@ -48,7 +48,7 @@ internal class ResponseItemsConverter : JsonConverter<IReadOnlyCollection<BulkRe
 		var depth = reader.CurrentDepth;
 		while (reader.Read() && reader.CurrentDepth > depth)
 		{
-			var item = JsonSerializer.Deserialize<BulkResponseItem>(ref reader, options);
+			var item = JsonSerializer.Deserialize<BulkResponseItem>(ref reader, IngestSerializationContext.Default.BulkResponseItem);
 			if (item != null)
 				list.Add(item);
 		}

@@ -16,7 +16,7 @@ namespace Elastic.Ingest.Elasticsearch;
 /// </summary>
 public interface IElasticsearchEventWriter<TEvent>
 {
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 	/// <summary>
 	/// Provide a custom routine to write <typeparamref name="TEvent"/> to an ArrayBufferWriter{T}
 	/// <para>This implementation is only called if <see cref="ElasticsearchChannelOptionsBase{TEvent}.UseReadOnlyMemory"/> is true, defaults to false</para>

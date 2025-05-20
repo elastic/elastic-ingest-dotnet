@@ -26,7 +26,7 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 	/// </summary>
 	public IElasticsearchEventWriter<TEvent>? EventWriter { get; set; }
 
-	#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 	/// <summary>
 	/// Expert option,
 	/// This will eagerly serialize to <see cref="ReadOnlyMemory{TEvent}"/> and use <see cref="PostData.ReadOnlyMemory"/>.

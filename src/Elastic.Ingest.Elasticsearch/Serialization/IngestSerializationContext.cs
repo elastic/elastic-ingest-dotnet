@@ -2,8 +2,8 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using Elastic.Transport.Products.Elasticsearch;
 
 namespace Elastic.Ingest.Elasticsearch.Serialization;
 
@@ -15,6 +15,7 @@ namespace Elastic.Ingest.Elasticsearch.Serialization;
 [JsonSerializable(typeof(BulkResponseItem))]
 [JsonSerializable(typeof(BulkResponse))]
 [JsonSerializable(typeof(BulkResponseItem))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
 internal partial class IngestSerializationContext : JsonSerializerContext
 {
 	static IngestSerializationContext() =>
