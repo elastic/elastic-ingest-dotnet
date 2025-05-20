@@ -24,7 +24,6 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	/// <returns>A tuple of (name, body) describing the index template</returns>
 	protected abstract (string, string) GetDefaultIndexTemplate(string name, string match, string mappingsName, string settingsName);
 
-
 	/// <summary>
 	/// Bootstrap the target data stream. Will register the appropriate index and component templates
 	/// </summary>
@@ -35,13 +34,13 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	{
 		if (bootstrapMethod == BootstrapMethod.None) return true;
 
-		ctx = ctx == default ? TokenSource.Token : ctx;
+		ctx = ctx == CancellationToken.None ? TokenSource.Token : ctx;
 
 		var name = TemplateName;
 		var match = TemplateWildcard;
 		if (await IndexTemplateExistsAsync(name, ctx).ConfigureAwait(false)) return false;
 
-		var (settingsName, settingsBody) = GetDefaultComponentSettings(name, ilmPolicy);
+		var (settingsName, settingsBody) = GetDefaultComponentSettings(bootstrapMethod, name, ilmPolicy);
 		if (!await PutComponentTemplateAsync(bootstrapMethod, settingsName, settingsBody, ctx).ConfigureAwait(false))
 			return false;
 
@@ -69,7 +68,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		var match = TemplateWildcard;
 		if (IndexTemplateExists(name)) return false;
 
-		var (settingsName, settingsBody) = GetDefaultComponentSettings(name, ilmPolicy);
+		var (settingsName, settingsBody) = GetDefaultComponentSettings(bootstrapMethod, name, ilmPolicy);
 		if (!PutComponentTemplate(bootstrapMethod, settingsName, settingsBody))
 			return false;
 
@@ -83,6 +82,50 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 
 		return true;
 	}
+
+	private bool? _isServerless;
+	/// Detects whether we are running against serverless or not
+	protected bool IsServerless(BootstrapMethod bootstrapMethod)
+	{
+		if (_isServerless.HasValue)
+			return _isServerless.Value;
+		var rootInfo = Options.Transport.Request<DynamicResponse>(HttpMethod.GET, $"/");
+		var statusCode = rootInfo.ApiCallDetails.HttpStatusCode;
+		if (statusCode is not 200)
+			return bootstrapMethod == BootstrapMethod.Silent
+				? false
+				: throw new Exception(
+					$"Failure to check whether instance is serverless or not {rootInfo}",
+					rootInfo.ApiCallDetails.OriginalException
+				);
+		var flavor = rootInfo.Body.Get<string>("version.build_flavor");
+		_isServerless = statusCode is 200 && flavor == "serverless";
+		return _isServerless.Value;
+
+	}
+
+	/// The indices and/o datastreams to refresh as part of this implementation
+	protected abstract string RefreshTargets { get; }
+
+	/// Refresh all targets that were written too
+	public bool Refresh()
+	{
+		var url = $"{RefreshTargets}/_refresh?allow_no_indices=true&ignore_unavailable=true";
+		var refresh = Options.Transport.Request<RefreshResponse>(HttpMethod.POST, url, PostData.Empty);
+		var statusCode = refresh.ApiCallDetails.HttpStatusCode;
+		return statusCode is 200;
+	}
+
+	/// Refresh all targets that were written too
+	public async Task<bool> RefreshAsync(CancellationToken ctx = default)
+	{
+		var url = $"{RefreshTargets}/_refresh?allow_no_indices=true&ignore_unavailable=true";
+		var refresh = await Options.Transport.RequestAsync<RefreshResponse>(HttpMethod.POST, url, PostData.Empty, ctx)
+			.ConfigureAwait(false);
+		var statusCode = refresh.ApiCallDetails.HttpStatusCode;
+		return statusCode is 200;
+	}
+
 
 	/// <summary></summary>
 	protected bool IndexTemplateExists(string name)
@@ -105,9 +148,11 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	/// <summary></summary>
 	protected bool PutIndexTemplate(BootstrapMethod bootstrapMethod, string name, string body)
 	{
-		var putIndexTemplateResponse = Options.Transport.Request<PutIndexTemplateResponse>
-			(HttpMethod.PUT, $"_index_template/{name}", PostData.String(body));
+		var putIndexTemplateResponse = Options.Transport.Request<PutIndexTemplateResponse>(
+			HttpMethod.PUT, $"_index_template/{name}", PostData.String(body)
+		);
 		if (putIndexTemplateResponse.ApiCallDetails.HasSuccessfulStatusCode) return true;
+
 
 		return bootstrapMethod == BootstrapMethod.Silent
 			? false
@@ -168,15 +213,21 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	/// Returns default component settings template for a <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/>
 	/// </summary>
 	/// <returns>A tuple of (name, body) describing the default component template settings</returns>
-	protected (string, string) GetDefaultComponentSettings(string indexTemplateName, string? ilmPolicy = null)
+	protected (string, string) GetDefaultComponentSettings(BootstrapMethod bootstrapMethod, string indexTemplateName, string? ilmPolicy = null)
 	{
-		if (string.IsNullOrWhiteSpace(ilmPolicy)) ilmPolicy = "logs";
+		if (string.IsNullOrWhiteSpace(ilmPolicy))
+			ilmPolicy = "logs";
+
+		var settings = "{}";
+		if (!IsServerless(bootstrapMethod))
+			settings = $@"{{
+                  ""index.lifecycle.name"": ""{ilmPolicy}""
+                }}";
+
 		var settingsName = $"{indexTemplateName}-settings";
 		var settingsBody = $@"{{
               ""template"": {{
-                ""settings"": {{
-                  ""index.lifecycle.name"": ""{ilmPolicy}""
-                }}
+                ""settings"": {settings}
               }},
               ""_meta"": {{
                 ""description"": ""Template installed by .NET ingest libraries (https://github.com/elastic/elastic-ingest-dotnet)"",

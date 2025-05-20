@@ -69,7 +69,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	protected override Task<BulkResponse> ExportAsync(ITransport transport, ArraySegment<TEvent> page, CancellationToken ctx = default)
 	{
 		ctx = ctx == default ? TokenSource.Token : ctx;
-#if NETSTANDARD2_1
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 		// Option is obsolete to prevent external users to set it.
 #pragma warning disable CS0618
 		if (Options.UseReadOnlyMemory)
@@ -104,4 +104,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 
 	/// <summary>  </summary>
 	protected class PutComponentTemplateResponse : ElasticsearchResponse { }
+
+	/// <summary>  </summary>
+	protected class RefreshResponse : ElasticsearchResponse { }
 }

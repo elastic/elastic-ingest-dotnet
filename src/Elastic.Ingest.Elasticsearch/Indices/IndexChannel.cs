@@ -39,6 +39,9 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
 		TemplateWildcard = string.Format(Options.IndexFormat, "*");
 	}
 
+	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
+	protected override string RefreshTargets => _skipIndexNameOnOperations ? Options.IndexFormat : string.Format(Options.IndexFormat, "*");
+
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
 	protected override string BulkPathAndQuery => _url;
 
@@ -67,4 +70,5 @@ public class IndexChannel<TEvent> : ElasticsearchChannelBase<TEvent, IndexChanne
             }}";
 		return (name, indexTemplateBody);
 	}
+
 }

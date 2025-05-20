@@ -27,7 +27,7 @@ var options = new NoopBufferedChannel.NoopChannelOptions
 };
 Console.WriteLine("2");
 var channel = new DiagnosticsBufferedChannel(options);
-Console.WriteLine($"Begin: ({channel.OutboundStarted}) {channel.MaxConcurrency} {channel.BatchExportOperations} -> {channel.InflightEvents}");
+Console.WriteLine($"Begin: ({channel.OutboundStarted}) {channel.MaxConcurrency} {channel.InflightExportOperations} -> {channel.InflightEvents}");
 await Parallel.ForEachAsync(Enumerable.Range(0, int.MaxValue), new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount, CancellationToken = ctxs.Token }, async (i, ctx) =>
 {
 	var e = new NoopBufferedChannel.NoopEvent { Id = i };

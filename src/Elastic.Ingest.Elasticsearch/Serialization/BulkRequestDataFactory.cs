@@ -2,7 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 using System.Buffers;
 #else
 using System.Collections.Generic;
@@ -22,7 +22,7 @@ namespace Elastic.Ingest.Elasticsearch.Serialization;
 /// </summary>
 public static class BulkRequestDataFactory
 {
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 	/// <summary>
 	/// Get the NDJSON request body bytes for a page of <typeparamref name="TEvent"/> events.
 	/// </summary>
@@ -42,7 +42,9 @@ public static class BulkRequestDataFactory
 		foreach (var @event in page.AsSpan())
 		{
 			var indexHeader = createHeaderFactory(@event);
-			JsonSerializer.Serialize(writer, indexHeader, indexHeader.GetType(), SerializerOptions);
+#pragma warning disable IL2026, IL3050 // SerializerContext is registered.
+			JsonSerializer.Serialize(writer, indexHeader, indexHeader.GetType(), options.SerializerOptions);
+#pragma warning restore IL2026, IL3050 // SerializerContext is registered.
 			bufferWriter.Write(LineFeed);
 			writer.Reset();
 
@@ -55,7 +57,9 @@ public static class BulkRequestDataFactory
 			if (options.EventWriter?.WriteToArrayBuffer != null)
 				options.EventWriter.WriteToArrayBuffer(bufferWriter, @event);
 			else
-				JsonSerializer.Serialize(writer, @event, SerializerOptions);
+#pragma warning disable IL2026, IL3050 // SerializerContext is registered.
+				JsonSerializer.Serialize(writer, @event, options.SerializerOptions);
+#pragma warning restore IL2026, IL3050 // SerializerContext is registered.
 			writer.Reset();
 
 			if (indexHeader is UpdateOperation)
@@ -85,7 +89,7 @@ public static class BulkRequestDataFactory
 		ElasticsearchChannelOptionsBase<TEvent> options, Func<TEvent, BulkOperationHeader> createHeaderFactory,
 		CancellationToken ctx = default)
 	{
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 		var items = page;
 #else
 			// needs cast prior to netstandard2.0
@@ -100,9 +104,11 @@ public static class BulkRequestDataFactory
 			if (@event == null) continue;
 
 			var indexHeader = createHeaderFactory(@event);
-			await JsonSerializer.SerializeAsync(stream, indexHeader, indexHeader.GetType(), SerializerOptions, ctx)
+#pragma warning disable IL2026, IL3050 // SerializerContext is registered.
+			await JsonSerializer.SerializeAsync(stream, indexHeader, indexHeader.GetType(), options.SerializerOptions, ctx)
 				.ConfigureAwait(false);
 			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
+#pragma warning restore IL2026, IL3050 // SerializerContext is registered.
 
 			if (indexHeader is UpdateOperation)
 				await stream.WriteAsync(DocUpdateHeaderStart, 0, DocUpdateHeaderStart.Length, ctx).ConfigureAwait(false);
@@ -110,8 +116,10 @@ public static class BulkRequestDataFactory
 			if (options.EventWriter?.WriteToStreamAsync != null)
 				await options.EventWriter.WriteToStreamAsync(stream, @event, ctx).ConfigureAwait(false);
 			else
-				await JsonSerializer.SerializeAsync(stream, @event, SerializerOptions, ctx)
+#pragma warning disable IL2026, IL3050 // SerializerContext is registered.
+				await JsonSerializer.SerializeAsync(stream, @event, options.SerializerOptions, ctx)
 					.ConfigureAwait(false);
+#pragma warning restore IL2026, IL3050 // SerializerContext is registered.
 
 			if (indexHeader is UpdateOperation)
 				await stream.WriteAsync(DocUpdateHeaderEnd, 0, DocUpdateHeaderEnd.Length, ctx).ConfigureAwait(false);
@@ -139,18 +147,14 @@ public static class BulkRequestDataFactory
 		var id = options.BulkOperationIdLookup?.Invoke(@event);
 
 		if (options.OperationMode == OperationMode.Index)
-		{
 			return skipIndexName
 				? !string.IsNullOrWhiteSpace(id) ? new IndexOperation { Id = id } : new IndexOperation()
 				: !string.IsNullOrWhiteSpace(id) ? new IndexOperation { Index = index, Id = id } : new IndexOperation { Index = index };
-		}
 
 		if (options.OperationMode == OperationMode.Create)
-		{
 			return skipIndexName
 				? !string.IsNullOrWhiteSpace(id) ? new CreateOperation { Id = id } : new CreateOperation()
 				: !string.IsNullOrWhiteSpace(id) ? new CreateOperation { Index = index, Id = id } : new CreateOperation { Index = index };
-		}
 
 		if (!string.IsNullOrWhiteSpace(id) && id != null && (options.BulkUpsertLookup?.Invoke(@event, id) ?? false))
 			return skipIndexName ? new UpdateOperation { Id = id } : new UpdateOperation { Id = id, Index = index };

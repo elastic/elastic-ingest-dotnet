@@ -97,7 +97,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	public int MaxConcurrency { get; }
 
 	/// <summary>
-	/// The effective batch export size .
+	/// The effective batch export size.
 	/// <para>Either the  configured concurrency <see cref="Channels.BufferOptions.OutboundBufferMaxSize"/> or the calculated size.</para>
 	/// <para>If the configured <see cref="Channels.BufferOptions.OutboundBufferMaxSize"/> exceeds (<see cref="Channels.BufferOptions.InboundBufferMaxSize"/> / <see cref="MaxConcurrency"/>)</para>
 	/// <para>the batch export size will be lowered to (<see cref="Channels.BufferOptions.InboundBufferMaxSize"/> / <see cref="MaxConcurrency"/>) to ensure we saturate <see cref="MaxConcurrency"/></para>
@@ -111,9 +111,9 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// </summary>
 	public int DrainSize { get; }
 
-	private int _ongoingExportOperations;
+	private int _inflightExportOperations;
 	/// <summary> Outstanding export operations </summary>
-	public int BatchExportOperations => _ongoingExportOperations;
+	public int InflightExportOperations => _inflightExportOperations;
 	private readonly CountdownEvent _waitForOutboundRead;
 	private List<Task> _taskList;
 
@@ -222,6 +222,39 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		return await InChannel.Writer.WaitToWriteAsync(ctx).ConfigureAwait(false);
 	}
 
+	private CountdownEvent? _waitForDrain;
+
+	/// Tries to complete and wait for all inflight buffers to be handled
+	public async ValueTask<bool> WaitForDrainAsync(TimeSpan? maxWait = null, CancellationToken ctx = default)
+	{
+		// calculate how many more exports we are expecting
+		var toDrain = (int)(_inflightEvents / BatchExportSize);
+		// create a countdown event minus some safety for concurrency already decreasing _inflightEvents
+		// We are doing an additional wait after
+		_waitForDrain ??= new CountdownEvent(Math.Max(toDrain - MaxConcurrency, 0));
+		// TODO this assumes export takes at most 1s, we should do a moving window average or mean
+		// from what we observe
+		var wait = maxWait ?? (TimeSpan.FromSeconds(1 * toDrain));
+		_ = TryComplete();
+
+		if (_outBoundChannelConsumed && _inflightExportOperations == 0 && _inflightEvents == 0)
+			return true;
+
+		_waitForDrain.Wait(wait, ctx);
+
+		if (_outBoundChannelConsumed && _inflightExportOperations == 0 && _inflightEvents == 0)
+			return true;
+
+		//if we are not fully drained, wait up to MaxConcurrency seconds additional seconds.
+		var maxSanityWait = TimeSpan.FromSeconds(MaxConcurrency * 1);
+		var start = DateTimeOffset.UtcNow;
+		do
+			await Task.Delay(TimeSpan.FromMilliseconds(100), ctx).ConfigureAwait(false);
+		while ((!_outBoundChannelConsumed || _inflightEvents > 0 || _inflightExportOperations > 0)
+			   && (DateTimeOffset.UtcNow - start) < maxSanityWait);
+		return _outBoundChannelConsumed && _inflightEvents == 0 && _inflightExportOperations == 0;
+	}
+
 	/// <inheritdoc cref="ChannelWriter{T}.TryComplete"/>
 	public override bool TryComplete(Exception? error = null) => InChannel.Writer.TryComplete(error);
 
@@ -289,6 +322,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	protected virtual ArraySegment<TEvent> RetryBuffer(TResponse response, ArraySegment<TEvent> currentBuffer, IWriteTrackingBuffer statistics) =>
 		EmptyArraySegments<TEvent>.Empty;
 
+	private bool _outBoundChannelConsumed;
 	private async Task ConsumeOutboundEventsAsync()
 	{
 		_callbacks.OutboundChannelStartedCallback?.Invoke();
@@ -304,6 +338,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 			while (OutChannel.Reader.TryRead(out var buffer))
 			{
+				_outBoundChannelConsumed = true;
 				var items = buffer.GetArraySegment();
 				await _throttleExportTasks.WaitAsync(TokenSource.Token).ConfigureAwait(false);
 				var t = ExportBufferAsync(items, buffer);
@@ -324,7 +359,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	private async Task ExportBufferAsync(ArraySegment<TEvent> items, IOutboundBuffer<TEvent> buffer)
 	{
-		Interlocked.Increment(ref _ongoingExportOperations);
+		Interlocked.Increment(ref _inflightExportOperations);
 		using var outboundBuffer = buffer;
 		var maxRetries = Options.BufferOptions.ExportMaxRetries;
 		for (var i = 0; i <= maxRetries && items.Count > 0; i++)
@@ -335,13 +370,17 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			_callbacks.ExportItemsAttemptCallback?.Invoke(i, items.Count);
 			TResponse? response = null;
 
-			// delay if we still have items and we are not at the end of the max retry cycle
+			// delay if we still have items, and we are not at the end of the max retry cycle
 			var atEndOfRetries = i == maxRetries;
 			try
 			{
 				response = await ExportAsync(items, TokenSource.Token).ConfigureAwait(false);
 				_callbacks.ExportResponseCallback?.Invoke(response,
-					new WriteTrackingBufferEventData { Count = outboundBuffer.Count, DurationSinceFirstWrite = outboundBuffer.DurationSinceFirstWrite });
+					new WriteTrackingBufferEventData
+					{
+						Count = outboundBuffer.Count,
+						DurationSinceFirstWrite = outboundBuffer.DurationSinceFirstWrite
+					});
 			}
 			catch (Exception e)
 			{
@@ -365,10 +404,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			else if (items.Count > 0 && atEndOfRetries)
 				_callbacks.ExportMaxRetriesCallback?.Invoke(items);
 		}
-		Interlocked.Decrement(ref _ongoingExportOperations);
+		Interlocked.Decrement(ref _inflightExportOperations);
 		_callbacks.ExportBufferCallback?.Invoke();
 		if (_signal is { IsSet: false })
 			_signal.Signal();
+		if (_waitForDrain is { IsSet: false })
+			_waitForDrain.Signal();
 	}
 
 	private int _seenTimeouts;
@@ -457,7 +498,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		sb.AppendLine(DiagnosticsListener.ToString());
 		sb.AppendLine($"{nameof(InflightEvents)}: {InflightEvents:N0}");
 		sb.AppendLine($"{nameof(BufferOptions.InboundBufferMaxSize)}: {BufferOptions.InboundBufferMaxSize:N0}");
-		sb.AppendLine($"{nameof(BatchExportOperations)}: {BatchExportOperations:N0}");
+		sb.AppendLine($"{nameof(InflightExportOperations)}: {InflightExportOperations:N0}");
 		sb.AppendLine($"{nameof(BatchExportSize)}: {BatchExportSize:N0}");
 		sb.AppendLine($"{nameof(DrainSize)}: {DrainSize:N0}");
 		sb.AppendLine($"{nameof(MaxConcurrency)}: {MaxConcurrency:N0}");
@@ -470,14 +511,14 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		try
 		{
-			// Mark inchannel completed to flush buffer and end task, signalling end to outchannel
+			// Mark inchannel completed to flush buffer and end task, signaling the end to the out channel
 			InChannel.Writer.TryComplete();
-			// Wait a reasonable duration for the outchannel to complete before disposing the rest
+			// Wait a reasonable duration for the out channel to complete before disposing the rest
 			if (!_exitCancelSource.IsCancellationRequested)
 			{
 				// Allow one retry before we exit
-				var maxwait = Options.BufferOptions.ExportBackoffPeriod(1);
-				_exitCancelSource.Token.WaitHandle.WaitOne(maxwait);
+				var maxWaitForComplete = Options.BufferOptions.ExportBackoffPeriod(1);
+				_exitCancelSource.Token.WaitHandle.WaitOne(maxWaitForComplete);
 			}
 			_exitCancelSource.Dispose();
 			InboundBuffer.Dispose();

@@ -36,11 +36,11 @@ public class DiagnosticsBufferedChannel : NoopBufferedChannel
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>
 	protected override Task<NoopResponse> ExportAsync(ArraySegment<NoopEvent> buffer, CancellationToken ctx = default)
 	{
-		#if NETSTANDARD2_1
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 		var b = buffer;
-		#else
+#else
 		IList<NoopEvent> b = buffer;
-		#endif
+#endif
 		if (BatchExportSize != buffer.Count)
 			Interlocked.Increment(ref _bufferMismatches);
 

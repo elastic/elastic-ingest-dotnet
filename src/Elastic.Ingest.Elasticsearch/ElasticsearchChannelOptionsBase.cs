@@ -3,6 +3,10 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
 using Elastic.Transport;
@@ -22,7 +26,7 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 	/// </summary>
 	public IElasticsearchEventWriter<TEvent>? EventWriter { get; set; }
 
-	#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 	/// <summary>
 	/// Expert option,
 	/// This will eagerly serialize to <see cref="ReadOnlyMemory{TEvent}"/> and use <see cref="PostData.ReadOnlyMemory"/>.
@@ -36,4 +40,32 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 	[Obsolete("Temporary exposed expert option, used to evaluate two different approaches to serialization")]
 	public bool UseReadOnlyMemory { get; set; }
 
+	private IJsonTypeInfoResolver? _serializerContext;
+
+	/// <summary> The JsonSerializerContext to use for serialization. </summary>
+	public JsonSerializerContext SerializerContext
+	{
+		set
+		{
+			_serializerContext = JsonTypeInfoResolver.Combine(
+				IngestSerializationContext.Default,
+				Elastic.Transport.Products.Elasticsearch.ErrorSerializerContext.Default,
+				value
+			);
+			_serializerOptions = new JsonSerializerOptions
+			{
+				TypeInfoResolver = _serializerContext,
+				DefaultIgnoreCondition = ElasticsearchChannelStatics.SerializerOptions.DefaultIgnoreCondition,
+				Encoder = ElasticsearchChannelStatics.SerializerOptions.Encoder
+			};
+		}
+	}
+
+	private JsonSerializerOptions _serializerOptions = new()
+	{
+		DefaultIgnoreCondition = ElasticsearchChannelStatics.SerializerOptions.DefaultIgnoreCondition,
+		Encoder = ElasticsearchChannelStatics.SerializerOptions.Encoder
+	};
+
+	internal JsonSerializerOptions SerializerOptions => _serializerOptions;
 }

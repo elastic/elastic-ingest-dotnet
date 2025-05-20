@@ -109,6 +109,12 @@ internal class InboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 			_breaker.CancelAfter(-1);
 			return await readTask.ConfigureAwait(false) ? WaitToReadResult.Read : WaitToReadResult.Completed;
 		}
+		catch (OperationCanceledException)
+		{
+			_breaker.Dispose();
+			_breaker = new CancellationTokenSource();
+			return WaitToReadResult.Timeout;
+		}
 		catch (Exception) when (_breaker.IsCancellationRequested)
 		{
 			_breaker.Dispose();
