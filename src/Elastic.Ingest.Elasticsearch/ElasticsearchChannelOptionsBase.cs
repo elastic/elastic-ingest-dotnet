@@ -42,14 +42,16 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 
 	private IJsonTypeInfoResolver? _serializerContext;
 
-	/// <summary>
-	/// The JsonSerializerContext to use for serialization.
-	/// </summary>
+	/// <summary> The JsonSerializerContext to use for serialization. </summary>
 	public JsonSerializerContext SerializerContext
 	{
 		set
 		{
-			_serializerContext = JsonTypeInfoResolver.Combine(IngestSerializationContext.Default, value);
+			_serializerContext = JsonTypeInfoResolver.Combine(
+				IngestSerializationContext.Default,
+				Elastic.Transport.Products.Elasticsearch.ErrorSerializerContext.Default,
+				value
+			);
 			_serializerOptions = new JsonSerializerOptions
 			{
 				TypeInfoResolver = _serializerContext,
@@ -59,11 +61,8 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 		}
 	}
 
-	internal IJsonTypeInfoResolver TypeInfoResolver => _serializerContext ?? IngestSerializationContext.Default;
-
 	private JsonSerializerOptions _serializerOptions = new()
 	{
-		TypeInfoResolver = IngestSerializationContext.Default,
 		DefaultIgnoreCondition = ElasticsearchChannelStatics.SerializerOptions.DefaultIgnoreCondition,
 		Encoder = ElasticsearchChannelStatics.SerializerOptions.Encoder
 	};

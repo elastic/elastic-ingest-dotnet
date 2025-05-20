@@ -40,7 +40,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		var match = TemplateWildcard;
 		if (await IndexTemplateExistsAsync(name, ctx).ConfigureAwait(false)) return false;
 
-		var (settingsName, settingsBody) = GetDefaultComponentSettings(name, ilmPolicy);
+		var (settingsName, settingsBody) = GetDefaultComponentSettings(bootstrapMethod, name, ilmPolicy);
 		if (!await PutComponentTemplateAsync(bootstrapMethod, settingsName, settingsBody, ctx).ConfigureAwait(false))
 			return false;
 
@@ -68,7 +68,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		var match = TemplateWildcard;
 		if (IndexTemplateExists(name)) return false;
 
-		var (settingsName, settingsBody) = GetDefaultComponentSettings(name, ilmPolicy);
+		var (settingsName, settingsBody) = GetDefaultComponentSettings(bootstrapMethod, name, ilmPolicy);
 		if (!PutComponentTemplate(bootstrapMethod, settingsName, settingsBody))
 			return false;
 
@@ -85,12 +85,19 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 
 	private bool? _isServerless;
 	/// Detects whether we are running against serverless or not
-	protected bool IsServerless()
+	protected bool IsServerless(BootstrapMethod bootstrapMethod)
 	{
 		if (_isServerless.HasValue)
 			return _isServerless.Value;
 		var rootInfo = Options.Transport.Request<DynamicResponse>(HttpMethod.GET, $"/");
 		var statusCode = rootInfo.ApiCallDetails.HttpStatusCode;
+		if (statusCode is not 200)
+			return bootstrapMethod == BootstrapMethod.Silent
+				? false
+				: throw new Exception(
+					$"Failure to check whether instance is serverless or not {rootInfo}",
+					rootInfo.ApiCallDetails.OriginalException
+				);
 		var flavor = rootInfo.Body.Get<string>("version.build_flavor");
 		_isServerless = statusCode is 200 && flavor == "serverless";
 		return _isServerless.Value;
@@ -206,14 +213,15 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	/// Returns default component settings template for a <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/>
 	/// </summary>
 	/// <returns>A tuple of (name, body) describing the default component template settings</returns>
-	protected (string, string) GetDefaultComponentSettings(string indexTemplateName, string? ilmPolicy = null)
+	protected (string, string) GetDefaultComponentSettings(BootstrapMethod bootstrapMethod, string indexTemplateName, string? ilmPolicy = null)
 	{
-		if (string.IsNullOrWhiteSpace(ilmPolicy)) ilmPolicy = "logs";
+		if (string.IsNullOrWhiteSpace(ilmPolicy))
+			ilmPolicy = "logs";
 
 		var settings = "{}";
-		if (!IsServerless())
+		if (!IsServerless(bootstrapMethod))
 			settings = $@"{{
-                  ""index.lifecycle.name"": ""{{ilmPolicy}}""
+                  ""index.lifecycle.name"": ""{ilmPolicy}""
                 }}";
 
 		var settingsName = $"{indexTemplateName}-settings";
