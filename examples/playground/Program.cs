@@ -22,7 +22,6 @@ var bufferOptions = new BufferOptions
 {
 	InboundBufferMaxSize = 1_000_000,
 	OutboundBufferMaxSize = 5_000,
-	ExportMaxConcurrency = Environment.ProcessorCount,
 	BoundedChannelFullMode = BoundedChannelFullMode.Wait
 };
 

@@ -20,21 +20,13 @@ public interface IOutboundBuffer<TEvent> : IWriteTrackingBuffer, IDisposable
 	ArraySegment<TEvent> GetArraySegment();
 }
 
-internal class OutboundBuffer<TEvent> : IOutboundBuffer<TEvent>
+internal class OutboundBuffer<TEvent>(InboundBuffer<TEvent> buffer) : IOutboundBuffer<TEvent>
 {
-	//public IReadOnlyCollection<TEvent> Items { get; }
-	private TEvent[] ArrayItems { get; }
+	public int Count { get; } = buffer.Count;
 
-	public int Count { get; }
-	public TimeSpan? DurationSinceFirstWrite { get; }
+	public TimeSpan? DurationSinceFirstWrite { get; } = buffer.DurationSinceFirstWrite;
 
-	public OutboundBuffer(InboundBuffer<TEvent> buffer)
-	{
-		Count = buffer.Count;
-		DurationSinceFirstWrite = buffer.DurationSinceFirstWrite;
-		// create a shallow copied collection to hand to consumers.
-		ArrayItems = buffer.Reset();
-	}
+	private TEvent[] ArrayItems { get; } = buffer.Reset();
 
 	public ArraySegment<TEvent> GetArraySegment() => new(ArrayItems, 0, Count);
 

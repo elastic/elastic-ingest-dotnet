@@ -72,10 +72,10 @@ public class BehaviorTests : IDisposable
 			if (await channel.WaitToWriteAsync(e))
 				written++;
 		}
-		var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(2));
-		signalled.Should().BeTrue("The channel was not drained in the expected time");
 		written.Should().Be(100);
+		var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(2));
 		channel.ExportedBuffers.Should().Be(1);
+		signalled.Should().BeTrue("The channel was not drained in the expected time");
 	}
 
 	[Fact] public async Task ConcurrencyIsApplied()
