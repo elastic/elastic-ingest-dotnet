@@ -419,7 +419,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		_callbacks.InboundChannelStartedCallback?.Invoke();
 
 		WaitToReadResult result;
-		while ((result = await InboundBuffer.WaitToReadAsync(InChannel.Reader).ConfigureAwait(false)) != WaitToReadResult.Completed)
+		while ((result = await InboundBuffer.WaitToReadAsync(InChannel.Reader, TokenSource.Token).ConfigureAwait(false)) != WaitToReadResult.Completed)
 		{
 			if (TokenSource.Token.IsCancellationRequested) break;
 			if (_signal is { IsSet: true }) break;
