@@ -136,8 +136,7 @@ public static class BulkRequestDataFactory
 	/// <param name="options">The <see cref="IndexChannelOptions{TEvent}"/> for the channel.</param>
 	/// <param name="skipIndexName">Control whether the index name is included in the meta data for the operation.</param>
 	/// <returns>A <see cref="BulkOperationHeader"/> instance.</returns>
-	public static BulkOperationHeader CreateBulkOperationHeaderForIndex<TEvent>(TEvent @event, IndexChannelOptions<TEvent> options,
-		bool skipIndexName = false)
+	public static BulkOperationHeader CreateBulkOperationHeaderForIndex<TEvent>(TEvent @event, IndexChannelOptions<TEvent> options, bool skipIndexName = false)
 	{
 		var indexTime = options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
 		if (options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(options.IndexOffset.Value);

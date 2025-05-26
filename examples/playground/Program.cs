@@ -6,7 +6,9 @@ using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Elastic.Channels;
 using Elastic.Ingest.Elasticsearch;
+using Elastic.Ingest.Elasticsearch.Catalog;
 using Elastic.Ingest.Elasticsearch.DataStreams;
+using Elastic.Ingest.Elasticsearch.Semantic;
 using Elastic.Transport;
 using Elastic.Transport.Products.Elasticsearch;
 
@@ -17,11 +19,11 @@ Console.CancelKeyPress += (sender, eventArgs) =>
 	eventArgs.Cancel = true;
 };
 
-const int numDocs = 1_000_000;
+const int numDocs = 10;
 var bufferOptions = new BufferOptions
 {
 	InboundBufferMaxSize = 1_000_000,
-	OutboundBufferMaxSize = 5_000,
+	OutboundBufferMaxSize = 10,
 	BoundedChannelFullMode = BoundedChannelFullMode.Wait
 };
 
@@ -47,7 +49,7 @@ async Task DoWork()
 }
 
 
-async Task PushToChannel(DataStreamChannel<EcsDocument> c)
+async Task PushToChannel(SemanticIndexChannel<MyDocument> c)
 {
 	var random = new Random();
 	if (c == null) throw new ArgumentNullException(nameof(c));
@@ -65,10 +67,14 @@ async Task PushToChannel(DataStreamChannel<EcsDocument> c)
 		: $"---> Drained channel {c.InflightEvents} pending buffers.");
 	await c.RefreshAsync();
 
+	await c.ApplyAliasesAsync();
+	await c.ApplyLatestAliasAsync();
+	await c.ApplyActiveSearchAliasAsync();
+
 	async Task DoChannelWrite(int i, CancellationToken cancellationToken)
 	{
 		var message = $"Logging information {i} - Random value: {random.NextDouble()}";
-		var doc = new EcsDocument { Timestamp = DateTimeOffset.UtcNow, Message = message };
+		var doc = new MyDocument { Message = message };
 		if (await c.WaitToWriteAsync(cancellationToken) && c.TryWrite(doc))
 			return;
 
@@ -76,15 +82,18 @@ async Task PushToChannel(DataStreamChannel<EcsDocument> c)
 	}
 }
 
-DataStreamChannel<EcsDocument> SetupElasticsearchChannel()
+SemanticIndexChannel<MyDocument> SetupElasticsearchChannel()
 {
 	var apiKey = Environment.GetEnvironmentVariable("ELASTIC_API_KEY") ?? throw new Exception();
 	var url = Environment.GetEnvironmentVariable("ELASTIC_URL") ?? throw new Exception();
 
-	var configuration = new ElasticsearchConfiguration(new Uri(url), new ApiKey(apiKey));
+	var configuration = new ElasticsearchConfiguration(new Uri(url), new ApiKey(apiKey))
+	{
+		ProxyAddress = "http://localhost:8866"
+	};
 	var transport = new DistributedTransport(configuration);
-	var c = new DataStreamChannel<EcsDocument>(
-		new DataStreamChannelOptions<EcsDocument>(transport)
+	var c = new SemanticIndexChannel<MyDocument>(
+		new SemanticIndexChannelOptions<MyDocument>(transport)
 		{
 			BufferOptions = bufferOptions,
 			CancellationToken = cancellationTokenSource.Token,
@@ -92,21 +101,36 @@ DataStreamChannel<EcsDocument> SetupElasticsearchChannel()
 			ExportResponseCallback = (c, t) =>
 			{
 				Console.WriteLine($"{c.ApiCallDetails.HttpMethod} Response: {c.ApiCallDetails.HttpStatusCode}");
-			}
+			},
+			InferenceCreateTimeout = TimeSpan.FromMinutes(5),
+			// language=json
+			GetMapping = (inferenceId, searchInferenceId) =>
+				$$"""
+				{
+				  "properties": {
+				    "message": {
+				        "type": "text",
+				        "fields": {
+				            "semantic": {
+				                "type": "semantic_text",
+				                "inference_id": "{{inferenceId}}"
+				            }
+				        }
+				    }
+				  }
+				}
+				"""
 		});
 
 	return c;
 }
 
-public class EcsDocument
+public class MyDocument
 {
-	[JsonPropertyName("@timestamp")]
-	public DateTimeOffset Timestamp { init; get; }
-
 	[JsonPropertyName("message")]
 	public string Message { init; get; } = null!;
 }
 
-[JsonSerializable(typeof(EcsDocument))]
+[JsonSerializable(typeof(MyDocument))]
 internal partial class ExampleJsonSerializerContext : JsonSerializerContext;
 
