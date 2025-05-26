@@ -22,7 +22,7 @@ public class SubPathTests : ChannelTestWithSingleDocResponseBase
 
 	[Fact]
 	public void IndexChannel_WithDynamicIndexName_UsesCorrectUrlAndOperationHeader() =>
-		ExecuteAndAssert("/subpath/_bulk", "{\"create\":{\"_index\":\"dotnet-2023.07.29\"}}");
+		ExecuteAndAssert("/subpath/_bulk", "{\"create\":{\"_index\":\"testdocument-2023.07.29\"}}");
 
 	private void ExecuteAndAssert(string expectedUrl, string expectedOperationHeader, string indexName = null)
 	{
