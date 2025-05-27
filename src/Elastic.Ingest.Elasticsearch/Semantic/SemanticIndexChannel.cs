@@ -33,6 +33,9 @@ public class SemanticIndexChannelOptions<TDocument>(ITransport transport) : Cata
 	/// <para>Should be a multiple of 2 and no more than 32</para>
 	public int SearchNumThreads { get; init; } = 2;
 
+	/// The number of threads the index inference endpoint should use if <see cref="UsePreexistingInferenceIds"/> is not specified.
+	public int IndexNumThreads { get; init; } = 1;
+
 	/// A function that returns the mapping for <typeparamref name="TDocument"/> given the inference id and search inference id.
 	public Func<string, string, string>? GetMapping { get; init; }
 
@@ -89,7 +92,7 @@ public class SemanticIndexChannel<TDocument> : CatalogIndexChannel<TDocument, Se
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.BootstrapElasticsearchAsync"/>
 	public override async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, string? ilmPolicy = null, CancellationToken ctx = default)
 	{
-		if (!await BootstrapInferenceAsync(bootstrapMethod, InferenceId, 1, ctx).ConfigureAwait(false))
+		if (!await BootstrapInferenceAsync(bootstrapMethod, InferenceId, Options.IndexNumThreads, ctx).ConfigureAwait(false))
 			return false;
 
 		if (!await BootstrapInferenceAsync(bootstrapMethod, SearchInferenceId, Options.SearchNumThreads, ctx).ConfigureAwait(false))
