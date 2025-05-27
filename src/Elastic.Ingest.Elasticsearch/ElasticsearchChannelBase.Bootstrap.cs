@@ -2,6 +2,9 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Ingest.Transport;
@@ -17,6 +20,10 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	protected abstract string TemplateName { get; }
 	/// <summary> The index template wildcard the <see cref="BootstrapElasticsearch"/> should register for its index template.</summary>
 	protected abstract string TemplateWildcard { get; }
+
+	/// Allow implementations to override the default behavior of always bootstrapping the component templates
+	/// The default is false, meaning we won't register the component templates again if the index template already exists.
+	protected virtual bool AlwaysBootstrapComponentTemplates => false;
 
 	/// <summary>
 	/// Returns a minimal default index template for an <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> implementation
@@ -38,7 +45,9 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 
 		var name = TemplateName;
 		var match = TemplateWildcard;
-		if (await IndexTemplateExistsAsync(name, ctx).ConfigureAwait(false)) return false;
+		var indexTemplateExists = await IndexTemplateExistsAsync(name, ctx).ConfigureAwait(false);
+		if (indexTemplateExists && !AlwaysBootstrapComponentTemplates)
+			return true;
 
 		var (settingsName, settingsBody) = GetDefaultComponentSettings(bootstrapMethod, name, ilmPolicy);
 		if (!await PutComponentTemplateAsync(bootstrapMethod, settingsName, settingsBody, ctx).ConfigureAwait(false))
@@ -47,6 +56,9 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		var (mappingsName, mappingsBody) = GetDefaultComponentMappings(name);
 		if (!await PutComponentTemplateAsync(bootstrapMethod, mappingsName, mappingsBody, ctx).ConfigureAwait(false))
 			return false;
+
+		if (indexTemplateExists)
+			return true;
 
 		var (indexTemplateName, indexTemplateBody) = GetDefaultIndexTemplate(name, match, mappingsName, settingsName);
 		if (!await PutIndexTemplateAsync(bootstrapMethod, indexTemplateName, indexTemplateBody, ctx).ConfigureAwait(false))
@@ -66,7 +78,9 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 
 		var name = TemplateName;
 		var match = TemplateWildcard;
-		if (IndexTemplateExists(name)) return false;
+		var indexTemplateExists = IndexTemplateExists(name);
+		if (indexTemplateExists && !AlwaysBootstrapComponentTemplates)
+			return true;
 
 		var (settingsName, settingsBody) = GetDefaultComponentSettings(bootstrapMethod, name, ilmPolicy);
 		if (!PutComponentTemplate(bootstrapMethod, settingsName, settingsBody))
@@ -75,6 +89,9 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		var (mappingsName, mappingsBody) = GetDefaultComponentMappings(name);
 		if (!PutComponentTemplate(bootstrapMethod, mappingsName, mappingsBody))
 			return false;
+
+		if (indexTemplateExists)
+			return true;
 
 		var (indexTemplateName, indexTemplateBody) = GetDefaultIndexTemplate(name, match, mappingsName, settingsName);
 		if (!PutIndexTemplate(bootstrapMethod, indexTemplateName, indexTemplateBody))
@@ -218,11 +235,19 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		if (string.IsNullOrWhiteSpace(ilmPolicy))
 			ilmPolicy = "logs";
 
-		var settings = "{}";
-		if (!IsServerless(bootstrapMethod))
-			settings = $@"{{
-                  ""index.lifecycle.name"": ""{ilmPolicy}""
-                }}";
+		var injectedSettings = GetDefaultComponentIndexSettings();
+		var overallSettings = new Dictionary<string, string>();
+		foreach (var kv in injectedSettings)
+			overallSettings[kv.Key] = kv.Value;
+
+		if (!IsServerless(bootstrapMethod) && ilmPolicy is not null)
+			overallSettings["index.lifecycle.name"] = ilmPolicy;
+
+		var settings = new StringBuilder("{");
+		var settingsAsJson = string.Join(",\n", overallSettings.Select(kv => $"  \"{kv.Key}\": \"{kv.Value}\""));
+		if (!string.IsNullOrWhiteSpace(settingsAsJson))
+			settings.Append('\n').Append(settingsAsJson).Append('\n');
+		settings.Append("}");
 
 		var settingsName = $"{indexTemplateName}-settings";
 		var settingsBody = $@"{{
@@ -237,6 +262,9 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		return (settingsName, settingsBody);
 	}
 
+	/// Allows implementations of <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> to inject additional component index settings
+	protected virtual IReadOnlyDictionary<string, string> GetDefaultComponentIndexSettings() => new Dictionary<string, string>();
+
 	/// <summary>
 	/// Returns a minimal default mapping component settings template for a <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/>
 	/// </summary>
@@ -244,10 +272,10 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	protected (string, string) GetDefaultComponentMappings(string indexTemplateName)
 	{
 		var settingsName = $"{indexTemplateName}-mappings";
+		var mappings = GetMappings() ?? "{}";
 		var settingsBody = $@"{{
               ""template"": {{
-                ""mappings"": {{
-                }}
+                ""mappings"": {mappings}
               }},
               ""_meta"": {{
                 ""description"": ""Template installed by .NET ingest libraries (https://github.com/elastic/elastic-ingest-dotnet)"",
@@ -256,5 +284,8 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
             }}";
 		return (settingsName, settingsBody);
 	}
+
+	/// Allows implementations of <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> to inject mappings for <typeparamref name="TEvent"/>
+	protected virtual string? GetMappings() => null;
 
 }

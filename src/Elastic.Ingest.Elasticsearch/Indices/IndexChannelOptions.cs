@@ -18,13 +18,13 @@ public class IndexChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEven
 	/// <summary>
 	/// Gets or sets the format string for the Elastic search index. The current <c>DateTimeOffset</c> is passed as parameter
 	/// 0.
-	/// <para> Defaults to "dotnet-{0:yyyy.MM.dd}"</para>
+	/// <para> Defaults to "<typeparamref name="TEvent"/>.Name.ToLowerInvariant()-{0:yyyy.MM.dd}"</para>
 	/// <para> If no {0} parameter is defined the index name is effectively fixed</para>
 	/// </summary>
-	public string IndexFormat { get; set; } = "dotnet-{0:yyyy.MM.dd}";
+	public virtual string IndexFormat { get; set; } = $"{typeof(TEvent).Name.ToLowerInvariant()}-{{0:yyyy.MM.dd}}";
 
 	/// <summary>
-	/// Gets or sets the offset to use for the index <c>DateTimeOffset</c>. Default value is null, which uses the system local
+	/// Gets or sets the offset to use for the index <c>DateTimeOffset</c>. The default value is null, which uses the system local
 	/// offset. Use "00:00" for UTC.
 	/// </summary>
 	public TimeSpan? IndexOffset { get; set; }
@@ -35,8 +35,8 @@ public class IndexChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEven
 	public Func<TEvent, DateTimeOffset?>? TimestampLookup { get; set; }
 
 	/// <summary>
-	/// If the document provides an Id this allows you to set a per document `_id`.
-	/// <para>If an `_id` is defined an `_index` bulk operation will be created.</para>
+	/// If the document provides an I, D, this allows you to set a per document `_id`.
+	/// <para>If an `_id` is defined, an `_index` bulk operation will be created.</para>
 	/// <para>Otherwise (the default) `_create` bulk operation will be issued for the document.</para>
 	/// <para>Read more about bulk operations here:</para>
 	/// <para>https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-request-body</para>

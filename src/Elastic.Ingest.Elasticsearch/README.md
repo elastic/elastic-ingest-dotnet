@@ -122,3 +122,101 @@ This will try and set up the target data stream with the `7-days-default` ILM po
 Throwing exceptions if it fails to do so because `BootstrapMethod.Failure` was provided
 
 An index template with accompanying component templates will be created based named using `IndexFormat`.
+
+## `CatalogChannel<TDocument>` (experimental)
+
+Where `IndexChannel<>` and `DataStreamChannel<>` are build for `time-series` use-cases `CatalogChannel<TDocument>` is build 
+for cases where we expect to write all data to a single index during the limited lifetime of the application.
+
+It inherits `IndexChannel<>` and therefor equally ensures index and component templates get registered.
+
+```csharp
+var options = new CatalogIndexChannelOptions<MyDocument>(transport)
+{
+  SerializerContext = ExampleJsonSerializerContext.Default,
+  GetMapping = () => // language=json
+    $$"""
+    {
+      "properties": {
+        "message": {
+          "type": "text"
+        }
+      }
+    }
+    """
+};
+var c = new CatalogIndexChannel<MyDocument>(options);
+await c.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
+````
+This will by default write all documents to `mydocument-{DateTimeOffset.UtcNow:yyyy.MM.dd.HHmmss}` where the `DateTimeOffset.UtcNow`
+gets queried only once during the channel's instantiation.
+
+You can wait for documents to be indexed and refresh elasticsearch at your expected termination point.
+
+```csharp
+await c.WaitForDrainAsync();
+await c.RefreshAsync();
+```
+
+After which you can use you apply the following aliases:
+
+* `mydocument-latest` the last written index
+* `mydocument` the active search alias
+
+```csharp
+await c.ApplyAliasesAsync();
+```
+
+You can also do this separately:
+
+```csharp
+await c.ApplyLatestAliasAsync();
+// Call this later to swap search alias over over to the latest index
+await c.ApplyActiveSearchAliasAsync();
+```
+
+## `SemanticIndexChannel<TDocument>` (experimental)
+
+A specialization of `CatalogIndexChannel<TDocument>` 
+
+```csharp
+var options = new SemanticIndexChannelOptions<MyDocument>(transport)
+{
+    BufferOptions = bufferOptions,
+    CancellationToken = cancellationTokenSource.Token,
+    SerializerContext = ExampleJsonSerializerContext.Default,
+    InferenceCreateTimeout = TimeSpan.FromMinutes(5),
+    GetMapping = (inferenceId, searchInferenceId) => // language=json
+      $$"""
+      {
+        "properties": {
+          "message": {
+              "type": "text",
+              "fields": {
+                  "semantic": {
+                      "type": "semantic_text",
+                      "inference_id": "{{inferenceId}}"
+                  }
+              }
+          }
+        }
+      }
+      """
+};
+  
+var c = new SemanticIndexChannel<MyDocument>(options);
+```
+The bootstrapping of which by default ensures that inference endpoints using default Elastic-built LLM providers are registered. 
+
+However, external inference identifiers can be provided as well.
+
+```csharp
+var options = new SemanticIndexChannelOptions<MyDocument>(transport)
+{
+   UsePreexistingInferenceIds = true   
+   InferenceId = "my-inference-id",
+   SearchInferenceId = "my-search-inference-id"
+};
+```
+
+
