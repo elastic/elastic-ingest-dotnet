@@ -24,7 +24,11 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
-  
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
   <ItemGroup>
     <Content Include="README.md" Pack="true" PackagePath="README.md" CopyToOutputDirectory="PreserveNewest">
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
