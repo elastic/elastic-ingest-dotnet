@@ -6,8 +6,6 @@ using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Elastic.Channels;
 using Elastic.Ingest.Elasticsearch;
-using Elastic.Ingest.Elasticsearch.Catalog;
-using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Semantic;
 using Elastic.Transport;
 using Elastic.Transport.Products.Elasticsearch;
@@ -19,7 +17,7 @@ Console.CancelKeyPress += (sender, eventArgs) =>
 	eventArgs.Cancel = true;
 };
 
-const int numDocs = 10;
+const int numDocs = 1_000;
 var bufferOptions = new BufferOptions
 {
 	InboundBufferMaxSize = 1_000_000,
@@ -98,7 +96,7 @@ SemanticIndexChannel<MyDocument> SetupElasticsearchChannel()
 			BufferOptions = bufferOptions,
 			CancellationToken = cancellationTokenSource.Token,
 			SerializerContext = ExampleJsonSerializerContext.Default,
-			ExportResponseCallback = (c, t) =>
+			ExportResponseCallback = (c, _) =>
 			{
 				Console.WriteLine($"{c.ApiCallDetails.HttpMethod} Response: {c.ApiCallDetails.HttpStatusCode}");
 			},

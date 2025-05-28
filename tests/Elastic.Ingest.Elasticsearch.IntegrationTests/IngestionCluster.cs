@@ -17,13 +17,12 @@ using static Elastic.Elasticsearch.Managed.DetectedProxySoftware;
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
 /// <summary> Declare our cluster that we want to inject into our test classes </summary>
-public class IngestionCluster : XunitClusterBase
+public class IngestionCluster(XunitClusterConfiguration xunitClusterConfiguration)
+	: XunitClusterBase(xunitClusterConfiguration)
 {
-	protected static string Version = "8.7.0";
+	protected static readonly string Version = "9.0.0";
 
 	public IngestionCluster() : this(new XunitClusterConfiguration(Version) { StartingPortNumber = 9202 }) { }
-
-	public IngestionCluster(XunitClusterConfiguration xunitClusterConfiguration) : base(xunitClusterConfiguration) { }
 
 	public ElasticsearchClient CreateClient(ITestOutputHelper output, string? hostname = null) =>
 		this.GetOrAddClient(cluster =>
@@ -65,10 +64,7 @@ public class IngestionCluster : XunitClusterBase
 		});
 }
 
-public class SecurityCluster : IngestionCluster
+public class SecurityCluster() : IngestionCluster(new XunitClusterConfiguration(Version, ClusterFeatures.Security)
 {
-	public SecurityCluster() : base(new XunitClusterConfiguration(Version, ClusterFeatures.Security)
-	{
-		StartingPortNumber = 9202, TrialMode = XPackTrialMode.Trial,
-	}) { }
-}
+	StartingPortNumber = 9202, TrialMode = XPackTrialMode.Trial
+});

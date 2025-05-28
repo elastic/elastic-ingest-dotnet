@@ -14,12 +14,9 @@ using Xunit.Abstractions;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
-public class BootstrapFailureTests : IntegrationTestBase<SecurityCluster>
+public class BootstrapFailureTests(SecurityCluster cluster, ITestOutputHelper output)
+	: IntegrationTestBase<SecurityCluster>(cluster, output)
 {
-	public BootstrapFailureTests(SecurityCluster cluster, ITestOutputHelper output) : base(cluster, output)
-	{
-	}
-
 	[Fact]
 	public async Task BootstrapSilentShouldReportError()
 	{

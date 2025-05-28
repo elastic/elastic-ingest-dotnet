@@ -14,12 +14,9 @@ using Xunit.Abstractions;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
-public class IndexIngestionTests : IntegrationTestBase
+public class IndexIngestionTests(IngestionCluster cluster, ITestOutputHelper output)
+	: IntegrationTestBase(cluster, output)
 {
-	public IndexIngestionTests(IngestionCluster cluster, ITestOutputHelper output) : base(cluster, output)
-	{
-	}
-
 	[Fact]
 	public async Task EnsureDocumentsEndUpInIndex()
 	{

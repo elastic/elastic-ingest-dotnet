@@ -8,6 +8,7 @@ using System.Buffers;
 using System.Collections.Generic;
 #endif
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
@@ -31,6 +32,8 @@ public static class BulkRequestDataFactory
 	/// <param name="options">The <see cref="ElasticsearchChannelOptionsBase{TEvent}"/> for the channel where the request will be written.</param>
 	/// <param name="createHeaderFactory">A function which takes an instance of <typeparamref name="TEvent"/> and produces the operation header containing the action and optional meta data.</param>
 	/// <returns>A <see cref="ReadOnlyMemory{T}"/> of <see cref="byte"/> representing the entire request body in NDJSON format.</returns>
+	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "We always provide a static JsonTypeInfoResolver")]
+	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "We always provide a static JsonTypeInfoResolver")]
 	public static ReadOnlyMemory<byte> GetBytes<TEvent>(ArraySegment<TEvent> page,
 		ElasticsearchChannelOptionsBase<TEvent> options, Func<TEvent, BulkOperationHeader> createHeaderFactory)
 	{
@@ -42,9 +45,7 @@ public static class BulkRequestDataFactory
 		foreach (var @event in page.AsSpan())
 		{
 			var indexHeader = createHeaderFactory(@event);
-#pragma warning disable IL2026, IL3050 // SerializerContext is registered.
 			JsonSerializer.Serialize(writer, indexHeader, indexHeader.GetType(), options.SerializerOptions);
-#pragma warning restore IL2026, IL3050 // SerializerContext is registered.
 			bufferWriter.Write(LineFeed);
 			writer.Reset();
 
@@ -57,9 +58,7 @@ public static class BulkRequestDataFactory
 			if (options.EventWriter?.WriteToArrayBuffer != null)
 				options.EventWriter.WriteToArrayBuffer(bufferWriter, @event);
 			else
-#pragma warning disable IL2026, IL3050 // SerializerContext is registered.
 				JsonSerializer.Serialize(writer, @event, options.SerializerOptions);
-#pragma warning restore IL2026, IL3050 // SerializerContext is registered.
 			writer.Reset();
 
 			if (indexHeader is UpdateOperation)
@@ -85,6 +84,8 @@ public static class BulkRequestDataFactory
 	/// <param name="createHeaderFactory">A function which takes an instance of <typeparamref name="TEvent"/> and produces the operation header containing the action and optional meta data.</param>
 	/// <param name="ctx">The cancellation token to cancel operation.</param>
 	/// <returns></returns>
+	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "We always provide a static JsonTypeInfoResolver")]
+	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "We always provide a static JsonTypeInfoResolver")]
 	public static async Task WriteBufferToStreamAsync<TEvent>(ArraySegment<TEvent> page, Stream stream,
 		ElasticsearchChannelOptionsBase<TEvent> options, Func<TEvent, BulkOperationHeader> createHeaderFactory,
 		CancellationToken ctx = default)
@@ -104,11 +105,9 @@ public static class BulkRequestDataFactory
 			if (@event == null) continue;
 
 			var indexHeader = createHeaderFactory(@event);
-#pragma warning disable IL2026, IL3050 // SerializerContext is registered.
 			await JsonSerializer.SerializeAsync(stream, indexHeader, indexHeader.GetType(), options.SerializerOptions, ctx)
 				.ConfigureAwait(false);
 			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
-#pragma warning restore IL2026, IL3050 // SerializerContext is registered.
 
 			if (indexHeader is UpdateOperation)
 				await stream.WriteAsync(DocUpdateHeaderStart, 0, DocUpdateHeaderStart.Length, ctx).ConfigureAwait(false);
@@ -116,10 +115,8 @@ public static class BulkRequestDataFactory
 			if (options.EventWriter?.WriteToStreamAsync != null)
 				await options.EventWriter.WriteToStreamAsync(stream, @event, ctx).ConfigureAwait(false);
 			else
-#pragma warning disable IL2026, IL3050 // SerializerContext is registered.
 				await JsonSerializer.SerializeAsync(stream, @event, options.SerializerOptions, ctx)
 					.ConfigureAwait(false);
-#pragma warning restore IL2026, IL3050 // SerializerContext is registered.
 
 			if (indexHeader is UpdateOperation)
 				await stream.WriteAsync(DocUpdateHeaderEnd, 0, DocUpdateHeaderEnd.Length, ctx).ConfigureAwait(false);

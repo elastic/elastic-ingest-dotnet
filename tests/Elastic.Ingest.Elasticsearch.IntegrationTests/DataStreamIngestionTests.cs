@@ -15,12 +15,9 @@ using Xunit.Abstractions;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
-public class DataStreamIngestionTests : IntegrationTestBase
+public class DataStreamIngestionTests(IngestionCluster cluster, ITestOutputHelper output)
+	: IntegrationTestBase(cluster, output)
 {
-	public DataStreamIngestionTests(IngestionCluster cluster, ITestOutputHelper output) : base(cluster, output)
-	{
-	}
-
 	[Fact]
 	public async Task EnsureDocumentsEndUpInDataStream()
 	{

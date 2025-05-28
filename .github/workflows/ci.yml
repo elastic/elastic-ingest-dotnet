@@ -21,6 +21,34 @@ env:
   ARTIFACTS: 'build/output/*.nupkg'
 
 jobs:
+  aot-validate:
+    runs-on: ${{ matrix.os.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+        - runner: ubuntu-latest
+          folder: linux-x64
+          binary: ingest-aot-smoketest
+        - runner: macos-latest
+          folder: osx-arm64
+          binary: ingest-aot-smoketest
+        - runner: windows-latest
+          folder: win-x64
+          binary: ingest-aot-smoketest.exe
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-dotnet@v4
+      with:
+        global-json-file: ./global.json
+
+    - name: Publish AOT
+      run: dotnet publish examples/transport-aot-example
+
+    - name: Invoke AOT
+      run: ./examples/ingest-aot-smoketest/bin/Release/net8.0/${{ matrix.os.folder }}/${{ matrix.os.binary }}
+
   test-windows:
     runs-on: windows-latest
     steps:

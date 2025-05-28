@@ -26,13 +26,20 @@
   </PropertyGroup>
   
   <ItemGroup>
-    <Content Include="README.md" Pack="true" PackagePath="README.md" CopyToOutputDirectory="PreserveNewest"/>
+    <Content Include="README.md" Pack="true" PackagePath="README.md" CopyToOutputDirectory="PreserveNewest">
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </Content>
     <Content Include="../../nuget-icon.png" CopyToOutputDirectory="PreserveNewest">
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
       <Link>nuget-icon.png</Link>
       <Pack>True</Pack>
       <PackagePath>nuget-icon.png</PackagePath>
     </Content>
     <None Include="../../license.txt" CopyToOutputDirectory="PreserveNewest">
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
       <Pack>True</Pack>
       <PackagePath>license.txt</PackagePath>
     </None>

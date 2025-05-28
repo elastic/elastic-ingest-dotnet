@@ -13,4 +13,8 @@
     <PackageReference Include="JunitXml.TestLogger" Version="3.0.114" PrivateAssets="All" />
     <PackageReference Include="XunitContext" Version="3.2.5" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <NoWarn>xUnit1041</NoWarn>
+  </PropertyGroup>
 </Project>

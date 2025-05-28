@@ -8,21 +8,13 @@ using Xunit.Abstractions;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
-public abstract class IntegrationTestBase : IntegrationTestBase<IngestionCluster>
-{
-	protected IntegrationTestBase(IngestionCluster cluster, ITestOutputHelper output, string? hostName = null)
-		: base(cluster, output, hostName) { }
-}
-public abstract class IntegrationTestBase<TCluster> : IClusterFixture<TCluster>
+public abstract class IntegrationTestBase(IngestionCluster cluster, ITestOutputHelper output, string? hostName = null)
+	: IntegrationTestBase<IngestionCluster>(cluster, output, hostName);
+
+public abstract class IntegrationTestBase<TCluster>(TCluster cluster, ITestOutputHelper output, string? hostName = null)
+	: IClusterFixture<TCluster>
 	where TCluster : IngestionCluster, new()
 {
-	protected IngestionCluster Cluster { get; }
-	protected ElasticsearchClient Client { get; }
-
-
-	protected IntegrationTestBase(TCluster cluster, ITestOutputHelper output, string? hostName = null)
-	{
-		Cluster = cluster;
-		Client = cluster.CreateClient(output, hostName);
-	}
+	protected IngestionCluster Cluster { get; } = cluster;
+	protected ElasticsearchClient Client { get; } = cluster.CreateClient(output, hostName);
 }
