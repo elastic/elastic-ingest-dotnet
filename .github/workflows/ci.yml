@@ -44,7 +44,7 @@ jobs:
         global-json-file: ./global.json
 
     - name: Publish AOT
-      run: dotnet publish examples/transport-aot-example
+      run: dotnet publish examples/ingest-aot-smoketest
 
     - name: Invoke AOT
       run: ./examples/ingest-aot-smoketest/bin/Release/net8.0/${{ matrix.os.folder }}/${{ matrix.os.binary }}
