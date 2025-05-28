@@ -11,4 +11,12 @@
     <ProjectReference Include="..\..\src\Elastic.Channels\Elastic.Channels.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Update="xunit" Version="2.9.3" />
+    <PackageReference Update="xunit.runner.visualstudio" Version="2.8.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
 </Project>

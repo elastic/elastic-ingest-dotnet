@@ -20,7 +20,7 @@
 
     <IsPackable>False</IsPackable>
   </PropertyGroup>
-  
+
   <ItemGroup>
   </ItemGroup>
 </Project>

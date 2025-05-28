@@ -73,6 +73,9 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 		if (backOffWholeRequest) return events;
 
 		var zipped = Zip(response, events);
+		if (zipped.Count == 0)
+			return EmptyArraySegments<TEvent>.Empty;
+
 		var retryEvents = zipped
 			.Where(t => RetryEvent(t))
 			.Select(t => t.Item1)

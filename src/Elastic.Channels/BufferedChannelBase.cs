@@ -133,7 +133,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			: new CancellationTokenSource();
 		Options = options;
 
-		var listeners = callbackListeners == null ? new[] { Options } : callbackListeners.Concat(new[] { Options }).ToArray();
+		var listeners = callbackListeners == null ? [Options] : callbackListeners.Concat([Options]).ToArray();
 		DiagnosticsListener = listeners
 			.Select(l => (l is IChannelDiagnosticsListener c) ? c : null)
 			.FirstOrDefault(e => e != null);
@@ -142,7 +142,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			// if no debug listener was already provided but was requested explicitly create one.
 			var l = new ChannelDiagnosticsListener<TEvent, TResponse>(GetType().Name);
 			DiagnosticsListener = l;
-			listeners = listeners.Concat(new[] { l }).ToArray();
+			listeners = listeners.Concat([l]).ToArray();
 		}
 		_callbacks = new ChannelCallbackInvoker<TEvent, TResponse>(listeners);
 
@@ -224,30 +224,45 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 	private CountdownEvent? _waitForDrain;
 
+	/// Educated guess for how long we should wait for an outgoing export.
+	/// Defaults to 1s
+	protected virtual TimeSpan DrainRequestTimeout => TimeSpan.FromSeconds(1);
+
 	/// Tries to complete and wait for all inflight buffers to be handled
 	public async ValueTask<bool> WaitForDrainAsync(TimeSpan? maxWait = null, CancellationToken ctx = default)
 	{
+		var startWaitTime = DateTime.UtcNow;
 		// calculate how many more exports we are expecting
-		var toDrain = (int)(_inflightEvents / BatchExportSize);
+		var pendingExports = (int)(_inflightEvents / BatchExportSize);
 		// create a countdown event minus some safety for concurrency already decreasing _inflightEvents
 		// We are doing an additional wait after
-		_waitForDrain ??= new CountdownEvent(Math.Max(toDrain - MaxConcurrency, 0));
-		// TODO this assumes export takes at most 1s, we should do a moving window average or mean
-		// from what we observe
-		var wait = maxWait ?? (TimeSpan.FromSeconds(1 * toDrain));
+		var errorMargin = Math.Min(MaxConcurrency, 4);
+		var ticksWithErrorMargin = Math.Max(pendingExports - errorMargin, 0);
+		var ticks = pendingExports < MaxConcurrency ? pendingExports : ticksWithErrorMargin;
+
+		_waitForDrain ??= new CountdownEvent(ticks);
+		var waitForSignalsMs = maxWait is null
+			? DrainRequestTimeout.TotalMilliseconds * ticks
+			: Math.Min(DrainRequestTimeout.TotalMilliseconds * ticks, maxWait.Value.TotalMilliseconds);
+		var waitForSignals = TimeSpan.FromMilliseconds(waitForSignalsMs);
 		_ = TryComplete();
 
 		if (_outBoundChannelConsumed && _inflightExportOperations == 0 && _inflightEvents == 0)
 			return true;
 
-		_waitForDrain.Wait(wait, ctx);
+		_waitForDrain.Wait(waitForSignals, ctx);
 
 		if (_outBoundChannelConsumed && _inflightExportOperations == 0 && _inflightEvents == 0)
 			return true;
 
+		// recalculate pendingExports
+		pendingExports = (int)(_inflightEvents / BatchExportSize) + errorMargin;
+		var waitForFullDrain = maxWait is null
+			? DrainRequestTimeout.TotalMilliseconds * pendingExports
+			: Math.Min(DrainRequestTimeout.TotalMilliseconds * pendingExports, maxWait.Value.TotalMilliseconds);
 		//if we are not fully drained, wait up to MaxConcurrency seconds additional seconds.
-		var maxSanityWait = TimeSpan.FromSeconds(MaxConcurrency * 1);
-		var start = DateTimeOffset.UtcNow;
+		var maxSanityWait = TimeSpan.FromMilliseconds(waitForFullDrain);
+		var start = maxWait.HasValue ? startWaitTime : DateTimeOffset.UtcNow;
 		do
 			await Task.Delay(TimeSpan.FromMilliseconds(100), ctx).ConfigureAwait(false);
 		while ((!_outBoundChannelConsumed || _inflightEvents > 0 || _inflightExportOperations > 0)

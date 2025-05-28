@@ -21,7 +21,8 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 	public DataStreamChannel(DataStreamChannelOptions<TEvent> options) : this(options, null) { }
 
 	/// <inheritdoc cref="DataStreamChannel{TEvent}"/>
-	public DataStreamChannel(DataStreamChannelOptions<TEvent> options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners) : base(options, callbackListeners)
+	public DataStreamChannel(DataStreamChannelOptions<TEvent> options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners)
+		: base(options, callbackListeners)
 	{
 		var dataStream = Options.DataStream.ToString();
 

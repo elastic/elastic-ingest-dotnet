@@ -137,7 +137,8 @@ public class CatalogIndexChannel<TDocument, TChannelOptions> : IndexChannel<TDoc
 	public async Task<bool> ApplyActiveSearchAliasAsync(string? indexPointingToLatestAlias = null, CancellationToken ctx = default)
 	{
 		var latestAlias = string.Format(Options.IndexFormat, "latest");
-		indexPointingToLatestAlias ??= await CatAsync($"_cat/aliases/{latestAlias}?h=index", ctx).ConfigureAwait(false);
+		indexPointingToLatestAlias ??= (await CatAsync($"_cat/aliases/{latestAlias}?h=index", ctx).ConfigureAwait(false))
+			.Trim(Environment.NewLine.ToCharArray());
 
 		if (string.IsNullOrEmpty(indexPointingToLatestAlias))
 			return false;
@@ -180,8 +181,8 @@ public class CatalogIndexChannel<TDocument, TChannelOptions> : IndexChannel<TDoc
 	private async Task<string> ShouldRemovePreviousAliasAsync(string matchingIndices, string alias, CancellationToken ctx)
 	{
 		var hasPreviousVersions = await Options.Transport.HeadAsync($"{matchingIndices}?allow_no_indices=false", ctx).ConfigureAwait(false);
-		var queryAliasIndex = await CatAsync($"_cat/aliases/{alias}?h=index", ctx).ConfigureAwait(false);
-		var rq = new RequestConfiguration { Accept = "text/plain" };
+		var queryAliasIndex = (await CatAsync($"_cat/aliases/{alias}?h=index", ctx).ConfigureAwait(false))
+			.Trim(Environment.NewLine.ToCharArray());
 		return hasPreviousVersions.ApiCallDetails.HttpStatusCode == 200 ? queryAliasIndex : string.Empty;
 	}
 

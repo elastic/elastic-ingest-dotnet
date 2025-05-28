@@ -45,6 +45,11 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		return details.HasSuccessfulStatusCode;
 	}
 
+	/// Returns the request timeout as the maximum time <see cref="BufferedChannelBase{TChannelOptions, TEvent, TResponse}.WaitForDrainAsync"/>
+	/// should wait for pending flushes
+	protected override TimeSpan DrainRequestTimeout =>
+		Options.Transport.Configuration.RequestTimeout ?? RequestConfiguration.DefaultRequestTimeout;
+
 	/// <summary>
 	/// The URL for the bulk request.
 	/// </summary>
@@ -55,7 +60,10 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Zip"/>
 	protected override List<(TEvent, BulkResponseItem)> Zip(BulkResponse response, IReadOnlyCollection<TEvent> page) =>
-		page.Zip(response.Items, (doc, item) => (doc, item)).ToList();
+		// ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
+		response.Items == null
+		? new List<(TEvent, BulkResponseItem)>()
+		: page.Zip(response.Items, (doc, item) => (doc, item)).ToList();
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryEvent"/>
 	protected override bool RetryEvent((TEvent, BulkResponseItem) @event) =>
@@ -86,7 +94,9 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 				{
 					/* NOT USED */
 				},
-				async (b, stream, ctx) => { await BulkRequestDataFactory.WriteBufferToStreamAsync(b, stream, Options, CreateBulkOperationHeader, ctx).ConfigureAwait(false); })
+				async (b, stream, localCtx) =>
+					await BulkRequestDataFactory.WriteBufferToStreamAsync(b, stream, Options, CreateBulkOperationHeader, localCtx)
+						.ConfigureAwait(false))
 			, ctx);
 #pragma warning restore IDE0022 // Use expression body for method
 	}
