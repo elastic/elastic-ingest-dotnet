@@ -65,7 +65,11 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 		IWriteTrackingBuffer consumedBufferStatistics
 	)
 	{
-		if (!Retry(response)) return EmptyArraySegments<TEvent>.Empty;
+		if (!Retry(response))
+		{
+			Options.ExportMaxRetriesCallback?.Invoke(events);
+			return EmptyArraySegments<TEvent>.Empty;
+		}
 
 		var backOffWholeRequest = RetryAllItems(response);
 

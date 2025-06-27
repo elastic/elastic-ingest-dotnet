@@ -6,12 +6,14 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels;
+using Elastic.Clients.Elasticsearch;
 using Elastic.Clients.Elasticsearch.IndexManagement;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Transport;
 using FluentAssertions;
 using Xunit;
 using Xunit.Abstractions;
+using DataStreamName = Elastic.Ingest.Elasticsearch.DataStreams.DataStreamName;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
@@ -71,5 +73,42 @@ public class DataStreamIngestionTests(IngestionCluster cluster, ITestOutputHelpe
 		//this ensures the data stream is managed by the expected ilm_policy
 		getDataStream.ApiCallDetails.DebugInformation.Should()
 			.Contain(@"""ilm_policy"" : ""7-days-default""");
+	}
+}
+
+public class DataStreamIngestionFailureTests()
+{
+	[Fact]
+	public void EnsureMaxRetriesIsCalled()
+	{
+		var maxRetriesIsCalled = false;
+		var exceptionIsCalled = false;
+		var targetDataStream = new DataStreamName("timeseriesdocs", "dotnet");
+		var slim = new CountdownEvent(1);
+		var options = new DataStreamChannelOptions<TimeSeriesDocument>(new DistributedTransport(new ConnectionConfiguration()))
+		{
+#pragma warning disable CS0618
+			UseReadOnlyMemory = true,
+#pragma warning restore CS0618
+			DataStream = targetDataStream,
+			BufferOptions = new BufferOptions { WaitHandle = slim, OutboundBufferMaxSize = 1 },
+			ExportMaxRetriesCallback = items =>
+			{
+				maxRetriesIsCalled = true;
+			},
+			ExportExceptionCallback = e =>
+			{
+				exceptionIsCalled = true;
+			}
+		};
+		var channel = new DataStreamChannel<TimeSeriesDocument>(options);
+
+		channel.TryWrite(new TimeSeriesDocument { Timestamp = DateTimeOffset.Now, Message = "hello-world" });
+		if (!slim.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
+			throw new Exception($"document was not persisted within 10 seconds: {channel}");
+
+		maxRetriesIsCalled.Should().BeTrue();
+		exceptionIsCalled.Should().BeTrue();
+
 	}
 }
