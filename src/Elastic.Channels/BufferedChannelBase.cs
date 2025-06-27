@@ -401,7 +401,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			{
 				_callbacks.ExportExceptionCallback?.Invoke(e);
 				if (atEndOfRetries)
+				{
+					_callbacks.ExportMaxRetriesCallback?.Invoke(items);
 					break;
+				}
 			}
 
 			items = response == null
