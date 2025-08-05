@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -44,11 +45,14 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 	private IJsonTypeInfoResolver? _serializerContext;
 
 	/// <summary> The JsonSerializerContext to use for serialization. </summary>
+	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "We always provide a static JsonTypeInfoResolver")]
+	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "We always provide a static JsonTypeInfoResolver")]
 	public JsonSerializerContext SerializerContext
 	{
 		set
 		{
 			_serializerContext = JsonTypeInfoResolver.Combine(
+				new DefaultJsonTypeInfoResolver(),
 				IngestSerializationContext.Default,
 				ElasticsearchTransportSerializerContext.Default,
 				value
@@ -62,9 +66,9 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 		}
 	}
 
-	/// <summary>
-	/// The JsonSerializerContexts to use for serialization.
-	/// </summary>
+	/// <summary> The JsonSerializerContexts to use for serialization. </summary>
+	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "We always provide a static JsonTypeInfoResolver")]
+	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "We always provide a static JsonTypeInfoResolver")]
 	public JsonSerializerContext[] SerializerContexts
 	{
 		set
@@ -72,6 +76,7 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 
 			_serializerContext = JsonTypeInfoResolver.Combine(
 				[
+					new DefaultJsonTypeInfoResolver(),
 					IngestSerializationContext.Default,
 					ElasticsearchTransportSerializerContext.Default,
 					.. value
