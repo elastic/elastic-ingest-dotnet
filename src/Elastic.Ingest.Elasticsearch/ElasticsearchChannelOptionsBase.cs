@@ -62,6 +62,30 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 		}
 	}
 
+	/// <summary>
+	/// The JsonSerializerContexts to use for serialization.
+	/// </summary>
+	public JsonSerializerContext[] SerializerContexts
+	{
+		set
+		{
+
+			_serializerContext = JsonTypeInfoResolver.Combine(
+				[
+					IngestSerializationContext.Default,
+					ElasticsearchTransportSerializerContext.Default,
+					.. value
+				]
+			);
+			_serializerOptions = new JsonSerializerOptions
+			{
+				TypeInfoResolver = _serializerContext,
+				DefaultIgnoreCondition = ElasticsearchChannelStatics.SerializerOptions.DefaultIgnoreCondition,
+				Encoder = ElasticsearchChannelStatics.SerializerOptions.Encoder
+			};
+		}
+	}
+
 	private JsonSerializerOptions _serializerOptions = new()
 	{
 		DefaultIgnoreCondition = ElasticsearchChannelStatics.SerializerOptions.DefaultIgnoreCondition,
