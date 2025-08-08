@@ -273,8 +273,10 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	{
 		var settingsName = $"{indexTemplateName}-mappings";
 		var mappings = GetMappings() ?? "{}";
+		var settings = GetMappingSettings() ?? "{}";
 		var settingsBody = $@"{{
               ""template"": {{
+                ""settings"": {settings},
                 ""mappings"": {mappings}
               }},
               ""_meta"": {{
@@ -287,5 +289,8 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 
 	/// Allows implementations of <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> to inject mappings for <typeparamref name="TEvent"/>
 	protected virtual string? GetMappings() => null;
+
+	/// Allows implementations of <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> to inject settings allong with <see cref="GetMappings"/> for <typeparamref name="TEvent"/>
+	protected virtual string? GetMappingSettings() => null;
 
 }
