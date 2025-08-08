@@ -6,6 +6,7 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A60DDBBB-4BF4-4B3B-A13A-E0B409917433}"
 	ProjectSection(SolutionItems) = preProject
 		src\Directory.Build.props = src\Directory.Build.props
+		src\Range.cs = src\Range.cs
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "build", "build", "{B284B3C8-2592-4B5D-B287-207285E4B7F9}"
@@ -66,9 +67,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Elastic.Ingest.Elasticsearc
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Elastic.Ingest.Elasticsearch.Profiling", "benchmarks\Elastic.Ingest.Elasticsearch.Profiling\Elastic.Ingest.Elasticsearch.Profiling.csproj", "{DE05C98F-C410-4ED0-A77B-36B66C784105}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Performance.Common", "benchmarks\Performance.Common\Performance.Common.csproj", "{077B0564-26D1-4FF1-98A5-633EAA9BE051}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Performance.Common", "benchmarks\Performance.Common\Performance.Common.csproj", "{077B0564-26D1-4FF1-98A5-633EAA9BE051}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "playground", "examples\playground\playground.csproj", "{C0E73713-EA13-403C-BE43-F2164AB6CF73}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Playground", "examples\playground\Playground.csproj", "{C0E73713-EA13-403C-BE43-F2164AB6CF73}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ingest-aot-smoketest", "examples\ingest-aot-smoketest\ingest-aot-smoketest.csproj", "{A560F8FC-BEA4-4CF8-AC47-CA84F30F4106}"
 EndProject

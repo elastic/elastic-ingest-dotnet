@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;netstandard2.1;net8.0</TargetFrameworks>
@@ -7,7 +7,9 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>True</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+  
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
@@ -24,9 +26,14 @@
   <ItemGroup>
     <ProjectReference Include="..\Elastic.Ingest.Transport\Elastic.Ingest.Transport.csproj" />
   </ItemGroup>
+  
   <ItemGroup Condition="'$(TargetFramework)' != 'net8.0'">
     <PackageReference Include="PolySharp" Version="1.15.0" PrivateAssets="all"
                       IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"/>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)'=='netstandard2.0'">
+    <Compile Include="$(MSBuildThisFileDirectory)\..\Range.cs" />
   </ItemGroup>
 
 </Project>

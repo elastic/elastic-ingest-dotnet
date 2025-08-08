@@ -3,7 +3,14 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Pipelines;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices.ComTypes;
+using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels;
@@ -21,15 +28,14 @@ public abstract class TransportChannelBase<TChannelOptions, TEvent, TResponse, T
 	ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, TResponse, TBulkResponseItem>
 	where TChannelOptions : TransportChannelOptionsBase<TEvent, TResponse, TBulkResponseItem>
 	where TResponse : TransportResponse, new()
-	where TEvent : class
 {
 	/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
-	protected TransportChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners)
-		: base(options, callbackListeners) { }
+	protected TransportChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners, string diagnosticsName)
+		: base(options, callbackListeners, diagnosticsName) { }
 
 	/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
-	protected TransportChannelBase(TChannelOptions options)
-		: base(options) { }
+	protected TransportChannelBase(TChannelOptions options, string diagnosticsName)
+		: base(options, diagnosticsName) { }
 
 	/// <summary> Implement sending the current <paramref name="page"/> of the buffer to the output. </summary>
 	/// <param name="transport"></param>

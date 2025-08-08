@@ -26,9 +26,6 @@ public class BulkIngestionBenchmarks
 	[ParamsAllValues]
 	public bool DisableDiagnostics { get; set; }
 
-	[ParamsAllValues]
-	public bool UseReadOnlyMemory { get; set; }
-
 	[GlobalSetup]
 	public void Setup()
 	{
@@ -47,7 +44,6 @@ public class BulkIngestionBenchmarks
 				OutboundBufferMaxSize = MaxExportSize
 			},
 			DisableDiagnostics = DisableDiagnostics,
-			UseReadOnlyMemory = UseReadOnlyMemory,
 			IndexFormat = "stock-data-v8",
 			OutboundChannelExitedCallback = () => _waitHandle.Set(),
 #if DEBUG

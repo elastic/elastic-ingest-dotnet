@@ -1,12 +1,14 @@
 // Licensed to Elasticsearch B.V under one or more agreements.
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
+
 using System;
 using System.Collections.Generic;
 using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
+using static Elastic.Ingest.Elasticsearch.Serialization.HeaderSerializationStrategy;
 
 namespace Elastic.Ingest.Elasticsearch.Indices;
 
@@ -14,7 +16,6 @@ namespace Elastic.Ingest.Elasticsearch.Indices;
 /// <para>If unsure prefer to use <see cref="DataStreamChannel{TEvent}"/></para>
 /// </summary>
 public class IndexChannel<TEvent> : IndexChannel<TEvent, IndexChannelOptions<TEvent>>
-	where TEvent : class
 {
 	/// <inheritdoc cref="IndexChannel{TEvent}"/>
 	public IndexChannel(IndexChannelOptions<TEvent> options) : base(options) { }
@@ -26,17 +27,17 @@ public class IndexChannel<TEvent> : IndexChannel<TEvent, IndexChannelOptions<TEv
 /// <inheritdoc cref="IndexChannel{TEvent}"/>
 public class IndexChannel<TEvent, TChannelOptions> : ElasticsearchChannelBase<TEvent, TChannelOptions>
 	where TChannelOptions : IndexChannelOptions<TEvent>
-	where TEvent : class
-{
-	private readonly string _url;
 
-	private readonly bool _skipIndexNameOnOperations;
+{
+	private readonly bool _skipIndexName;
+	private readonly string _url;
 
 	/// <inheritdoc cref="IndexChannel{TEvent}"/>
 	public IndexChannel(TChannelOptions options) : this(options, null) { }
 
 	/// <inheritdoc cref="IndexChannel{TEvent}"/>
-	public IndexChannel(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners) : base(options, callbackListeners)
+	public IndexChannel(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners, string? diagnosticsName = null)
+		: base(options, callbackListeners, diagnosticsName ?? nameof(IndexChannel<TEvent>))
 	{
 		_url = base.BulkPathAndQuery;
 
@@ -45,7 +46,7 @@ public class IndexChannel<TEvent, TChannelOptions> : ElasticsearchChannelBase<TE
 		if (string.Format(Options.IndexFormat, DateTimeOffset.UtcNow).Equals(Options.IndexFormat, StringComparison.Ordinal))
 		{
 			_url = $"{Options.IndexFormat}/{base.BulkPathAndQuery}";
-			_skipIndexNameOnOperations = true;
+			_skipIndexName = true;
 		}
 
 		TemplateName = string.Format(Options.IndexFormat, "template");
@@ -53,14 +54,49 @@ public class IndexChannel<TEvent, TChannelOptions> : ElasticsearchChannelBase<TE
 	}
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
-	protected override string RefreshTargets => _skipIndexNameOnOperations ? Options.IndexFormat : string.Format(Options.IndexFormat, "*");
+	protected override string RefreshTargets => _skipIndexName ? Options.IndexFormat : string.Format(Options.IndexFormat, "*");
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
 	protected override string BulkPathAndQuery => _url;
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
-	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent @event) =>
-		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(@event, Options, _skipIndexNameOnOperations);
+	/// <inheritdoc cref="EventIndexStrategy"/>
+	protected override (HeaderSerializationStrategy, BulkHeader?) EventIndexStrategy(TEvent @event)
+	{
+		var indexTime = Options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
+		if (Options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(Options.IndexOffset.Value);
+
+		var index = _skipIndexName ? string.Empty : string.Format(Options.IndexFormat, indexTime);
+		var id = Options.BulkOperationIdLookup?.Invoke(@event);
+		var templates = Options.DynamicTemplateLookup?.Invoke(@event);
+		var requireAlias = Options.RequireAlias?.Invoke(@event);
+		var listExecutedPipelines = Options.ListExecutedPipelines?.Invoke(@event);
+		var isUpsert = Options.BulkUpsertLookup?.Invoke(@event, index) is true;
+		if (string.IsNullOrWhiteSpace(index)
+			&& string.IsNullOrWhiteSpace(id)
+			&& templates is null
+			&& isUpsert is false
+			&& requireAlias is null or false
+			&& listExecutedPipelines is null or false)
+			return Options.OperationMode == OperationMode.Index
+				? (IndexNoParams, null)
+				: (CreateNoParams, null);
+
+		var header = new BulkHeader
+		{
+			Id = id,
+			Index = index,
+			DynamicTemplates = templates,
+			RequireAlias = requireAlias,
+			ListExecutedPipelines = listExecutedPipelines
+		};
+		var op = Options.OperationMode == OperationMode.Index
+			? HeaderSerializationStrategy.Index
+			: Create;
+		if (isUpsert)
+			op = Update;
+
+		return (op, header);
+	}
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName { get; }

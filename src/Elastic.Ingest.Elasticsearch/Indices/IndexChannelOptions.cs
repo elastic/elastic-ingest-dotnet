@@ -43,6 +43,9 @@ public class IndexChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEven
 	/// </summary>
 	public Func<TEvent, string>? BulkOperationIdLookup { get; set; }
 
+	/// <summary> If true, the action must target an index alias. Defaults to false. </summary>
+	public Func<TEvent, bool>? RequireAlias { get; set; }
+
 	/// <summary>
 	/// Uses the callback provided to <see cref="BulkOperationIdLookup"/> to determine if this is in fact an update operation
 	/// <para>If this returns true the document will be sent as an upsert operation</para>

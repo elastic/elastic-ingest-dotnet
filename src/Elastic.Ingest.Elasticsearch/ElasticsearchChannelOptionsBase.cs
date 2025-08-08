@@ -8,6 +8,8 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using System.Collections;
+using System.Collections.Generic;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
 using Elastic.Transport;
@@ -41,6 +43,12 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 	#endif
 	[Obsolete("Temporary exposed expert option, used to evaluate two different approaches to serialization")]
 	public bool UseReadOnlyMemory { get; set; }
+
+	/// <summary> Optionally set dynamic templates for event</summary>
+	public Func<TEvent, IDictionary<string, string>?>? DynamicTemplateLookup { get; set; }
+
+	/// <summary> If true, the response will include the ingest pipelines that were executed. Defaults to false. </summary>
+	public Func<TEvent, bool>? ListExecutedPipelines { get; set; }
 
 	private IJsonTypeInfoResolver? _serializerContext;
 

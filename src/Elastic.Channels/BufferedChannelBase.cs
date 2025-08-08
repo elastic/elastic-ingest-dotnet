@@ -58,7 +58,6 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	: ChannelWriter<TEvent>, IBufferedChannel<TEvent>
 	where TChannelOptions : ChannelOptionsBase<TEvent, TResponse>
 	where TResponse : class, new()
-	where TEvent : class
 {
 	private readonly Task _inTask;
 	private readonly Task _outTask;
@@ -123,10 +122,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	internal InboundBuffer<TEvent> InboundBuffer { get; }
 
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
-	protected BufferedChannelBase(TChannelOptions options) : this(options, null) { }
+	protected BufferedChannelBase(TChannelOptions options, string diagnosticsName) : this(options, null, diagnosticsName) { }
 
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>
-	protected BufferedChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners)
+	protected BufferedChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners, string diagnosticsName)
 	{
 		TokenSource = options.CancellationToken.HasValue
 			? CancellationTokenSource.CreateLinkedTokenSource(options.CancellationToken.Value)
@@ -135,12 +134,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 		var listeners = callbackListeners == null ? [Options] : callbackListeners.Concat([Options]).ToArray();
 		DiagnosticsListener = listeners
-			.Select(l => (l is IChannelDiagnosticsListener c) ? c : null)
-			.FirstOrDefault(e => e != null);
+			.OfType<IChannelDiagnosticsListener?>()
+			.FirstOrDefault();
 		if (DiagnosticsListener == null && !options.DisableDiagnostics)
 		{
 			// if no debug listener was already provided but was requested explicitly create one.
-			var l = new ChannelDiagnosticsListener<TEvent, TResponse>(GetType().Name);
+			var l = new ChannelDiagnosticsListener<TEvent, TResponse>(diagnosticsName);
 			DiagnosticsListener = l;
 			listeners = listeners.Concat([l]).ToArray();
 		}
@@ -368,7 +367,11 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			}
 		}
 		await Task.WhenAll(_taskList).ConfigureAwait(false);
+#if NET8_0_OR_GREATER
+		await _exitCancelSource.CancelAsync().ConfigureAwait(false);
+#else
 		_exitCancelSource.Cancel();
+#endif
 		_callbacks.OutboundChannelExitedCallback?.Invoke();
 	}
 
@@ -450,7 +453,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 					// this should free up tasks blocking on WaitToReadAsync() within InBoundBuffer.WaitToReadAsync()
 					// read the comments in InBoundBuffer.WaitToReadAsync() to understand more.
 					// https://github.com/dotnet/runtime/issues/761
-					InChannel.Writer.TryWrite(null);
+					InChannel.Writer.TryWrite(default);
 					Interlocked.Exchange(ref _inflightEvents, 0);
 					continue;
 				}
@@ -509,7 +512,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	}
 
 	/// <inheritdoc cref="object.ToString"/>>
-	public override string ToString()
+	public override string? ToString()
 	{
 		if (DiagnosticsListener == null) return base.ToString();
 		var sb = new StringBuilder();

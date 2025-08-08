@@ -14,7 +14,6 @@ namespace Elastic.Ingest.Elasticsearch;
 
 public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	where TChannelOptions : ElasticsearchChannelOptionsBase<TEvent>
-	where TEvent : class
 {
 	/// <summary> The index template name <see cref="BootstrapElasticsearch"/> should register.</summary>
 	protected abstract string TemplateName { get; }
@@ -121,10 +120,10 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 
 	}
 
-	/// The indices and/o datastreams to refresh as part of this implementation
+	/// The indices and/or datastreams to refresh as part of this implementation
 	protected abstract string RefreshTargets { get; }
 
-	/// Refresh all targets that were written too
+	/// Refresh all targets that were written to.
 	public bool Refresh()
 	{
 		var url = $"{RefreshTargets}/_refresh?allow_no_indices=true&ignore_unavailable=true";
@@ -133,7 +132,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		return statusCode is 200;
 	}
 
-	/// Refresh all targets that were written too
+	/// Refresh all targets that were written to.
 	public async Task<bool> RefreshAsync(CancellationToken ctx = default)
 	{
 		var url = $"{RefreshTargets}/_refresh?allow_no_indices=true&ignore_unavailable=true";

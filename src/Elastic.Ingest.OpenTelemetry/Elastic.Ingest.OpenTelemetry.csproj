@@ -11,6 +11,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Elastic.Channels\Elastic.Channels.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Google.Protobuf" Version="3.17.3" />
     <PackageReference Include="Grpc.Net.Client" Version="2.38.0" />
     <PackageReference Include="Grpc.Tools" Version="2.39.0-pre1">

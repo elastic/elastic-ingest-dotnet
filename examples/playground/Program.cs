@@ -2,6 +2,8 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System.Buffers;
+using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Elastic.Channels;
@@ -132,3 +134,53 @@ public class MyDocument
 [JsonSerializable(typeof(MyDocument))]
 internal partial class ExampleJsonSerializerContext : JsonSerializerContext;
 
+
+//using System.Buffers;
+//using System.Text;
+//using Elastic.OpenTelemetry;
+//using Elastic.OpenTelemetry.Extensions;
+//using Elastic.Ingest.Elasticsearch;
+//using Elastic.Transport;
+//using OpenTelemetry;
+//using OpenTelemetry.Resources;
+//using OpenTelemetry.Trace;
+
+//await using var otel = new ElasticOpenTelemetryBuilder()
+//	.ConfigureResource(r => r.AddService("IngestBulkPOC"))
+//	.Build();
+
+//// language=json
+//const string payload = """{"my_field":"Hello, world!"}""";
+
+//var rentedArray = ArrayPool<byte>.Shared.Rent(payload.Length);
+//var bytesUsed = Encoding.UTF8.GetBytes(payload, rentedArray);
+
+//var transportConfiguration = new TransportConfigurationDescriptor(new Uri("http://localhost:9200"))
+//	//.EnableDebugMode()
+//	.Authentication(new ApiKey("OGhBRVpwSUJibklCOVRXVHNuZXI6TW9zdlVMa0RSOXU0V0k5Q0lsRnBJZw=="));
+
+//var transport = new DistributedTransport(transportConfiguration);
+
+////Console.ReadKey();
+
+//var writer = transport.GetElasticsearchBulkWriter("test-index");
+
+//await writer.WriteIndexOperationAsync(rentedArray.AsMemory()[..bytesUsed]);
+//await writer.WriteIndexOperationAsync(rentedArray.AsMemory()[..bytesUsed], Id.From("abc123"));
+//await writer.WriteIndexOperationAsync(rentedArray.AsMemory()[..bytesUsed]);
+//await writer.WriteIndexOperationAsync(rentedArray.AsMemory()[..bytesUsed]);
+//await writer.WriteIndexOperationAsync(rentedArray.AsMemory()[..bytesUsed]);
+
+//using var response = await writer.CompleteAsync();
+
+//if (response.ApiCallDetails.HasSuccessfulStatusCode)
+//{
+//	var operations = 0;
+//	await foreach (var op in response.GetOperationResultsAsync())
+//	{
+//		operations++;
+//		Console.WriteLine($"{op.OperationIndex}: {op.Action} - {op.StatusCode}");
+//	}
+
+//	Console.WriteLine($"Read {operations} operations.");
+//}

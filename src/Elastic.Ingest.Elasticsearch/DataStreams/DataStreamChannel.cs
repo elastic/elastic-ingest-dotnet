@@ -14,28 +14,37 @@ namespace Elastic.Ingest.Elasticsearch.DataStreams;
 public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataStreamChannelOptions<TEvent>>
 	where TEvent : class
 {
-	private readonly CreateOperation _fixedHeader;
 	private readonly string _url;
 
 	/// <inheritdoc cref="DataStreamChannel{TEvent}"/>
 	public DataStreamChannel(DataStreamChannelOptions<TEvent> options) : this(options, null) { }
 
 	/// <inheritdoc cref="DataStreamChannel{TEvent}"/>
-	public DataStreamChannel(DataStreamChannelOptions<TEvent> options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners)
-		: base(options, callbackListeners)
+	public DataStreamChannel(DataStreamChannelOptions<TEvent> options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners, string? diagnosticsName = null)
+		: base(options, callbackListeners, diagnosticsName ?? nameof(DataStreamChannel<TEvent>))
 	{
 		var dataStream = Options.DataStream.ToString();
 
 		_url = $"{dataStream}/{base.BulkPathAndQuery}";
-
-		_fixedHeader = new CreateOperation();
 	}
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
 	protected override string RefreshTargets => Options.DataStream.ToString();
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
-	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent @event) => _fixedHeader;
+	/// <inheritdoc cref="EventIndexStrategy"/>
+	protected override (HeaderSerializationStrategy, BulkHeader?) EventIndexStrategy(TEvent @event)
+	{
+		var listExecutedPipelines = Options.ListExecutedPipelines?.Invoke(@event);
+		var templates = Options.DynamicTemplateLookup?.Invoke(@event);
+		if (templates is null && listExecutedPipelines is null or false)
+			return (HeaderSerializationStrategy.CreateNoParams, null);
+		var header = new BulkHeader
+		{
+			DynamicTemplates = templates,
+			ListExecutedPipelines = listExecutedPipelines
+		};
+		return (HeaderSerializationStrategy.Create, header);
+	}
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName => Options.DataStream.GetTemplateName();

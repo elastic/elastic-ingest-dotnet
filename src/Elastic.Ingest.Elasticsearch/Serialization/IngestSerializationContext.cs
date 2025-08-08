@@ -7,11 +7,11 @@ using System.Text.Json.Serialization;
 
 namespace Elastic.Ingest.Elasticsearch.Serialization;
 
-[JsonSerializable(typeof(BulkOperationHeader))]
-[JsonSerializable(typeof(CreateOperation))]
-[JsonSerializable(typeof(IndexOperation))]
-[JsonSerializable(typeof(DeleteOperation))]
-[JsonSerializable(typeof(UpdateOperation))]
+//[JsonSerializable(typeof(BulkOperationHeader))]
+//[JsonSerializable(typeof(CreateOperation))]
+//[JsonSerializable(typeof(IndexOperation))]
+//[JsonSerializable(typeof(DeleteOperation))]
+//[JsonSerializable(typeof(UpdateOperation))]
 [JsonSerializable(typeof(BulkResponseItem))]
 [JsonSerializable(typeof(BulkResponse))]
 [JsonSerializable(typeof(BulkResponseItem))]

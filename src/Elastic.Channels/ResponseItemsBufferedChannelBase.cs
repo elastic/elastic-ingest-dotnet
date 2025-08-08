@@ -30,15 +30,14 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 	: BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	where TChannelOptions : ResponseItemsChannelOptionsBase<TEvent, TResponse, TBulkResponseItem>
 	where TResponse : class, new()
-	where TEvent : class
 {
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
-	protected ResponseItemsBufferedChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners)
-		: base(options, callbackListeners) { }
+	protected ResponseItemsBufferedChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, TResponse>>? callbackListeners, string diagnosticsName)
+		: base(options, callbackListeners, diagnosticsName) { }
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}"/>
-	protected ResponseItemsBufferedChannelBase(TChannelOptions options)
-		: base(options) { }
+	protected ResponseItemsBufferedChannelBase(TChannelOptions options, string diagnosticsName)
+		: base(options, diagnosticsName) { }
 
 	/// <summary> Based on <typeparamref name="TResponse"/> should return a bool indicating if retry is needed</summary>
 	protected abstract bool Retry(TResponse response);

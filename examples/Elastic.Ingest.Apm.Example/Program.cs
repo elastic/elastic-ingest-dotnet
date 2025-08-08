@@ -33,7 +33,7 @@ internal class Program
 			DebugMode = true,
 			Authentication = new ApiKey(args[1])
 		};
-
+		
 		var transport = new DistributedTransport(config);
 
 		var numberOfEvents = 800;

@@ -77,10 +77,6 @@ public class CatalogIndexChannel<TDocument, TChannelOptions> : IndexChannel<TDoc
 	/// <para>Since this is catalog data and not time series data, all data needs to end up in a single index</para>
 	public string IndexName { get; }
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
-	protected override BulkOperationHeader CreateBulkOperationHeader(TDocument @event) =>
-		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(@event, Options, true);
-
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
 	protected override string RefreshTargets => IndexName;
 
