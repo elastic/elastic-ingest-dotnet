@@ -30,37 +30,37 @@ public class IngestionCluster(XunitClusterConfiguration xunitClusterConfiguratio
 			var isCi = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI"));
 			var nodes = NodesUris(hostname);
 			var connectionPool = new StaticNodePool(nodes);
-			//var settings = new ElasticsearchClientSettings(connectionPool)
-			//	.RequestTimeout(TimeSpan.FromSeconds(5))
-			//	.ServerCertificateValidationCallback(CertificateValidations.AllowAll)
-			//	.OnRequestCompleted(d =>
-			//	{
-			//		// ON CI only logged failed requests
-			//		// Locally we just log everything for ease of development
-			//		try
-			//		{
-			//			if (isCi)
-			//			{
-			//				if (!d.HasSuccessfulStatusCode)
-			//					output.WriteLine(d.DebugInformation);
-			//			}
-			//			else output.WriteLine(d.DebugInformation);
-			//		}
-			//		catch
-			//		{
-			//			// ignored
-			//		}
-			//	})
-			//	.EnableDebugMode()
-			//	//do not request server stack traces on CI, too noisy
-			//	.IncludeServerStackTraceOnError(!isCi);
-			//if (cluster.DetectedProxy != None)
-			//{
-			//	var proxyUrl = cluster.DetectedProxy == Fiddler ? "ipv4.fiddler" : "localhost";
-			//	settings = settings.Proxy(new Uri($"http://{proxyUrl}:8080"), null!, null!);
-			//}
+			var settings = new ElasticsearchClientSettings(connectionPool)
+				.RequestTimeout(TimeSpan.FromSeconds(5))
+				.ServerCertificateValidationCallback(CertificateValidations.AllowAll)
+				.OnRequestCompleted(d =>
+				{
+					// ON CI only logged failed requests
+					// Locally we just log everything for ease of development
+					try
+					{
+						if (isCi)
+						{
+							if (!d.HasSuccessfulStatusCode)
+								output.WriteLine(d.DebugInformation);
+						}
+						else output.WriteLine(d.DebugInformation);
+					}
+					catch
+					{
+						// ignored
+					}
+				})
+				.EnableDebugMode()
+				//do not request server stack traces on CI, too noisy
+				.IncludeServerStackTraceOnError(!isCi);
+			if (cluster.DetectedProxy != None)
+			{
+				var proxyUrl = cluster.DetectedProxy == Fiddler ? "ipv4.fiddler" : "localhost";
+				settings = settings.Proxy(new Uri($"http://{proxyUrl}:8080"), null!, null!);
+			}
 
-			return new ElasticsearchClient();
+			return new ElasticsearchClient(settings);
 		});
 }
 

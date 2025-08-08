@@ -30,6 +30,9 @@ public class CatalogIndexChannelOptions<TDocument>(ITransport transport) : Catal
 {
 	/// A function that returns the mapping for <typeparamref name="TDocument"/>.
 	public Func<string>? GetMapping { get; init; }
+
+	/// A function that returns settings to accompany <see cref="GetMapping"/>.
+	public Func<string>? GetMappingSettings { get; init; }
 }
 
 /// <inheritdoc cref="CatalogIndexChannel{TDocument}" />
@@ -42,6 +45,10 @@ public class CatalogIndexChannel<TDocument> : CatalogIndexChannel<TDocument, Cat
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.GetMappings"/>>
 	protected override string? GetMappings() => Options.GetMapping?.Invoke();
+
+	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.GetMappings"/>>
+	/// <inheritdoc />
+	protected override string? GetMappingSettings() => Options.GetMappingSettings?.Invoke();
 }
 
 /// A channel which is optimized for writing fixed catalog datasets to Elasticsearch.
