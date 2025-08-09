@@ -40,7 +40,7 @@ public class SemanticIndexChannelOptions<TDocument>(ITransport transport) : Cata
 	public Func<string, string, string>? GetMapping { get; init; }
 
 	/// A function that returns the mapping settings for <typeparamref name="TDocument"/> given the inference id and search inference id.
-	public Func<string, string, string>? GetMappingSetting { get; init; }
+	public Func<string, string, string>? GetMappingSettings { get; init; }
 
 	/// The timeout for creating the inference id.
 	/// <para>If not specified, the default timeout is used.</para>
@@ -81,7 +81,7 @@ public class SemanticIndexChannel<TDocument> : CatalogIndexChannel<TDocument, Se
 	protected override string? GetMappings() => Options.GetMapping?.Invoke(InferenceId, SearchInferenceId);
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.GetMappingSettings"/>
-	protected override string? GetMappingSettings() => Options.GetMappingSetting?.Invoke(InferenceId, SearchInferenceId);
+	protected override string? GetMappingSettings() => Options.GetMappingSettings?.Invoke(InferenceId, SearchInferenceId);
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.BootstrapElasticsearch"/>
 	public override bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod, string? ilmPolicy = null)

@@ -63,7 +63,7 @@ public class SemanticIndexIngestionTests(IngestionCluster cluster, ITestOutputHe
 				}
 				""",
 
-			GetMappingSetting = (inferenceId, searchInferenceId) =>
+			GetMappingSettings = (inferenceId, searchInferenceId) =>
 				"""
 				{
 				  "analysis": {
