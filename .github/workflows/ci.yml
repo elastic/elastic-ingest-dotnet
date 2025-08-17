@@ -37,7 +37,7 @@ jobs:
           folder: win-x64
           binary: ingest-aot-smoketest.exe
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - uses: actions/setup-dotnet@v4
       with:
@@ -53,7 +53,7 @@ jobs:
     runs-on: windows-latest
     steps:
     
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
           fetch-depth: 1
           
@@ -82,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         fetch-depth: 1
 
@@ -129,7 +129,7 @@ jobs:
       id-token: write
       packages: write
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - uses: actions/download-artifact@v5
       with:
@@ -162,7 +162,7 @@ jobs:
       issues: write
       packages: write
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         fetch-depth: 1
 
