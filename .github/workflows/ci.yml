@@ -39,7 +39,7 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
-    - uses: actions/setup-dotnet@v4
+    - uses: actions/setup-dotnet@v5
       with:
         global-json-file: ./global.json
 
@@ -63,7 +63,7 @@ jobs:
           git tag --list
     
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         global-json-file: ./global.json
         dotnet-version: |
@@ -92,7 +92,7 @@ jobs:
         git tag --list
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         global-json-file: ./global.json
         dotnet-version: |
@@ -167,7 +167,7 @@ jobs:
         fetch-depth: 1
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
           global-json-file: ./global.json
           dotnet-version: |
