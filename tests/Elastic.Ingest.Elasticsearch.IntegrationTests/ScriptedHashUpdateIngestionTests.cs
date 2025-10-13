@@ -148,7 +148,12 @@ public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster, ITestOut
 			IndexFormat = indexPrefix + "{0:yyyy.MM.dd.HH-mm-ss-fffffff}",
 			ActiveSearchAlias = indexPrefix + "search",
 			BulkOperationIdLookup = c => c.Id,
-			ScriptedHashBulkUpsertLookup = !useScriptedHashBulkUpsert ? null : (c, _) => new HashedBulkUpdate("hash", c.Hash),
+			ScriptedHashBulkUpsertLookup = !useScriptedHashBulkUpsert ? null : (c, channelHash) =>
+			{
+				var hash = HashedBulkUpdate.CreateHash(channelHash, c.Id, c.Title ?? string.Empty);
+				c.Hash = hash;
+				return new HashedBulkUpdate("hash", hash);
+			},
 			BufferOptions = new BufferOptions
 			{
 				WaitHandle = slim, OutboundBufferMaxSize = 100,

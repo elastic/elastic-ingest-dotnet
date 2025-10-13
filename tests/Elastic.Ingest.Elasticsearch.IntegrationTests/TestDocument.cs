@@ -38,8 +38,6 @@ public class HashDocument
 	public string? Title { get; set; }
 
 	[JsonPropertyName("hash")]
-	public string Hash => Create(Id, Title ?? "");
-
-	private static string Create(params string[] components) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("", components))))[..8];
+	public string Hash { get; set; } = string.Empty;
 
 }

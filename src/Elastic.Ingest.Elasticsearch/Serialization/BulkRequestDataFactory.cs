@@ -189,9 +189,10 @@ public static class BulkRequestDataFactory
 		if (!string.IsNullOrWhiteSpace(id) && id != null && (options.BulkUpsertLookup?.Invoke(@event, id) ?? false))
 			return skipIndexName ? new UpdateOperation { Id = id } : new UpdateOperation { Id = id, Index = index };
 
-		if (!string.IsNullOrWhiteSpace(id) && id != null && options.ScriptedHashBulkUpsertLookup is not null)
+		var hash = options.ChannelHash;
+		if (!string.IsNullOrWhiteSpace(hash) && id != null && options.ScriptedHashBulkUpsertLookup is not null)
 		{
-			var hashInfo = options.ScriptedHashBulkUpsertLookup.Invoke(@event, id);
+			var hashInfo = options.ScriptedHashBulkUpsertLookup.Invoke(@event, hash);
 			return skipIndexName
 				? new ScriptedHashUpdateOperation { Id = id, UpdateInformation = hashInfo}
 				: new ScriptedHashUpdateOperation { Id = id, Index = index, UpdateInformation  = hashInfo };

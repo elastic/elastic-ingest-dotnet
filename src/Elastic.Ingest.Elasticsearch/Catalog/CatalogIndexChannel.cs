@@ -23,20 +23,45 @@ public class CatalogIndexChannelOptionsBase<TDocument>(ITransport transport) : I
 	/// The alias name pointing to the version of the index intended to be queries
 	/// <para> By calling <see cref="CatalogIndexChannel{TDocument, TChannelOptions}.ApplyAliasesAsync"/> the alias will be updated to point to the latest index.</para>
 	public string ActiveSearchAlias { get; set; } = $"{typeof(TDocument).Name.ToLowerInvariant()}";
-
-	/// Hash over the document to use for indexing, this hash is used to determine if the document should be indexed.
-	public Func<TDocument, string>[]? HashOver { get; init; }
 }
 
 /// <inheritdoc cref="CatalogIndexChannel{TDocument}" />
 public class CatalogIndexChannelOptions<TDocument>(ITransport transport) : CatalogIndexChannelOptionsBase<TDocument>(transport)
 {
+	private readonly Func<string>? _getMapping;
+
 	/// A function that returns the mapping for <typeparamref name="TDocument"/>.
-	public Func<string>? GetMapping { get; init; }
+	public Func<string>? GetMapping
+	{
+		get => _getMapping;
+		init
+		{
+			_getMapping = value;
+			_channelHash = HashedBulkUpdate.CreateHash(base.ChannelHash, ActiveSearchAlias,
+				_getMapping?.Invoke() ?? string.Empty, _getMapping?.Invoke() ?? string.Empty
+			);
+		}
+	}
+
+	private readonly Func<string>? _getMappingSettings;
 
 	/// A function that returns settings to accompany <see cref="GetMapping"/>.
-	public Func<string>? GetMappingSettings { get; init; }
+	public Func<string>? GetMappingSettings
+	{
+		get => _getMappingSettings;
+		init
+		{
+			_getMappingSettings = value;
+			_channelHash = HashedBulkUpdate.CreateHash(base.ChannelHash, ActiveSearchAlias,
+				_getMapping?.Invoke() ?? string.Empty, _getMapping?.Invoke() ?? string.Empty
+			);
+		}
+	}
 
+	private readonly string _channelHash = string.Empty;
+
+	/// <inheritdoc />
+	public override string ChannelHash => string.IsNullOrEmpty(_channelHash) ? base.ChannelHash : _channelHash;
 }
 
 /// <inheritdoc cref="CatalogIndexChannel{TDocument}" />

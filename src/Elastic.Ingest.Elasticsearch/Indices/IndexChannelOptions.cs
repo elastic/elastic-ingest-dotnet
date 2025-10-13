@@ -2,6 +2,8 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 using System;
+using System.Security.Cryptography;
+using System.Text;
 using Elastic.Transport;
 
 namespace Elastic.Ingest.Elasticsearch.Indices;
@@ -11,7 +13,24 @@ namespace Elastic.Ingest.Elasticsearch.Indices;
 /// </summary>
 /// <param name="Field">The field to check the previous hash against</param>
 /// <param name="Hash">The current hash of the document</param>
-public record HashedBulkUpdate(string Field, string Hash);
+public record HashedBulkUpdate(string Field, string Hash)
+{
+	/// <summary>
+	/// A short SHA256 hash of the provided <paramref name="components"/>
+	/// </summary>
+	/// <param name="components"></param>
+	/// <returns></returns>
+	public static string CreateHash(params string[] components)
+	{
+#if NET8_0_OR_GREATER
+		return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("", components))))[..8];
+#else
+		var sha = SHA256.Create();
+		var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join("", components)));
+		return BitConverter.ToString(hash).Replace("-", "")[..8];
+#endif
+	}
+};
 
 /// <summary>
 /// Provides options to <see cref="IndexChannel{TEvent}"/> to control how and where data gets written to Elasticsearch
@@ -22,19 +41,39 @@ public class IndexChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEven
 	/// <inheritdoc cref="IndexChannelOptions{TEvent}"/>
 	public IndexChannelOptions(ITransport transport) : base(transport) { }
 
+	private string _indexFormat = $"{typeof(TEvent).Name.ToLowerInvariant()}-{{0:yyyy.MM.dd}}";
+
 	/// <summary>
 	/// Gets or sets the format string for the Elastic search index. The current <c>DateTimeOffset</c> is passed as parameter
 	/// 0.
 	/// <para> Defaults to "<typeparamref name="TEvent"/>.Name.ToLowerInvariant()-{0:yyyy.MM.dd}"</para>
 	/// <para> If no {0} parameter is defined the index name is effectively fixed</para>
 	/// </summary>
-	public virtual string IndexFormat { get; set; } = $"{typeof(TEvent).Name.ToLowerInvariant()}-{{0:yyyy.MM.dd}}";
+	public virtual string IndexFormat
+	{
+		get => _indexFormat;
+		set
+		{
+			_indexFormat = value;
+			_channelHash = HashedBulkUpdate.CreateHash(_indexFormat, _indexOffset?.ToString() ?? string.Empty);
+		}
+	}
+
+	private TimeSpan? _indexOffset;
 
 	/// <summary>
 	/// Gets or sets the offset to use for the index <c>DateTimeOffset</c>. The default value is null, which uses the system local
 	/// offset. Use "00:00" for UTC.
 	/// </summary>
-	public TimeSpan? IndexOffset { get; set; }
+	public TimeSpan? IndexOffset
+	{
+		get => _indexOffset;
+		set
+		{
+			_indexOffset = value;
+			_channelHash = HashedBulkUpdate.CreateHash(_indexFormat, _indexOffset?.ToString() ?? string.Empty);
+		}
+	}
 
 	/// <summary>
 	/// Provide a per document <c>DateTimeOffset</c> to be used as the date passed as parameter 0 to <see cref="IndexFormat"/>
@@ -42,7 +81,7 @@ public class IndexChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEven
 	public Func<TEvent, DateTimeOffset?>? TimestampLookup { get; set; }
 
 	/// <summary>
-	/// If the document provides an I, D, this allows you to set a per document `_id`.
+	/// If the document provides an ID, this allows you to set a per document `_id`.
 	/// <para>If an `_id` is defined, an `_index` bulk operation will be created.</para>
 	/// <para>Otherwise (the default) `_create` bulk operation will be issued for the document.</para>
 	/// <para>Read more about bulk operations here:</para>
@@ -62,6 +101,7 @@ public class IndexChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEven
 	/// <summary>
 	/// Uses the callback provided to <see cref="BulkOperationIdLookup"/> to determine if this is in fact an update operation
 	/// <para>Returns the field and the hash to use for the scripted upsert </para>
+	/// <para>The string passed to the callback is the hash of the current channel options that can be used to hash bust in case of channel option changes</para>
 	/// <para>Otherwise (the default) `index` bulk operation will be issued for the document.</para>
 	/// <para>Read more about bulk operations here:</para>
 	/// <para>https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-request-body</para>
@@ -72,4 +112,12 @@ public class IndexChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEven
 	/// Control the operation header for each bulk operation.
 	/// </summary>
 	public OperationMode OperationMode { get; set; }
+
+	private string _channelHash = HashedBulkUpdate.CreateHash($"{typeof(TEvent).Name.ToLowerInvariant()}-{{0:yyyy.MM.dd}}");
+	/// <summary>
+	/// A hash of the channel options. This can be used to hash bust in case of channel option changes.
+	/// It's also passed to <see cref="ScriptedHashBulkUpsertLookup"/>
+	/// </summary>
+	public virtual string ChannelHash => _channelHash;
+
 }
