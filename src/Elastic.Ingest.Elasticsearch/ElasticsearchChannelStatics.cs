@@ -17,6 +17,17 @@ internal static class ElasticsearchChannelStatics
 	public static readonly byte[] DocUpdateHeaderStart = "{\"doc_as_upsert\": true, \"doc\": "u8.ToArray();
 	public static readonly byte[] DocUpdateHeaderEnd = " }"u8.ToArray();
 
+	public static readonly byte[] ScriptedHashUpsertStart =
+		"{ \"scripted_upsert\": true, \"upsert\": {}, \"script\": { \"source\": \"if (ctx.op != 'create') { if (ctx._source."u8.ToArray();
+
+	public static readonly byte[] ScriptedHashUpsertMiddle =
+		" == params.hash ) { ctx.op = 'noop' } } ctx._source = params.doc\", \"params\": { \"hash\": "u8.ToArray();
+
+	public static readonly byte[] ScriptedHashUpsertDocPreamble =
+		", \"doc\":"u8.ToArray();
+
+	public static readonly byte[] ScriptedHashUpsertEnd = " } } }"u8.ToArray();
+
 	public static readonly HashSet<int> RetryStatusCodes = [502, 503, 504, 429];
 
 	public static readonly JsonSerializerOptions SerializerOptions = new ()

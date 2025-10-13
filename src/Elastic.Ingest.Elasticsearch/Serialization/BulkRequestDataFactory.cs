@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -54,6 +55,20 @@ public static class BulkRequestDataFactory
 				bufferWriter.Write(DocUpdateHeaderStart);
 				writer.Reset();
 			}
+			if (indexHeader is ScriptedHashUpdateOperation hashUpdate)
+			{
+				bufferWriter.Write(ScriptedHashUpsertStart);
+				writer.Reset();
+				var field = Encoding.UTF8.GetBytes(hashUpdate.UpdateInformation.Field);
+				bufferWriter.Write(field);
+				writer.Reset();
+				bufferWriter.Write(ScriptedHashUpsertMiddle);
+				writer.Reset();
+				var hash = hashUpdate.UpdateInformation.Hash;
+				JsonSerializer.Serialize(writer, hash, options.SerializerOptions);
+				bufferWriter.Write(ScriptedHashUpsertDocPreamble);
+				writer.Reset();
+			}
 
 			if (options.EventWriter?.WriteToArrayBuffer != null)
 				options.EventWriter.WriteToArrayBuffer(bufferWriter, @event);
@@ -64,6 +79,11 @@ public static class BulkRequestDataFactory
 			if (indexHeader is UpdateOperation)
 			{
 				bufferWriter.Write(DocUpdateHeaderEnd);
+				writer.Reset();
+			}
+			if (indexHeader is ScriptedHashUpdateOperation)
+			{
+				bufferWriter.Write(ScriptedHashUpsertEnd);
 				writer.Reset();
 			}
 
@@ -112,6 +132,17 @@ public static class BulkRequestDataFactory
 			if (indexHeader is UpdateOperation)
 				await stream.WriteAsync(DocUpdateHeaderStart, 0, DocUpdateHeaderStart.Length, ctx).ConfigureAwait(false);
 
+			if (indexHeader is ScriptedHashUpdateOperation hashUpdate)
+			{
+				await stream.WriteAsync(ScriptedHashUpsertStart, 0, ScriptedHashUpsertStart.Length, ctx).ConfigureAwait(false);
+				var field = Encoding.UTF8.GetBytes(hashUpdate.UpdateInformation.Field);
+				await stream.WriteAsync(field, 0, field.Length, ctx).ConfigureAwait(false);
+				await stream.WriteAsync(ScriptedHashUpsertMiddle, 0, ScriptedHashUpsertMiddle.Length, ctx).ConfigureAwait(false);
+				var hash = hashUpdate.UpdateInformation.Hash;
+				await JsonSerializer.SerializeAsync(stream, hash, options.SerializerOptions, ctx).ConfigureAwait(false);
+				await stream.WriteAsync(ScriptedHashUpsertDocPreamble, 0, ScriptedHashUpsertDocPreamble.Length, ctx).ConfigureAwait(false);
+			}
+
 			if (options.EventWriter?.WriteToStreamAsync != null)
 				await options.EventWriter.WriteToStreamAsync(stream, @event, ctx).ConfigureAwait(false);
 			else
@@ -120,6 +151,9 @@ public static class BulkRequestDataFactory
 
 			if (indexHeader is UpdateOperation)
 				await stream.WriteAsync(DocUpdateHeaderEnd, 0, DocUpdateHeaderEnd.Length, ctx).ConfigureAwait(false);
+
+			if (indexHeader is ScriptedHashUpdateOperation)
+				await stream.WriteAsync(ScriptedHashUpsertEnd, 0, ScriptedHashUpsertEnd.Length, ctx).ConfigureAwait(false);
 
 			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
 		}
@@ -154,6 +188,16 @@ public static class BulkRequestDataFactory
 
 		if (!string.IsNullOrWhiteSpace(id) && id != null && (options.BulkUpsertLookup?.Invoke(@event, id) ?? false))
 			return skipIndexName ? new UpdateOperation { Id = id } : new UpdateOperation { Id = id, Index = index };
+
+		var hash = options.ChannelHash;
+		if (!string.IsNullOrWhiteSpace(hash) && id != null && options.ScriptedHashBulkUpsertLookup is not null)
+		{
+			var hashInfo = options.ScriptedHashBulkUpsertLookup.Invoke(@event, hash);
+			return skipIndexName
+				? new ScriptedHashUpdateOperation { Id = id, UpdateInformation = hashInfo}
+				: new ScriptedHashUpdateOperation { Id = id, Index = index, UpdateInformation  = hashInfo };
+		}
+
 
 		return
 			!string.IsNullOrWhiteSpace(id)
