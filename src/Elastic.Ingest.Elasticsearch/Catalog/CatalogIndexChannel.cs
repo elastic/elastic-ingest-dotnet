@@ -23,6 +23,9 @@ public class CatalogIndexChannelOptionsBase<TDocument>(ITransport transport) : I
 	/// The alias name pointing to the version of the index intended to be queries
 	/// <para> By calling <see cref="CatalogIndexChannel{TDocument, TChannelOptions}.ApplyAliasesAsync"/> the alias will be updated to point to the latest index.</para>
 	public string ActiveSearchAlias { get; set; } = $"{typeof(TDocument).Name.ToLowerInvariant()}";
+
+	/// Hash over the document to use for indexing, this hash is used to determine if the document should be indexed.
+	public Func<TDocument, string>[]? HashOver { get; init; }
 }
 
 /// <inheritdoc cref="CatalogIndexChannel{TDocument}" />
@@ -33,6 +36,7 @@ public class CatalogIndexChannelOptions<TDocument>(ITransport transport) : Catal
 
 	/// A function that returns settings to accompany <see cref="GetMapping"/>.
 	public Func<string>? GetMappingSettings { get; init; }
+
 }
 
 /// <inheritdoc cref="CatalogIndexChannel{TDocument}" />
@@ -61,7 +65,7 @@ public class CatalogIndexChannel<TDocument, TChannelOptions> : IndexChannel<TDoc
 	where TChannelOptions : CatalogIndexChannelOptionsBase<TDocument>
 	where TDocument : class
 {
-	private readonly string _url;
+	private string _url;
 
 	/// <inheritdoc cref="CatalogIndexChannel{TDocument}"/>
 	public CatalogIndexChannel(TChannelOptions options, ICollection<IChannelCallbacks<TDocument, BulkResponse>>? callbackListeners = null)
@@ -82,7 +86,7 @@ public class CatalogIndexChannel<TDocument, TChannelOptions> : IndexChannel<TDoc
 
 	/// The index name used for indexing. This the configured <see cref="IndexChannelOptions{TDocument}.IndexFormat"/> to compute a single index name for all operations.
 	/// <para>Since this is catalog data and not time series data, all data needs to end up in a single index</para>
-	public string IndexName { get; }
+	public string IndexName { get; private set; }
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
 	protected override BulkOperationHeader CreateBulkOperationHeader(TDocument @event) =>
@@ -96,6 +100,38 @@ public class CatalogIndexChannel<TDocument, TChannelOptions> : IndexChannel<TDoc
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.AlwaysBootstrapComponentTemplates"/>
 	protected override bool AlwaysBootstrapComponentTemplates => true;
+
+	/// <inheritdoc />
+	public override async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, string? ilmPolicy = null, CancellationToken ctx = default)
+	{
+		if (Options.ScriptedHashBulkUpsertLookup is null)
+			return await base.BootstrapElasticsearchAsync(bootstrapMethod, ilmPolicy, ctx).ConfigureAwait(false);
+		var latestAlias = string.Format(Options.IndexFormat, "latest");
+		var matchingIndices = string.Format(Options.IndexFormat, "*");
+		var currentIndex = await ShouldRemovePreviousAliasAsync(matchingIndices, latestAlias, ctx).ConfigureAwait(false);
+		if (string.IsNullOrEmpty(currentIndex))
+			return await base.BootstrapElasticsearchAsync(bootstrapMethod, ilmPolicy, ctx).ConfigureAwait(false);
+
+		IndexName = currentIndex;
+		_url = $"{IndexName}/{base.BulkPathAndQuery}";
+		return await base.BootstrapElasticsearchAsync(bootstrapMethod, ilmPolicy, ctx).ConfigureAwait(false);
+	}
+
+	/// <inheritdoc />
+	public override bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod, string? ilmPolicy = null)
+	{
+		if (Options.ScriptedHashBulkUpsertLookup is null)
+			return base.BootstrapElasticsearch(bootstrapMethod, ilmPolicy);
+		var latestAlias = string.Format(Options.IndexFormat, "latest");
+		var matchingIndices = string.Format(Options.IndexFormat, "*");
+		var currentIndex = ShouldRemovePreviousAlias(matchingIndices, latestAlias);
+		if (string.IsNullOrEmpty(currentIndex))
+			return base.BootstrapElasticsearch(bootstrapMethod, ilmPolicy);
+
+		IndexName = currentIndex;
+		_url = $"{IndexName}/{base.BulkPathAndQuery}";
+		return base.BootstrapElasticsearch(bootstrapMethod, ilmPolicy);
+	}
 
 	/// Applies the latest alias to the index.
 	public async Task<bool> ApplyLatestAliasAsync(CancellationToken ctx = default)
@@ -192,12 +228,25 @@ public class CatalogIndexChannel<TDocument, TChannelOptions> : IndexChannel<TDoc
 			.Trim(Environment.NewLine.ToCharArray());
 		return hasPreviousVersions.ApiCallDetails.HttpStatusCode == 200 ? queryAliasIndex : string.Empty;
 	}
+	private string ShouldRemovePreviousAlias(string matchingIndices, string alias)
+	{
+		var hasPreviousVersions = Options.Transport.Head($"{matchingIndices}?allow_no_indices=false");
+		var queryAliasIndex = Cat($"_cat/aliases/{alias}?h=index").Trim(Environment.NewLine.ToCharArray());
+		return hasPreviousVersions.ApiCallDetails.HttpStatusCode == 200 ? queryAliasIndex : string.Empty;
+	}
 
 	private async Task<string> CatAsync(string url, CancellationToken ctx)
 	{
 		var rq = new RequestConfiguration { Accept = "text/plain" };
 		var catResponse = await Options.Transport.RequestAsync<StringResponse>(new EndpointPath(HttpMethod.GET, url), postData: null, null, rq, ctx)
 			.ConfigureAwait(false);
+		return catResponse.Body;
+	}
+
+	private string Cat(string url)
+	{
+		var rq = new RequestConfiguration { Accept = "text/plain" };
+		var catResponse = Options.Transport.Request<StringResponse>(new EndpointPath(HttpMethod.GET, url), postData: null, null, rq);
 		return catResponse.Body;
 	}
 

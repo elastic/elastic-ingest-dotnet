@@ -7,6 +7,13 @@ using Elastic.Transport;
 namespace Elastic.Ingest.Elasticsearch.Indices;
 
 /// <summary>
+/// For scripted hash bulk upserts returns per operation the field and the hash to use for the scripted upsert
+/// </summary>
+/// <param name="Field">The field to check the previous hash against</param>
+/// <param name="Hash">The current hash of the document</param>
+public record HashedBulkUpdate(string Field, string Hash);
+
+/// <summary>
 /// Provides options to <see cref="IndexChannel{TEvent}"/> to control how and where data gets written to Elasticsearch
 /// </summary>
 /// <typeparam name="TEvent"></typeparam>
@@ -51,6 +58,15 @@ public class IndexChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEven
 	/// <para>https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-request-body</para>
 	/// </summary>
 	public Func<TEvent, string, bool>? BulkUpsertLookup { get; set; }
+
+	/// <summary>
+	/// Uses the callback provided to <see cref="BulkOperationIdLookup"/> to determine if this is in fact an update operation
+	/// <para>Returns the field and the hash to use for the scripted upsert </para>
+	/// <para>Otherwise (the default) `index` bulk operation will be issued for the document.</para>
+	/// <para>Read more about bulk operations here:</para>
+	/// <para>https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-request-body</para>
+	/// </summary>
+	public Func<TEvent, string, HashedBulkUpdate>? ScriptedHashBulkUpsertLookup { get; set; }
 
 	/// <summary>
 	/// Control the operation header for each bulk operation.

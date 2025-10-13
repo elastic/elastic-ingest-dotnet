@@ -5,11 +5,12 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Transport.Products.Elasticsearch;
 
 namespace Elastic.Ingest.Elasticsearch.Serialization;
 
-/// <summary> Represents the _bulk operation meta header </summary>
+/// <summary> Represents the _bulk operation meta-header </summary>
 public abstract class BulkOperationHeader
 {
 	/// <summary> The index or data stream to write to </summary>
@@ -25,7 +26,7 @@ public abstract class BulkOperationHeader
 	public bool? RequireAlias { get; init; }
 }
 
-/// <summary> Represents the _bulk create operation meta header </summary>
+/// <summary> Represents the _bulk create operation meta-header </summary>
 [JsonConverter(typeof(BulkOperationHeaderConverter<CreateOperation>))]
 public class CreateOperation : BulkOperationHeader
 {
@@ -34,7 +35,7 @@ public class CreateOperation : BulkOperationHeader
 	public Dictionary<string, string>? DynamicTemplates { get; init; }
 }
 
-/// <summary> Represents the _bulk index operation meta header </summary>
+/// <summary> Represents the _bulk index operation meta-header </summary>
 [JsonConverter(typeof(BulkOperationHeaderConverter<IndexOperation>))]
 public class IndexOperation : BulkOperationHeader
 {
@@ -43,16 +44,20 @@ public class IndexOperation : BulkOperationHeader
 	public Dictionary<string, string>? DynamicTemplates { get; init; }
 }
 
-/// <summary> Represents the _bulk delete operation meta header </summary>
+/// <summary> Represents the _bulk delete operation meta-header </summary>
 [JsonConverter(typeof(BulkOperationHeaderConverter<DeleteOperation>))]
-public class DeleteOperation : BulkOperationHeader
-{
-}
+public class DeleteOperation : BulkOperationHeader;
 
-/// <summary> Represents the _bulk update operation meta header </summary>
+/// <summary> Represents the _bulk update operation meta-header </summary>
 [JsonConverter(typeof(BulkOperationHeaderConverter<UpdateOperation>))]
-public class UpdateOperation : BulkOperationHeader
+public class UpdateOperation : BulkOperationHeader;
+
+/// <summary> Represents the _bulk update operation meta-header </summary>
+[JsonConverter(typeof(BulkOperationHeaderConverter<ScriptedHashUpdateOperation>))]
+public class ScriptedHashUpdateOperation : BulkOperationHeader
 {
+	/// <summary>  </summary>
+	public required HashedBulkUpdate UpdateInformation { get; init; }
 }
 
 internal class BulkOperationHeaderConverter<THeader> : JsonConverter<THeader>
@@ -69,6 +74,7 @@ internal class BulkOperationHeaderConverter<THeader> : JsonConverter<THeader>
 			DeleteOperation _ => "delete",
 			IndexOperation _ => "index",
 			UpdateOperation _ => "update",
+			ScriptedHashUpdateOperation _ => "update",
 			_ => throw new ArgumentOutOfRangeException(nameof(value), value, null)
 		};
 		writer.WriteStartObject();
