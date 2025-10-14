@@ -103,7 +103,7 @@ public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster, ITestOut
 		{
 			var title = "Hello World!";
 			if (i % 2 == 0)
-				title += $"{i:N}-{expectedVersion:N}";
+				title += $"{i:N0}-{expectedVersion:N0}";
 			channel.TryWrite(new HashDocument { Title = title , Id = $"hello-world-{i}" });
 		}
 		if (!slim.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))

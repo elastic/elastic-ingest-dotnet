@@ -18,12 +18,19 @@ internal static class ElasticsearchChannelStatics
 	public static readonly byte[] DocUpdateHeaderEnd = " }"u8.ToArray();
 
 	public static readonly byte[] ScriptedHashUpsertStart =
-		"{ \"scripted_upsert\": true, \"upsert\": {}, \"script\": { \"source\": \"if (ctx.op != 'create') { if (ctx._source."u8.ToArray();
+		"{ \"scripted_upsert\": true, \"upsert\": {}, \"script\": { \"source\": \"if (ctx._source."u8.ToArray();
 
-	public static readonly byte[] ScriptedHashUpsertMiddle =
-		" == params.hash ) { ctx.op = 'noop' } } ctx._source = params.doc\", \"params\": { \"hash\": "u8.ToArray();
+	public static readonly byte[] ScriptedHashUpsertAfterIfCheck = " == params.hash ) { "u8.ToArray();
 
-	public static readonly byte[] ScriptedHashUpsertDocPreamble =
+	public static readonly byte[] ScriptedHashUpdateScript = "ctx.op = 'noop'"u8.ToArray();
+
+	public static readonly byte[] ScriptedHashParamComma = ", "u8.ToArray();
+	public static readonly byte[] ScriptedHashKeySeparator = ": "u8.ToArray();
+
+	public static readonly byte[] ScriptedHashAfterIfCheckOp =
+		" } else { ctx._source = params.doc } \", \"params\": { \"hash\": "u8.ToArray();
+
+	public static readonly byte[] ScriptHashDocAsParameter =
 		", \"doc\":"u8.ToArray();
 
 	public static readonly byte[] ScriptedHashUpsertEnd = " } } }"u8.ToArray();

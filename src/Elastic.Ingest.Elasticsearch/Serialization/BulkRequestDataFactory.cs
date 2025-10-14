@@ -62,11 +62,36 @@ public static class BulkRequestDataFactory
 				var field = Encoding.UTF8.GetBytes(hashUpdate.UpdateInformation.Field);
 				bufferWriter.Write(field);
 				writer.Reset();
-				bufferWriter.Write(ScriptedHashUpsertMiddle);
+				bufferWriter.Write(ScriptedHashUpsertAfterIfCheck);
 				writer.Reset();
+
+				bufferWriter.Write(ScriptedHashUpdateScript);
+				writer.Reset();
+				if (hashUpdate.UpdateInformation.UpdateScript is not null)
+				{
+					bufferWriter.Write(Encoding.UTF8.GetBytes(hashUpdate.UpdateInformation.UpdateScript));
+					writer.Reset();
+				}
+				else
+				{
+					bufferWriter.Write(ScriptedHashAfterIfCheckOp);
+					writer.Reset();
+				}
 				var hash = hashUpdate.UpdateInformation.Hash;
 				JsonSerializer.Serialize(writer, hash, options.SerializerOptions);
-				bufferWriter.Write(ScriptedHashUpsertDocPreamble);
+
+				if (hashUpdate.UpdateInformation.Parameters is not null)
+					foreach (var (key, value) in hashUpdate.UpdateInformation.Parameters)
+					{
+						bufferWriter.Write(ScriptedHashParamComma);
+						writer.Reset();
+						JsonSerializer.Serialize(writer, key, options.SerializerOptions);
+						bufferWriter.Write(ScriptedHashKeySeparator);
+						writer.Reset();
+						JsonSerializer.Serialize(writer, value, options.SerializerOptions);
+					}
+
+				bufferWriter.Write(ScriptHashDocAsParameter);
 				writer.Reset();
 			}
 
@@ -137,10 +162,31 @@ public static class BulkRequestDataFactory
 				await stream.WriteAsync(ScriptedHashUpsertStart, 0, ScriptedHashUpsertStart.Length, ctx).ConfigureAwait(false);
 				var field = Encoding.UTF8.GetBytes(hashUpdate.UpdateInformation.Field);
 				await stream.WriteAsync(field, 0, field.Length, ctx).ConfigureAwait(false);
-				await stream.WriteAsync(ScriptedHashUpsertMiddle, 0, ScriptedHashUpsertMiddle.Length, ctx).ConfigureAwait(false);
+				await stream.WriteAsync(ScriptedHashUpsertAfterIfCheck, 0, ScriptedHashUpsertAfterIfCheck.Length, ctx).ConfigureAwait(false);
+
+				if (hashUpdate.UpdateInformation.UpdateScript is { } script && !string.IsNullOrWhiteSpace(script))
+				{
+					var bytes = Encoding.UTF8.GetBytes(script);
+					await stream.WriteAsync(bytes, 0, bytes.Length, ctx).ConfigureAwait(false);
+				}
+				else
+					await stream.WriteAsync(ScriptedHashUpdateScript, 0, ScriptedHashUpdateScript.Length, ctx).ConfigureAwait(false);
+
+				await stream.WriteAsync(ScriptedHashAfterIfCheckOp, 0, ScriptedHashAfterIfCheckOp.Length, ctx).ConfigureAwait(false);
+
 				var hash = hashUpdate.UpdateInformation.Hash;
 				await JsonSerializer.SerializeAsync(stream, hash, options.SerializerOptions, ctx).ConfigureAwait(false);
-				await stream.WriteAsync(ScriptedHashUpsertDocPreamble, 0, ScriptedHashUpsertDocPreamble.Length, ctx).ConfigureAwait(false);
+
+				if (hashUpdate.UpdateInformation.Parameters is { } parameters)
+					foreach (var kv in parameters)
+					{
+						await stream.WriteAsync(ScriptedHashParamComma, 0, ScriptedHashParamComma.Length, ctx ).ConfigureAwait(false);
+						await JsonSerializer.SerializeAsync(stream, kv.Key, options.SerializerOptions, ctx).ConfigureAwait(false);
+						await stream.WriteAsync(ScriptedHashKeySeparator, 0, ScriptedHashKeySeparator.Length, ctx ).ConfigureAwait(false);
+						await JsonSerializer.SerializeAsync(stream, kv.Value, options.SerializerOptions, ctx).ConfigureAwait(false);
+					}
+
+				await stream.WriteAsync(ScriptHashDocAsParameter, 0, ScriptHashDocAsParameter.Length, ctx).ConfigureAwait(false);
 			}
 
 			if (options.EventWriter?.WriteToStreamAsync != null)

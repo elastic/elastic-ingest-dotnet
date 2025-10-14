@@ -40,4 +40,10 @@ public class HashDocument
 	[JsonPropertyName("hash")]
 	public string Hash { get; set; } = string.Empty;
 
+	[JsonPropertyName("index_batch_date")]
+	public DateTimeOffset IndexBatchDate { get; set; }
+
+	[JsonPropertyName("last_updated")]
+	public DateTimeOffset LastUpdated { get; set; }
+
 }
