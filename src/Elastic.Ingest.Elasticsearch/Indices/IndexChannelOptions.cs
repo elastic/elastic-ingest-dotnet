@@ -2,6 +2,8 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using Elastic.Transport;
@@ -11,10 +13,33 @@ namespace Elastic.Ingest.Elasticsearch.Indices;
 /// <summary>
 /// For scripted hash bulk upserts returns per operation the field and the hash to use for the scripted upsert
 /// </summary>
-/// <param name="Field">The field to check the previous hash against</param>
-/// <param name="Hash">The current hash of the document</param>
-public record HashedBulkUpdate(string Field, string Hash)
+public record HashedBulkUpdate
 {
+	/// <summary>
+	/// For scripted hash bulk upserts returns per operation the field and the hash to use for the scripted upsert
+	/// </summary>
+	/// <param name="field">The field to check the previous hash against</param>
+	/// <param name="hash">The current hash of the document</param>
+	/// <param name="updateScript">The update script</param>
+	/// <param name="parameters"></param>
+	public HashedBulkUpdate(string field, string hash, string? updateScript, IDictionary<string, string>? parameters)
+		: this(field, hash)
+	{
+		UpdateScript = updateScript;
+		Parameters = parameters;
+	}
+
+	/// <summary>
+	/// For scripted hash bulk upserts returns per operation the field and the hash to use for the scripted upsert
+	/// </summary>
+	/// <param name="field">The field to check the previous hash against</param>
+	/// <param name="hash">The current hash of the document</param>
+	public HashedBulkUpdate(string field, string hash)
+	{
+		Field = field;
+		Hash = hash;
+	}
+
 	/// <summary>
 	/// A short SHA256 hash of the provided <paramref name="components"/>
 	/// </summary>
@@ -23,13 +48,25 @@ public record HashedBulkUpdate(string Field, string Hash)
 	public static string CreateHash(params string[] components)
 	{
 #if NET8_0_OR_GREATER
-		return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("", components))))[..8];
+		return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("", components))))[..16].ToLowerInvariant();
 #else
 		var sha = SHA256.Create();
 		var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join("", components)));
-		return BitConverter.ToString(hash).Replace("-", "")[..8];
+		return BitConverter.ToString(hash).Replace("-", "")[..16].ToLowerInvariant();
 #endif
 	}
+
+	/// <summary>The field to check the previous hash against</summary>
+	public string Field { get; init; }
+
+	/// <summary>The current hash of the document</summary>
+	public string Hash { get; init; }
+
+	/// <summary>Optional update script if hashes match defaults to ''</summary>
+	public string? UpdateScript { get; init; }
+
+	/// <summary> Optional additional parameters for <see cref="UpdateScript"/> </summary>
+	public IDictionary<string, string>? Parameters { get; init; }
 };
 
 /// <summary>
