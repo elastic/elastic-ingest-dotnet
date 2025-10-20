@@ -174,7 +174,6 @@ public class CustomScriptHashIngestionTests
 					new Dictionary<string, string>
 					{
 						{ "index_batch_date", c.IndexBatchDate.ToString("o") }
-
 					});
 			},
 			BufferOptions = new BufferOptions

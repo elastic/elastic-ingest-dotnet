@@ -78,39 +78,19 @@ public class IndexChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEven
 	/// <inheritdoc cref="IndexChannelOptions{TEvent}"/>
 	public IndexChannelOptions(ITransport transport) : base(transport) { }
 
-	private string _indexFormat = $"{typeof(TEvent).Name.ToLowerInvariant()}-{{0:yyyy.MM.dd}}";
-
 	/// <summary>
 	/// Gets or sets the format string for the Elastic search index. The current <c>DateTimeOffset</c> is passed as parameter
 	/// 0.
 	/// <para> Defaults to "<typeparamref name="TEvent"/>.Name.ToLowerInvariant()-{0:yyyy.MM.dd}"</para>
 	/// <para> If no {0} parameter is defined the index name is effectively fixed</para>
 	/// </summary>
-	public virtual string IndexFormat
-	{
-		get => _indexFormat;
-		set
-		{
-			_indexFormat = value;
-			_channelHash = HashedBulkUpdate.CreateHash(_indexFormat, _indexOffset?.ToString() ?? string.Empty);
-		}
-	}
-
-	private TimeSpan? _indexOffset;
+	public virtual string IndexFormat { get; set; } = $"{typeof(TEvent).Name.ToLowerInvariant()}-{{0:yyyy.MM.dd}}";
 
 	/// <summary>
 	/// Gets or sets the offset to use for the index <c>DateTimeOffset</c>. The default value is null, which uses the system local
 	/// offset. Use "00:00" for UTC.
 	/// </summary>
-	public TimeSpan? IndexOffset
-	{
-		get => _indexOffset;
-		set
-		{
-			_indexOffset = value;
-			_channelHash = HashedBulkUpdate.CreateHash(_indexFormat, _indexOffset?.ToString() ?? string.Empty);
-		}
-	}
+	public TimeSpan? IndexOffset { get; set; }
 
 	/// <summary>
 	/// Provide a per document <c>DateTimeOffset</c> to be used as the date passed as parameter 0 to <see cref="IndexFormat"/>
@@ -149,12 +129,4 @@ public class IndexChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEven
 	/// Control the operation header for each bulk operation.
 	/// </summary>
 	public OperationMode OperationMode { get; set; }
-
-	private string _channelHash = HashedBulkUpdate.CreateHash($"{typeof(TEvent).Name.ToLowerInvariant()}-{{0:yyyy.MM.dd}}");
-	/// <summary>
-	/// A hash of the channel options. This can be used to hash bust in case of channel option changes.
-	/// It's also passed to <see cref="ScriptedHashBulkUpsertLookup"/>
-	/// </summary>
-	public virtual string ChannelHash => _channelHash;
-
 }

@@ -49,7 +49,7 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 	/// Gets a default index template for the current <see cref="DataStreamChannel{TEvent}"/>
 	/// </summary>
 	/// <returns>A tuple of (name, body) describing the index template</returns>
-	protected override (string, string) GetDefaultIndexTemplate(string name, string match, string mappingsName, string settingsName)
+	protected override (string, string) GetDefaultIndexTemplate(string name, string match, string mappingsName, string settingsName, string hash)
 	{
 		var additionalComponents = GetInferredComponentTemplates();
 		var additionalComponentsJson = string.Join(", ", additionalComponents.Select(a => $"\"{a}\""));
@@ -61,7 +61,8 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
                 ""priority"": 201,
                 ""_meta"": {{
                     ""description"": ""Template installed by .NET ingest libraries (https://github.com/elastic/elastic-ingest-dotnet)"",
-                    ""assembly_version"": ""{LibraryVersion.Current}""
+                    ""assembly_version"": ""{LibraryVersion.Current}"",
+                    ""hash"": ""{hash}""
                 }}
             }}";
 		return (name, indexTemplateBody);

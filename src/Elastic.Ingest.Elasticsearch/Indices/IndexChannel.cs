@@ -60,7 +60,7 @@ public class IndexChannel<TEvent, TChannelOptions> : ElasticsearchChannelBase<TE
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
 	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent @event) =>
-		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(@event, Options, _skipIndexNameOnOperations);
+		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(@event, ChannelHash, Options, _skipIndexNameOnOperations);
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName { get; }
@@ -72,7 +72,7 @@ public class IndexChannel<TEvent, TChannelOptions> : ElasticsearchChannelBase<TE
 	/// Gets a default index template for the current <see cref="IndexChannel{TEvent}"/>
 	/// </summary>
 	/// <returns>A tuple of (name, body) describing the index template</returns>
-	protected override (string, string) GetDefaultIndexTemplate(string name, string match, string mappingsName, string settingsName)
+	protected override (string, string) GetDefaultIndexTemplate(string name, string match, string mappingsName, string settingsName, string hash)
 	{
 		var indexTemplateBody = @$"{{
                 ""index_patterns"": [""{match}""],
@@ -80,7 +80,8 @@ public class IndexChannel<TEvent, TChannelOptions> : ElasticsearchChannelBase<TE
                 ""priority"": 201,
                 ""_meta"": {{
                     ""description"": ""Template installed by .NET ingest libraries (https://github.com/elastic/elastic-ingest-dotnet)"",
-                    ""assembly_version"": ""{LibraryVersion.Current}""
+                    ""assembly_version"": ""{LibraryVersion.Current}"",
+                    ""hash"": ""{hash}""
                 }}
             }}";
 		return (name, indexTemplateBody);

@@ -210,10 +210,11 @@ public static class BulkRequestDataFactory
 	/// </summary>
 	/// <typeparam name="TEvent">The type for the event being ingested.</typeparam>
 	/// <param name="event">The <typeparamref name="TEvent"/> for which the header will be produced.</param>
+	/// <param name="channelHash">Hash of channel for <see cref="ScriptedHashUpdateOperation"/></param>
 	/// <param name="options">The <see cref="IndexChannelOptions{TEvent}"/> for the channel.</param>
 	/// <param name="skipIndexName">Control whether the index name is included in the meta data for the operation.</param>
 	/// <returns>A <see cref="BulkOperationHeader"/> instance.</returns>
-	public static BulkOperationHeader CreateBulkOperationHeaderForIndex<TEvent>(TEvent @event, IndexChannelOptions<TEvent> options, bool skipIndexName = false)
+	public static BulkOperationHeader CreateBulkOperationHeaderForIndex<TEvent>(TEvent @event, string channelHash, IndexChannelOptions<TEvent> options, bool skipIndexName = false)
 	{
 		var indexTime = options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
 		if (options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(options.IndexOffset.Value);
@@ -235,10 +236,9 @@ public static class BulkRequestDataFactory
 		if (!string.IsNullOrWhiteSpace(id) && id != null && (options.BulkUpsertLookup?.Invoke(@event, id) ?? false))
 			return skipIndexName ? new UpdateOperation { Id = id } : new UpdateOperation { Id = id, Index = index };
 
-		var hash = options.ChannelHash;
-		if (!string.IsNullOrWhiteSpace(hash) && id != null && options.ScriptedHashBulkUpsertLookup is not null)
+		if (!string.IsNullOrWhiteSpace(channelHash) && id != null && options.ScriptedHashBulkUpsertLookup is not null)
 		{
-			var hashInfo = options.ScriptedHashBulkUpsertLookup.Invoke(@event, hash);
+			var hashInfo = options.ScriptedHashBulkUpsertLookup.Invoke(@event, channelHash);
 			return skipIndexName
 				? new ScriptedHashUpdateOperation { Id = id, UpdateInformation = hashInfo}
 				: new ScriptedHashUpdateOperation { Id = id, Index = index, UpdateInformation  = hashInfo };
