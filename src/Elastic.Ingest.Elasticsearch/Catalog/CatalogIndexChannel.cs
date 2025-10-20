@@ -28,40 +28,12 @@ public class CatalogIndexChannelOptionsBase<TDocument>(ITransport transport) : I
 /// <inheritdoc cref="CatalogIndexChannel{TDocument}" />
 public class CatalogIndexChannelOptions<TDocument>(ITransport transport) : CatalogIndexChannelOptionsBase<TDocument>(transport)
 {
-	private readonly Func<string>? _getMapping;
-
 	/// A function that returns the mapping for <typeparamref name="TDocument"/>.
-	public Func<string>? GetMapping
-	{
-		get => _getMapping;
-		init
-		{
-			_getMapping = value;
-			_channelHash = HashedBulkUpdate.CreateHash(base.ChannelHash, ActiveSearchAlias,
-				_getMapping?.Invoke() ?? string.Empty, _getMapping?.Invoke() ?? string.Empty
-			);
-		}
-	}
-
-	private readonly Func<string>? _getMappingSettings;
+	public Func<string>? GetMapping { get; init; }
 
 	/// A function that returns settings to accompany <see cref="GetMapping"/>.
-	public Func<string>? GetMappingSettings
-	{
-		get => _getMappingSettings;
-		init
-		{
-			_getMappingSettings = value;
-			_channelHash = HashedBulkUpdate.CreateHash(base.ChannelHash, ActiveSearchAlias,
-				_getMapping?.Invoke() ?? string.Empty, _getMapping?.Invoke() ?? string.Empty
-			);
-		}
-	}
+	public Func<string>? GetMappingSettings { get; init; }
 
-	private readonly string _channelHash = string.Empty;
-
-	/// <inheritdoc />
-	public override string ChannelHash => string.IsNullOrEmpty(_channelHash) ? base.ChannelHash : _channelHash;
 }
 
 /// <inheritdoc cref="CatalogIndexChannel{TDocument}" />
@@ -115,7 +87,7 @@ public class CatalogIndexChannel<TDocument, TChannelOptions> : IndexChannel<TDoc
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
 	protected override BulkOperationHeader CreateBulkOperationHeader(TDocument @event) =>
-		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(@event, Options, true);
+		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(@event, ChannelHash, Options, true);
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
 	protected override string RefreshTargets => IndexName;
@@ -131,10 +103,18 @@ public class CatalogIndexChannel<TDocument, TChannelOptions> : IndexChannel<TDoc
 	{
 		if (Options.ScriptedHashBulkUpsertLookup is null)
 			return await base.BootstrapElasticsearchAsync(bootstrapMethod, ilmPolicy, ctx).ConfigureAwait(false);
+
+		// Ensure channel hash is set before bootstrapping, normally done as part of the bootstrap process
+		GenerateChannelHash(bootstrapMethod, ilmPolicy, out _, out _, out _, out _);
+
+		var indexTemplateExists = await IndexTemplateExistsAsync(TemplateName, ctx).ConfigureAwait(false);
+		var indexTemplateMatchesHash = indexTemplateExists && await IndexTemplateMatchesHashAsync(TemplateName, ChannelHash, ctx).ConfigureAwait(false);
+
 		var latestAlias = string.Format(Options.IndexFormat, "latest");
 		var matchingIndices = string.Format(Options.IndexFormat, "*");
 		var currentIndex = await ShouldRemovePreviousAliasAsync(matchingIndices, latestAlias, ctx).ConfigureAwait(false);
-		if (string.IsNullOrEmpty(currentIndex))
+		// ensure we index to the latest index unless we have no previous versions, or the index template has changed
+		if (string.IsNullOrEmpty(currentIndex) || !indexTemplateExists || !indexTemplateMatchesHash)
 			return await base.BootstrapElasticsearchAsync(bootstrapMethod, ilmPolicy, ctx).ConfigureAwait(false);
 
 		IndexName = currentIndex;
@@ -147,10 +127,18 @@ public class CatalogIndexChannel<TDocument, TChannelOptions> : IndexChannel<TDoc
 	{
 		if (Options.ScriptedHashBulkUpsertLookup is null)
 			return base.BootstrapElasticsearch(bootstrapMethod, ilmPolicy);
+
+		// Ensure channel hash is set before bootstrapping, normally done as part of the bootstrap process
+		GenerateChannelHash(bootstrapMethod, ilmPolicy, out _, out _, out _, out _);
+
+		var indexTemplateExists = IndexTemplateExists(TemplateName);
+		var indexTemplateMatchesHash = indexTemplateExists && IndexTemplateMatchesHash(TemplateName, ChannelHash);
+
 		var latestAlias = string.Format(Options.IndexFormat, "latest");
 		var matchingIndices = string.Format(Options.IndexFormat, "*");
 		var currentIndex = ShouldRemovePreviousAlias(matchingIndices, latestAlias);
-		if (string.IsNullOrEmpty(currentIndex))
+		// ensure we index to the latest index unless we have no previous versions, or the index template has changed
+		if (string.IsNullOrEmpty(currentIndex) || !indexTemplateExists || !indexTemplateMatchesHash)
 			return base.BootstrapElasticsearch(bootstrapMethod, ilmPolicy);
 
 		IndexName = currentIndex;

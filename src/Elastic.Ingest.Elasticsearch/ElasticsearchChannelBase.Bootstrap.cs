@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Transport;
 using Elastic.Transport;
 
@@ -25,11 +26,14 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	/// The default is false, meaning we won't register the component templates again if the index template already exists.
 	protected virtual bool AlwaysBootstrapComponentTemplates => false;
 
+	/// <summary> A unique hash calculated when <see cref="BootstrapElasticsearchAsync"/> is called</summary>
+	public string ChannelHash { get; private set; } = string.Empty;
+
 	/// <summary>
 	/// Returns a minimal default index template for an <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> implementation
 	/// </summary>
 	/// <returns>A tuple of (name, body) describing the index template</returns>
-	protected abstract (string, string) GetDefaultIndexTemplate(string name, string match, string mappingsName, string settingsName);
+	protected abstract (string, string) GetDefaultIndexTemplate(string name, string match, string mappingsName, string settingsName, string hash);
 
 	/// <summary>
 	/// Bootstrap the target data stream. Will register the appropriate index and component templates
@@ -39,32 +43,48 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	/// <param name="ctx"></param>
 	public virtual async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, string? ilmPolicy = null, CancellationToken ctx = default)
 	{
-		if (bootstrapMethod == BootstrapMethod.None) return true;
-
 		ctx = ctx == CancellationToken.None ? TokenSource.Token : ctx;
 
-		var name = TemplateName;
-		var match = TemplateWildcard;
-		var indexTemplateExists = await IndexTemplateExistsAsync(name, ctx).ConfigureAwait(false);
-		if (indexTemplateExists && !AlwaysBootstrapComponentTemplates)
+		GenerateChannelHash(bootstrapMethod, ilmPolicy, out var settingsName, out var settingsBody, out var mappingsName, out var mappingsBody);
+
+		if (bootstrapMethod == BootstrapMethod.None) return true;
+
+		var indexTemplateExists = await IndexTemplateExistsAsync(TemplateName, ctx).ConfigureAwait(false);
+		var indexTemplateMatchesHash = indexTemplateExists && await IndexTemplateMatchesHashAsync(TemplateName, ChannelHash, ctx).ConfigureAwait(false);
+		if (indexTemplateExists && !AlwaysBootstrapComponentTemplates && indexTemplateMatchesHash)
 			return true;
 
-		var (settingsName, settingsBody) = GetDefaultComponentSettings(bootstrapMethod, name, ilmPolicy);
 		if (!await PutComponentTemplateAsync(bootstrapMethod, settingsName, settingsBody, ctx).ConfigureAwait(false))
 			return false;
 
-		var (mappingsName, mappingsBody) = GetDefaultComponentMappings(name);
 		if (!await PutComponentTemplateAsync(bootstrapMethod, mappingsName, mappingsBody, ctx).ConfigureAwait(false))
 			return false;
 
 		if (indexTemplateExists)
 			return true;
 
-		var (indexTemplateName, indexTemplateBody) = GetDefaultIndexTemplate(name, match, mappingsName, settingsName);
+		var (indexTemplateName, indexTemplateBody) = GetDefaultIndexTemplate(TemplateName, TemplateWildcard, mappingsName, settingsName, ChannelHash);
 		if (!await PutIndexTemplateAsync(bootstrapMethod, indexTemplateName, indexTemplateBody, ctx).ConfigureAwait(false))
 			return false;
 
 		return true;
+	}
+
+	/// <summary> Generate the channel hash </summary>
+	protected void GenerateChannelHash(
+		BootstrapMethod bootstrapMethod,
+		string? ilmPolicy,
+		out string settingsName,
+		out string settingsBody,
+		out string mappingsName,
+		out string mappingsBody
+	)
+	{
+		(settingsName, settingsBody) = GetDefaultComponentSettings(bootstrapMethod, TemplateName, ilmPolicy);
+		(mappingsName, mappingsBody) = GetDefaultComponentMappings(TemplateName);
+
+		var hash = HashedBulkUpdate.CreateHash(settingsName, settingsBody, mappingsName, mappingsBody);
+		ChannelHash = hash;
 	}
 
 	/// <summary>
@@ -74,30 +94,47 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	/// <param name="ilmPolicy">Registers a component template that ensures the template is managed by this ilm policy</param>
 	public virtual bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod, string? ilmPolicy = null)
 	{
+		GenerateChannelHash(bootstrapMethod, ilmPolicy, out var settingsName, out var settingsBody, out var mappingsName, out var mappingsBody);
+
 		if (bootstrapMethod == BootstrapMethod.None) return true;
 
-		var name = TemplateName;
-		var match = TemplateWildcard;
-		var indexTemplateExists = IndexTemplateExists(name);
-		if (indexTemplateExists && !AlwaysBootstrapComponentTemplates)
+		//if the index template already exists and has the same hash, we don't need to re-register the component templates'
+		var indexTemplateExists = IndexTemplateExists(TemplateName);
+		var indexTemplateMatchesHash = indexTemplateExists && IndexTemplateMatchesHash(TemplateName, ChannelHash);
+		if (indexTemplateExists && !AlwaysBootstrapComponentTemplates && indexTemplateMatchesHash)
 			return true;
 
-		var (settingsName, settingsBody) = GetDefaultComponentSettings(bootstrapMethod, name, ilmPolicy);
 		if (!PutComponentTemplate(bootstrapMethod, settingsName, settingsBody))
 			return false;
 
-		var (mappingsName, mappingsBody) = GetDefaultComponentMappings(name);
 		if (!PutComponentTemplate(bootstrapMethod, mappingsName, mappingsBody))
 			return false;
 
 		if (indexTemplateExists)
 			return true;
 
-		var (indexTemplateName, indexTemplateBody) = GetDefaultIndexTemplate(name, match, mappingsName, settingsName);
+		var (indexTemplateName, indexTemplateBody) = GetDefaultIndexTemplate(TemplateName, TemplateWildcard, mappingsName, settingsName, ChannelHash);
 		if (!PutIndexTemplate(bootstrapMethod, indexTemplateName, indexTemplateBody))
 			return false;
 
 		return true;
+	}
+
+	/// <summary> Gets the stored hash of the index template and its generated components </summary>
+	protected bool IndexTemplateMatchesHash(string name, string hash)
+	{
+		var template = Options.Transport.Request<StringResponse>(HttpMethod.GET, $"/_index_template/{name}?filter_path=index_templates.index_template._meta.hash");
+		var metaHash = template.Body.Replace("""{"index_templates":[{"index_template":{"_meta":{"hash":""", "").Trim('\"').Split('\"').FirstOrDefault();
+		return !string.IsNullOrWhiteSpace(metaHash) && metaHash == hash;
+	}
+
+	/// <summary> Gets the stored hash of the index template and its generated components </summary>
+	protected async Task<bool> IndexTemplateMatchesHashAsync(string name, string hash, CancellationToken ctx = default)
+	{
+		var template = await Options.Transport.RequestAsync<StringResponse>(HttpMethod.GET, $"/_index_template/{name}?filter_path=index_templates.index_template._meta.hash", ctx)
+			.ConfigureAwait(false);
+		var metaHash = template.Body.Replace("""{"index_templates":[{"index_template":{"_meta":{"hash":""", "").Trim('\"').Split('\"').FirstOrDefault();
+		return !string.IsNullOrWhiteSpace(metaHash) && metaHash == hash;
 	}
 
 	private bool? _isServerless;
@@ -230,7 +267,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	/// Returns default component settings template for a <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/>
 	/// </summary>
 	/// <returns>A tuple of (name, body) describing the default component template settings</returns>
-	protected (string, string) GetDefaultComponentSettings(BootstrapMethod bootstrapMethod, string indexTemplateName, string? ilmPolicy = null)
+	private (string, string) GetDefaultComponentSettings(BootstrapMethod bootstrapMethod, string indexTemplateName, string? ilmPolicy = null)
 	{
 		if (string.IsNullOrWhiteSpace(ilmPolicy))
 			ilmPolicy = "logs";
@@ -269,7 +306,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	/// Returns a minimal default mapping component settings template for a <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/>
 	/// </summary>
 	/// <returns>A tuple of (name, body) describing the default component template mappings</returns>
-	protected (string, string) GetDefaultComponentMappings(string indexTemplateName)
+	private (string, string) GetDefaultComponentMappings(string indexTemplateName)
 	{
 		var settingsName = $"{indexTemplateName}-mappings";
 		var mappings = GetMappings() ?? "{}";

@@ -42,7 +42,7 @@ public class BulkRequestCreationWithTemplatedIndexNameBenchmarks
 	public async Task DynamicIndexName_WriteToStreamAsync()
 	{
 		MemoryStream.Position = 0;
-		var bytes = BulkRequestDataFactory.GetBytes(_data, _options!, e => BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(e, _options!, false));
+		var bytes = BulkRequestDataFactory.GetBytes(_data, _options!, e => BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(e, string.Empty, _options!, false));
 		var postData = PostData.ReadOnlyMemory(bytes);
 		await postData.WriteAsync(MemoryStream, _transportConfiguration!, false, CancellationToken.None);
 	}

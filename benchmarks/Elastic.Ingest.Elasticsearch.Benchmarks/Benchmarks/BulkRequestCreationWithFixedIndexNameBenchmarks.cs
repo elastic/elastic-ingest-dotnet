@@ -43,7 +43,7 @@ public class BulkRequestCreationWithFixedIndexNameBenchmarks
 	public async Task WriteToStreamAsync()
 	{
 		MemoryStream.Position = 0;
-		var bytes = BulkRequestDataFactory.GetBytes(_data, _options!, e => BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(e, _options!, true));
+		var bytes = BulkRequestDataFactory.GetBytes(_data, _options!, e => BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(e, string.Empty, _options!, true));
 		var postData = PostData.ReadOnlyMemory(bytes);
 		await postData.WriteAsync(MemoryStream, _transportConfiguration!, false, CancellationToken.None);
 	}
