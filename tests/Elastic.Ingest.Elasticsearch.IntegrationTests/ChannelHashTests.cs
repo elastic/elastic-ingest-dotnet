@@ -22,7 +22,7 @@ public class ChannelHashTests(IngestionCluster cluster, ITestOutputHelper output
 	[Fact]
 	public async Task HashChangesWithIndexChannelShouldCreateNewIndex()
 	{
-		var indexPrefix = "catalog-data-";
+		var indexPrefix = "hash-data-";
 		var slim = new CountdownEvent(1);
 		var channel = CreateChannel(indexPrefix, slim);
 		var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
