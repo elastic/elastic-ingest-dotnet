@@ -101,7 +101,7 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 	/// <summary> Returns whether the channel is trying to reuse an existing index. Only true if <see cref="IndexChannelOptions{TEvent}.ScriptedHashBulkUpsertLookup"/> is specified.
 	/// <para> If this returns true it does not guarantee reuse, the <see cref="ElasticsearchChannelBase{TDocument, TChannelOptions}.ChannelHash"/> should still match the hash stored in the index template _meta</para>
 	/// </summary>
-	public virtual bool TryReuseIndex => Options.BulkOperationIdLookup is not null;
+	public virtual bool TryReuseIndex => Options.ScriptedHashBulkUpsertLookup is not null;
 
 	/// <inheritdoc />
 	public override async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, string? ilmPolicy = null, CancellationToken ctx = default)
