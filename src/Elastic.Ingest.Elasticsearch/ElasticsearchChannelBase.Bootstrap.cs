@@ -125,8 +125,10 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	{
 		var template = Options.Transport.Request<StringResponse>(HttpMethod.GET, $"/_index_template/{name}?filter_path=index_templates.index_template._meta.hash");
 		var metaHash = template.Body.Replace("""{"index_templates":[{"index_template":{"_meta":{"hash":""", "").Trim('\"').Split('\"').FirstOrDefault();
-		// if the hash is empty, we don't have a hash stored, so we match'
-		return string.IsNullOrWhiteSpace(metaHash) || metaHash == hash;
+		// if the hash is empty, we don't have a hash stored, so we don't match
+		if (string.IsNullOrWhiteSpace(metaHash))
+			return false;
+	 	return metaHash == hash;
 	}
 
 	/// <summary> Gets the stored hash of the index template and its generated components </summary>
