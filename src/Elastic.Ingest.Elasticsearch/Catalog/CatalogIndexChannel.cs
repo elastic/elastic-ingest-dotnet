@@ -132,7 +132,7 @@ public class CatalogIndexChannel<TDocument, TChannelOptions> : IndexChannel<TDoc
 		GenerateChannelHash(bootstrapMethod, ilmPolicy, out _, out _, out _, out _);
 
 		var indexTemplateExists = IndexTemplateExists(TemplateName);
-		var indexTemplateMatchesHash = indexTemplateExists && IndexTemplateMatchesHash(TemplateName, ChannelHash);
+		var indexTemplateMatchesHash = indexTemplateExists && IndexTemplateMatchesHash(ChannelHash);
 
 		var latestAlias = string.Format(Options.IndexFormat, "latest");
 		var matchingIndices = string.Format(Options.IndexFormat, "*");

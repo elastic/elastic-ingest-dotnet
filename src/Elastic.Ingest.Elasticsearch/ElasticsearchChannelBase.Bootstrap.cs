@@ -121,23 +121,43 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	}
 
 	/// <summary> Gets the stored hash of the index template and its generated components </summary>
-	protected bool IndexTemplateMatchesHash(string name, string hash)
+	protected bool IndexTemplateMatchesHash(string hash)
 	{
-		var template = Options.Transport.Request<StringResponse>(HttpMethod.GET, $"/_index_template/{name}?filter_path=index_templates.index_template._meta.hash");
-		var metaHash = template.Body.Replace("""{"index_templates":[{"index_template":{"_meta":{"hash":""", "").Trim('\"').Split('\"').FirstOrDefault();
+		var metaHash = GetStoredMetaHash();
 		// if the hash is empty, we don't have a hash stored, so we don't match
 		if (string.IsNullOrWhiteSpace(metaHash))
 			return false;
 	 	return metaHash == hash;
 	}
 
-	/// <summary> Gets the stored hash of the index template and its generated components </summary>
-	protected async Task<bool> IndexTemplateMatchesHashAsync(string name, string hash, CancellationToken ctx = default)
+	/// <summary> Get the stored hash on the index template if available </summary>
+	public string? GetStoredMetaHash()
 	{
-		var template = await Options.Transport.RequestAsync<StringResponse>(HttpMethod.GET, $"/_index_template/{name}?filter_path=index_templates.index_template._meta.hash", ctx)
-			.ConfigureAwait(false);
+		var template = Options.Transport.Request<StringResponse>(HttpMethod.GET, $"/_index_template/{TemplateName}?filter_path=index_templates.index_template._meta.hash");
+		if (!template.ApiCallDetails.HasSuccessfulStatusCode)
+			return string.Empty;
+		return ReadMetaHash(template);
+	}
+
+	private static string? ReadMetaHash(StringResponse template)
+	{
 		var metaHash = template.Body.Replace("""{"index_templates":[{"index_template":{"_meta":{"hash":""", "").Trim('\"').Split('\"').FirstOrDefault();
+		return metaHash;
+	}
+
+	/// <summary> Gets the stored hash of the index template and its generated components </summary>
+	protected async Task<bool> IndexTemplateMatchesHashAsync(string hash, CancellationToken ctx = default)
+	{
+		var metaHash = await GetStoredMetaHashAsync(ctx).ConfigureAwait(false);
 		return !string.IsNullOrWhiteSpace(metaHash) && metaHash == hash;
+	}
+
+	/// <summary> Get the stored hash on the index template if available </summary>
+	public async Task<string?> GetStoredMetaHashAsync(CancellationToken ctx)
+	{
+		var template = await Options.Transport.RequestAsync<StringResponse>(HttpMethod.GET, $"/_index_template/{TemplateName}?filter_path=index_templates.index_template._meta.hash", ctx)
+			.ConfigureAwait(false);
+		return ReadMetaHash(template);
 	}
 
 	private bool? _isServerless;
