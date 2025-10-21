@@ -22,7 +22,7 @@ public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster, ITestOut
 	[Fact]
 	public async Task EnsureDocumentsEndUpInIndex()
 	{
-		var indexPrefix = "catalog-data-";
+		var indexPrefix = "update-data-";
 		var slim = new CountdownEvent(1);
 		var channel = CreateChannel(indexPrefix, slim);
 		var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
