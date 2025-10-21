@@ -108,7 +108,7 @@ public class CatalogIndexChannel<TDocument, TChannelOptions> : IndexChannel<TDoc
 		GenerateChannelHash(bootstrapMethod, ilmPolicy, out _, out _, out _, out _);
 
 		var indexTemplateExists = await IndexTemplateExistsAsync(TemplateName, ctx).ConfigureAwait(false);
-		var indexTemplateMatchesHash = indexTemplateExists && await IndexTemplateMatchesHashAsync(TemplateName, ChannelHash, ctx).ConfigureAwait(false);
+		var indexTemplateMatchesHash = indexTemplateExists && await IndexTemplateMatchesHashAsync(ChannelHash, ctx).ConfigureAwait(false);
 
 		var latestAlias = string.Format(Options.IndexFormat, "latest");
 		var matchingIndices = string.Format(Options.IndexFormat, "*");
@@ -132,7 +132,7 @@ public class CatalogIndexChannel<TDocument, TChannelOptions> : IndexChannel<TDoc
 		GenerateChannelHash(bootstrapMethod, ilmPolicy, out _, out _, out _, out _);
 
 		var indexTemplateExists = IndexTemplateExists(TemplateName);
-		var indexTemplateMatchesHash = indexTemplateExists && IndexTemplateMatchesHash(TemplateName, ChannelHash);
+		var indexTemplateMatchesHash = indexTemplateExists && IndexTemplateMatchesHash(ChannelHash);
 
 		var latestAlias = string.Format(Options.IndexFormat, "latest");
 		var matchingIndices = string.Format(Options.IndexFormat, "*");
