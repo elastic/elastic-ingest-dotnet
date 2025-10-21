@@ -60,7 +60,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		if (!await PutComponentTemplateAsync(bootstrapMethod, mappingsName, mappingsBody, ctx).ConfigureAwait(false))
 			return false;
 
-		if (indexTemplateExists)
+		if (indexTemplateExists && indexTemplateMatchesHash)
 			return true;
 
 		var (indexTemplateName, indexTemplateBody) = GetDefaultIndexTemplate(TemplateName, TemplateWildcard, mappingsName, settingsName, ChannelHash);
@@ -110,7 +110,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		if (!PutComponentTemplate(bootstrapMethod, mappingsName, mappingsBody))
 			return false;
 
-		if (indexTemplateExists)
+		if (indexTemplateExists && indexTemplateMatchesHash)
 			return true;
 
 		var (indexTemplateName, indexTemplateBody) = GetDefaultIndexTemplate(TemplateName, TemplateWildcard, mappingsName, settingsName, ChannelHash);
@@ -130,6 +130,16 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	 	return metaHash == hash;
 	}
 
+	/// <summary> Gets the stored hash of the index template and its generated components </summary>
+	public async Task<bool> IndexTemplateMatchesHashAsync(string hash, CancellationToken ctx = default)
+	{
+		var metaHash = await GetIndexTemplateHashAsync(ctx).ConfigureAwait(false);
+		if (string.IsNullOrWhiteSpace(metaHash))
+			return false;
+		return metaHash == hash;
+	}
+
+
 	/// <summary> Get the stored hash on the index template if available </summary>
 	public string? GetIndexTemplateHash()
 	{
@@ -143,13 +153,6 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 	{
 		var metaHash = template.Body.Replace("""{"index_templates":[{"index_template":{"_meta":{"hash":""", "").Trim('\"').Split('\"').FirstOrDefault();
 		return metaHash;
-	}
-
-	/// <summary> Gets the stored hash of the index template and its generated components </summary>
-	public async Task<bool> IndexTemplateMatchesHashAsync(string hash, CancellationToken ctx = default)
-	{
-		var metaHash = await GetIndexTemplateHashAsync(ctx).ConfigureAwait(false);
-		return !string.IsNullOrWhiteSpace(metaHash) && metaHash == hash;
 	}
 
 	/// <summary> Get the stored hash on the index template if available </summary>
