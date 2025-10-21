@@ -48,7 +48,7 @@ public class SemanticIndexChannelOptions<TDocument>(ITransport transport) : Cata
 	public TimeSpan? InferenceCreateTimeout { get; init; }
 
 	/// <summary> Set this to true before calling <see cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.BootstrapElasticsearchAsync"/> to attempt to reuse an existing index.
-	/// <para> Setting this to true does not force the behavior the <see cref="CatalogIndexChannel{TDocument}.ChannelHash"/> should also match the hash stored in the index template _meta</para>
+	/// <para> Setting this to true does not force the behavior the <see cref="ElasticsearchChannelBase{TDocument, TChannelOptions}.ChannelHash"/> should also match the hash stored in the index template _meta</para>
 	/// </summary>
 	public bool TryReuseIndex { get; set; }
 }
@@ -93,7 +93,7 @@ public class SemanticIndexChannel<TDocument> : CatalogIndexChannel<TDocument, Se
 
 	/// <summary>
 	/// Returns whether the channel will attempt to reuse an existing index. Only true if <see cref="SemanticIndexChannelOptions{TDocument}.TryReuseIndex"/> is specified.
-	/// <para> If this returns true it does not guarantee reuse, the <see cref="CatalogIndexChannel{TDocument}.ChannelHash"/> should still match the hash stored in the index template _meta</para>
+	/// <para> If this returns true it does not guarantee reuse, the <see cref="ElasticsearchChannelBase{TDocument, TChannelOptions}.ChannelHash"/> should still match the hash stored in the index template _meta</para>
 	/// </summary>
 	public override bool TryReuseIndex => Options.TryReuseIndex;
 
