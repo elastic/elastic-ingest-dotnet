@@ -46,6 +46,11 @@ public class SemanticIndexChannelOptions<TDocument>(ITransport transport) : Cata
 	/// <para>If not specified, the default timeout is used.</para>
 	/// <para>If specified, the timeout is used for both the inference id and search inference id.</para>
 	public TimeSpan? InferenceCreateTimeout { get; init; }
+
+	/// <summary> Set this to true before calling <see cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.BootstrapElasticsearchAsync"/> to attempt to reuse an existing index.
+	/// <para> Setting this to true does not force the behavior the <see cref="CatalogIndexChannel{TDocument}.ChannelHash"/> should also match the hash stored in the index template _meta</para>
+	/// </summary>
+	public bool TryReuseIndex { get; set; }
 }
 
 /// A channel that writes to an index which allows you to bootstrap inference endpoints <see cref="BootstrapElasticsearch"/> in a controlled fashion.
@@ -66,6 +71,9 @@ public class SemanticIndexChannel<TDocument> : CatalogIndexChannel<TDocument, Se
 				?? throw new ArgumentException("InferenceId must be set when UsePreexistingInferenceIds is true");
 		else
 			SearchInferenceId = Options.SearchInferenceId ?? $"{type}-search-elser";
+
+		if (options.ScriptedHashBulkUpsertLookup is not null)
+			throw new ArgumentException("SemanticIndexChannel does not support ScriptedHashBulkUpsertLookup");
 	}
 
 	/// The inference id used, either explicitly passed <see cref="SemanticIndexChannelOptions{TDocument}.InferenceId"/> or a precomputed one based on <typeparamref name="TDocument"/>
@@ -82,6 +90,12 @@ public class SemanticIndexChannel<TDocument> : CatalogIndexChannel<TDocument, Se
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.GetMappingSettings"/>
 	protected override string? GetMappingSettings() => Options.GetMappingSettings?.Invoke(InferenceId, SearchInferenceId);
+
+	/// <summary>
+	/// Returns whether the channel will attempt to reuse an existing index. Only true if <see cref="SemanticIndexChannelOptions{TDocument}.TryReuseIndex"/> is specified.
+	/// <para> If this returns true it does not guarantee reuse, the <see cref="CatalogIndexChannel{TDocument}.ChannelHash"/> should still match the hash stored in the index template _meta</para>
+	/// </summary>
+	public override bool TryReuseIndex => Options.TryReuseIndex;
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.BootstrapElasticsearch"/>
 	public override bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod, string? ilmPolicy = null)
