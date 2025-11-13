@@ -24,7 +24,7 @@
       "rollForward": false
     },
     "nupkg-validator": {
-      "version": "0.6.0",
+      "version": "0.10.1",
       "commands": [
         "nupkg-validator"
       ],

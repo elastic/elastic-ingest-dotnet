@@ -80,3 +80,5 @@ src/packages/
 BenchmarkDotNet.Artifacts
 
 /.ionide/symbolCache.db
+
+.artifacts
