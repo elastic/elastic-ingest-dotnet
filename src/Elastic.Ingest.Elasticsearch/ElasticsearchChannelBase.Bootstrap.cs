@@ -293,7 +293,7 @@ public abstract partial class ElasticsearchChannelBase<TDocument, TChannelOption
 	/// Returns default component settings template for a <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/>
 	/// </summary>
 	/// <returns>A tuple of (name, body) describing the default component template settings</returns>
-	private (string, string) GetDefaultComponentSettings(BootstrapMethod bootstrapMethod, string indexTemplateName, string? ilmPolicy = null)
+	protected (string, string) GetDefaultComponentSettings(BootstrapMethod bootstrapMethod, string indexTemplateName, string? ilmPolicy = null)
 	{
 		if (string.IsNullOrWhiteSpace(ilmPolicy))
 			ilmPolicy = "logs";
