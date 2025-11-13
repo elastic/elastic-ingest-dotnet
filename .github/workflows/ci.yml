@@ -124,6 +124,11 @@ jobs:
       packages: write
     steps:
     - uses: actions/checkout@v5
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        global-json-file: ./global.json
 
     - uses: actions/download-artifact@v6
       with:
