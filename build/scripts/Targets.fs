@@ -45,9 +45,7 @@ let private pristineCheck (arguments:ParseResults<Arguments>) =
     | _ -> failwithf "The checkout folder has pending changes, aborting"
 
 let private test (arguments:ParseResults<Arguments>) =
-    let junitOutput = Path.Combine(Paths.Output.FullName, "junit-{assembly}-{framework}-test-results.xml")
-    let loggerPathArgs = sprintf "LogFilePath=%s" junitOutput
-    let loggerArg = sprintf "--logger:\"junit;%s\"" loggerPathArgs
+    let loggerArg = "--logger:GithubActions" 
     exec "dotnet" ["test"; "-c"; "Release"; "--filter"; "FullyQualifiedName!~Elastic.Ingest.Elasticsearch.IntegrationTests"; loggerArg] |> ignore
 
 let private generatePackages (arguments:ParseResults<Arguments>) =
