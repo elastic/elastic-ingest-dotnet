@@ -50,8 +50,9 @@ async Task DoWork()
 async Task PushToChannel(SemanticIndexChannel<MyDocument> c)
 {
 	var random = new Random();
-	if (c == null) throw new ArgumentNullException(nameof(c));
+	ArgumentNullException.ThrowIfNull(c);
 
+	Console.WriteLine($"---> Bootstrapping Elasticsearch");
 	await c.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 
 	foreach (var i in Enumerable.Range(0, numDocs))
@@ -85,10 +86,7 @@ SemanticIndexChannel<MyDocument> SetupElasticsearchChannel()
 	var apiKey = Environment.GetEnvironmentVariable("ELASTIC_API_KEY") ?? throw new Exception();
 	var url = Environment.GetEnvironmentVariable("ELASTIC_URL") ?? throw new Exception();
 
-	var configuration = new ElasticsearchConfiguration(new Uri(url), new ApiKey(apiKey))
-	{
-		ProxyAddress = "http://localhost:8866"
-	};
+	var configuration = new ElasticsearchConfiguration(new Uri(url), new ApiKey(apiKey));
 	var transport = new DistributedTransport(configuration);
 	var c = new SemanticIndexChannel<MyDocument>(
 		new SemanticIndexChannelOptions<MyDocument>(transport)
@@ -110,7 +108,7 @@ SemanticIndexChannel<MyDocument> SetupElasticsearchChannel()
 				        "type": "text",
 				        "fields": {
 				            "semantic": {
-				                "type": "semantic_text",
+				                "type": "semantic_text"
 				                "inference_id": "{{inferenceId}}"
 				            }
 				        }
@@ -123,12 +121,14 @@ SemanticIndexChannel<MyDocument> SetupElasticsearchChannel()
 	return c;
 }
 
+#pragma warning disable CA1050
 public class MyDocument
+#pragma warning restore CA1050
 {
 	[JsonPropertyName("message")]
 	public string Message { init; get; } = null!;
 }
 
 [JsonSerializable(typeof(MyDocument))]
-internal partial class ExampleJsonSerializerContext : JsonSerializerContext;
+internal sealed partial class ExampleJsonSerializerContext : JsonSerializerContext;
 

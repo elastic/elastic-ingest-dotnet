@@ -11,7 +11,7 @@ public static class LibraryVersion
 {
 	/// <summary> Type to reflect version information from</summary>
 	// ReSharper disable once ClassNeverInstantiated.Local
-	private class VersionType { }
+	private sealed class VersionType { }
 
 	/// <summary> </summary>
 	public static readonly ReflectionVersionInfo Current = ReflectionVersionInfo.Create<VersionType>();

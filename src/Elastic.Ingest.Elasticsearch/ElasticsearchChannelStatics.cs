@@ -2,6 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -12,7 +13,7 @@ namespace Elastic.Ingest.Elasticsearch;
 
 internal static class ElasticsearchChannelStatics
 {
-	public static readonly byte[] LineFeed = { (byte)'\n' };
+	public static readonly byte[] LineFeed = [(byte)'\n'];
 
 	public static readonly byte[] DocUpdateHeaderStart = "{\"doc_as_upsert\": true, \"doc\": "u8.ToArray();
 	public static readonly byte[] DocUpdateHeaderEnd = " }"u8.ToArray();

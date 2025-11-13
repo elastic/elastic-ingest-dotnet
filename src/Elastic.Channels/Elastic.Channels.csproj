@@ -9,12 +9,12 @@
     <IsPackable>True</IsPackable>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="System.Threading.Channels" Version="8.0.0" />
+  <ItemGroup Condition="!$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net10.0'))">
+    <PackageReference Include="System.Threading.Channels" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)'=='netstandard2.0'">
-    <PackageReference Include="System.Buffers" Version="4.5.1" />
+    <PackageReference Include="System.Buffers" Version="4.6.1" />
   </ItemGroup>
 
 </Project>

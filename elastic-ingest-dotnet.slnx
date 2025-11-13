@@ -1,0 +1,45 @@
+<Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Elastic.Ingest.Elasticsearch.Benchmarks/Elastic.Ingest.Elasticsearch.Benchmarks.csproj" />
+    <Project Path="benchmarks/Elastic.Ingest.Elasticsearch.Profiling/Elastic.Ingest.Elasticsearch.Profiling.csproj" />
+    <Project Path="benchmarks/Performance.Common/Performance.Common.csproj" />
+  </Folder>
+  <Folder Name="/build/">
+    <File Path="build.bat" />
+    <File Path="build.sh" />
+    <File Path="CODE_OF_CONDUCT.md" />
+    <File Path="contributing.md" />
+    <File Path="Directory.Build.props" />
+    <File Path="dotnet-tools.json" />
+    <File Path="global.json" />
+    <File Path="license.txt" />
+    <File Path="NOTICE.txt" />
+    <File Path="nuget-icon.png" />
+    <File Path="nuget.config" />
+    <File Path="README.md" />
+    <Project Path="build/scripts/scripts.fsproj" />
+  </Folder>
+  <Folder Name="/examples/">
+    <File Path="examples/Directory.Build.props" />
+    <Project Path="examples/Elastic.Channels.Continuous/Elastic.Channels.Continuous.csproj" />
+    <Project Path="examples/Elastic.Channels.Example/Elastic.Channels.Example.csproj" />
+    <Project Path="examples/Elastic.Ingest.Apm.Example/Elastic.Ingest.Apm.Example.csproj" />
+    <Project Path="examples/Elastic.Ingest.OpenTelemetry.Example/Elastic.Ingest.OpenTelemetry.Example.csproj" />
+    <Project Path="examples/ingest-aot-smoketest/ingest-aot-smoketest.csproj" />
+    <Project Path="examples/playground/playground.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <File Path="src/Directory.Build.props" />
+    <Project Path="src/Elastic.Channels/Elastic.Channels.csproj" />
+    <Project Path="src/Elastic.Ingest.Apm/Elastic.Ingest.Apm.csproj" />
+    <Project Path="src/Elastic.Ingest.Elasticsearch/Elastic.Ingest.Elasticsearch.csproj" />
+    <Project Path="src/Elastic.Ingest.OpenTelemetry/Elastic.Ingest.OpenTelemetry.csproj" />
+    <Project Path="src/Elastic.Ingest.Transport/Elastic.Ingest.Transport.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <File Path="tests/Directory.Build.props" />
+    <Project Path="tests/Elastic.Channels.Tests/Elastic.Channels.Tests.csproj" />
+    <Project Path="tests/Elastic.Ingest.Elasticsearch.IntegrationTests/Elastic.Ingest.Elasticsearch.IntegrationTests.csproj" />
+    <Project Path="tests/Elastic.Ingest.Elasticsearch.Tests/Elastic.Ingest.Elasticsearch.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -47,7 +47,7 @@ jobs:
       run: dotnet publish examples/ingest-aot-smoketest
 
     - name: Invoke AOT
-      run: ./examples/ingest-aot-smoketest/bin/Release/net8.0/${{ matrix.os.folder }}/${{ matrix.os.binary }}
+      run: ./.artifacts/publish/ingest-aot-smoketest/release/${{ matrix.os.binary }}
 
   test-windows:
     runs-on: windows-latest
@@ -66,9 +66,6 @@ jobs:
       uses: actions/setup-dotnet@v5
       with:
         global-json-file: ./global.json
-        dotnet-version: |
-            6.x
-            8.x
 
     - name: Build
       run: build.bat build -s true
@@ -95,9 +92,6 @@ jobs:
       uses: actions/setup-dotnet@v5
       with:
         global-json-file: ./global.json
-        dotnet-version: |
-            6.x
-            8.x
 
     - name: Build
       run: ./build.sh build -s true
@@ -170,9 +164,6 @@ jobs:
       uses: actions/setup-dotnet@v5
       with:
           global-json-file: ./global.json
-          dotnet-version: |
-              6.x
-              8.x
 
     - uses: actions/download-artifact@v6
       with:

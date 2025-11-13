@@ -17,11 +17,11 @@ public class SubPathTests : ChannelTestWithSingleDocResponseBase
 	public SubPathTests() : base("https://localhost:9200/subpath") { }
 
 	[Fact]
-	public void IndexChannel_WithFixedIndexName_UsesCorrectUrlAndOperationHeader() =>
+	public void IndexChannelWithFixedIndexNameUsesCorrectUrlAndOperationHeader() =>
 		ExecuteAndAssert("/subpath/fixed-index/_bulk", "{\"create\":{}}", "fixed-index");
 
 	[Fact]
-	public void IndexChannel_WithDynamicIndexName_UsesCorrectUrlAndOperationHeader() =>
+	public void IndexChannelWithDynamicIndexNameUsesCorrectUrlAndOperationHeader() =>
 		ExecuteAndAssert("/subpath/_bulk", "{\"create\":{\"_index\":\"testdocument-2023.07.29\"}}");
 
 	private void ExecuteAndAssert(string expectedUrl, string expectedOperationHeader, string indexName = null)

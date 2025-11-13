@@ -35,7 +35,7 @@ public class BulkResponse : ElasticsearchResponse
 	}
 }
 
-internal class ResponseItemsConverter : JsonConverter<IReadOnlyCollection<BulkResponseItem>>
+internal sealed class ResponseItemsConverter : JsonConverter<IReadOnlyCollection<BulkResponseItem>>
 {
 	public static readonly IReadOnlyCollection<BulkResponseItem> EmptyBulkItems =
 		new ReadOnlyCollection<BulkResponseItem>(new List<BulkResponseItem>());

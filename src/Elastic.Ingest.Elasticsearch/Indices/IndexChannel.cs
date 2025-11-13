@@ -7,6 +7,7 @@ using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
+using static System.Globalization.CultureInfo;
 
 namespace Elastic.Ingest.Elasticsearch.Indices;
 
@@ -42,25 +43,25 @@ public class IndexChannel<TEvent, TChannelOptions> : ElasticsearchChannelBase<TE
 
 		// When the configured index format represents a fixed index name, we can optimize by providing a URL with the target index specified.
 		// We can later avoid the overhead of calculating and adding the index name to the operation headers.
-		if (string.Format(Options.IndexFormat, DateTimeOffset.UtcNow).Equals(Options.IndexFormat, StringComparison.Ordinal))
+		if (string.Format(InvariantCulture, Options.IndexFormat, DateTimeOffset.UtcNow).Equals(Options.IndexFormat, StringComparison.Ordinal))
 		{
 			_url = $"{Options.IndexFormat}/{base.BulkPathAndQuery}";
 			_skipIndexNameOnOperations = true;
 		}
 
-		TemplateName = string.Format(Options.IndexFormat, "template");
-		TemplateWildcard = string.Format(Options.IndexFormat, "*");
+		TemplateName = string.Format(InvariantCulture, Options.IndexFormat, "template");
+		TemplateWildcard = string.Format(InvariantCulture, Options.IndexFormat, "*");
 	}
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
-	protected override string RefreshTargets => _skipIndexNameOnOperations ? Options.IndexFormat : string.Format(Options.IndexFormat, "*");
+	protected override string RefreshTargets => _skipIndexNameOnOperations ? Options.IndexFormat : string.Format(InvariantCulture, Options.IndexFormat, "*");
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
 	protected override string BulkPathAndQuery => _url;
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
-	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent @event) =>
-		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(@event, ChannelHash, Options, _skipIndexNameOnOperations);
+	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent document) =>
+		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(document, ChannelHash, Options, _skipIndexNameOnOperations);
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName { get; }

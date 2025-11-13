@@ -7,6 +7,7 @@ using System.Linq;
 using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
+using static System.StringComparison;
 
 namespace Elastic.Ingest.Elasticsearch.DataStreams;
 
@@ -35,7 +36,7 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 	protected override string RefreshTargets => Options.DataStream.ToString();
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
-	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent @event) => _fixedHeader;
+	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent document) => _fixedHeader;
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName => Options.DataStream.GetTemplateName();
@@ -75,10 +76,10 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 	{
 		var additionalComponents = new List<string> { "data-streams-mappings" };
 		// if we know the type of data is logs or metrics apply certain defaults that Elasticsearch ships with.
-		if (Options.DataStream.Type.ToLowerInvariant() == "logs")
-			additionalComponents.AddRange(new[] { "logs-settings", "logs-mappings" });
-		else if (Options.DataStream.Type.ToLowerInvariant() == "metrics")
-			additionalComponents.AddRange(new[] { "metrics-settings", "metrics-mappings" });
+		if (Options.DataStream.Type.Equals("logs", OrdinalIgnoreCase))
+			additionalComponents.AddRange(["logs-settings", "logs-mappings"]);
+		else if (string.Equals(Options.DataStream.Type.ToLowerInvariant(), "metrics", OrdinalIgnoreCase))
+			additionalComponents.AddRange(["metrics-settings", "metrics-mappings"]);
 		return additionalComponents;
 	}
 }

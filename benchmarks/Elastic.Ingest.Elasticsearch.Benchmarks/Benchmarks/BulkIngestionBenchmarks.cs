@@ -8,7 +8,7 @@ using Performance.Common;
 namespace Elastic.Ingest.Elasticsearch.Benchmarks;
 
 [SimpleJob(RunStrategy.Monitoring, invocationCount: 10, id: "BulkIngestionJob")]
-public class BulkIngestionBenchmarks
+public class BulkIngestionBenchmarks : IDisposable
 {
 	private static readonly int MaxExportSize = 5_000;
 
@@ -72,4 +72,6 @@ public class BulkIngestionBenchmarks
 
 		_waitHandle.WaitOne();
 	}
+
+	public void Dispose() => _waitHandle.Dispose();
 }

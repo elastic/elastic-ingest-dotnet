@@ -12,6 +12,7 @@ using Elastic.Ingest.Elasticsearch.Semantic;
 using FluentAssertions;
 using Xunit;
 using Xunit.Abstractions;
+using static System.Globalization.CultureInfo;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
@@ -88,7 +89,7 @@ public class SemanticIndexIngestionTests(IngestionCluster cluster, ITestOutputHe
 		channel.SearchInferenceId.Should().Be("test-search-elser-inference");
 
 		var date = DateTimeOffset.Now;
-		var indexName = string.Format(options.IndexFormat, date);
+		var indexName = string.Format(InvariantCulture, options.IndexFormat, date);
 
 		var index = await Client.Indices.GetAsync(new GetIndexRequest(indexName));
 		index.Indices.Should().BeNullOrEmpty();

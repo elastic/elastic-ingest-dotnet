@@ -20,7 +20,7 @@ public class BulkResponseItem
 	public int Status { get; internal set; }
 }
 
-internal class ItemConverter : JsonConverter<BulkResponseItem>
+internal sealed class ItemConverter : JsonConverter<BulkResponseItem>
 {
 	private static readonly BulkResponseItem OkayBulkResponseItem = new BulkResponseItem { Status = 200, Action = "index" };
 

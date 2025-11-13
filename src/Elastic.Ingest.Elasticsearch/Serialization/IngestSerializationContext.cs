@@ -16,7 +16,7 @@ namespace Elastic.Ingest.Elasticsearch.Serialization;
 [JsonSerializable(typeof(BulkResponse))]
 [JsonSerializable(typeof(BulkResponseItem))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
-internal partial class IngestSerializationContext : JsonSerializerContext
+internal sealed partial class IngestSerializationContext : JsonSerializerContext
 {
 	static IngestSerializationContext() =>
 		Default = new IngestSerializationContext(ElasticsearchChannelStatics.SerializerOptions);

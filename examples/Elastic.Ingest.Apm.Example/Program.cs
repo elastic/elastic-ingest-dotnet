@@ -11,7 +11,7 @@ using Elastic.Transport;
 
 namespace Elastic.Ingest.Apm.Example;
 
-internal class Program
+internal sealed class Program
 {
 	private static int _rejections;
 	private static int _requests;
@@ -114,7 +114,7 @@ internal static class RandomGenerator
 	internal static string GenerateRandomBytesAsString(byte[] bytes)
 	{
 		GenerateRandomBytes(bytes);
-		return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant();
+		return Convert.ToHexStringLower(bytes).Replace("-", "");
 	}
 
 	internal static string GenerateRandomBytesAsString(int numberOfBytes) => GenerateRandomBytesAsString(new byte[numberOfBytes]);

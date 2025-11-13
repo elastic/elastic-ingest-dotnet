@@ -7,7 +7,7 @@ using Performance.Common;
 
 namespace Elastic.Ingest.Elasticsearch.Benchmarks.Benchmarks;
 
-public class BulkRequestCreationWithFixedIndexNameBenchmarks
+public class BulkRequestCreationWithFixedIndexNameBenchmarks : IDisposable
 {
 	private static readonly int DocumentsToIndex = 1_000;
 
@@ -46,5 +46,11 @@ public class BulkRequestCreationWithFixedIndexNameBenchmarks
 		var bytes = BulkRequestDataFactory.GetBytes(_data, _options!, e => BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(e, string.Empty, _options!, true));
 		var postData = PostData.ReadOnlyMemory(bytes);
 		await postData.WriteAsync(MemoryStream, _transportConfiguration!, false, CancellationToken.None);
+	}
+
+	public void Dispose()
+	{
+		MemoryStream.Dispose();
+		_transportConfiguration?.Dispose();
 	}
 }

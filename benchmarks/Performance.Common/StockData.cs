@@ -2,6 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System.Globalization;
 using System.Text;
 
 namespace Performance.Common;
@@ -25,14 +26,14 @@ public sealed class StockData
 	{
 		var columns = dataLine.Split(',', StringSplitOptions.TrimEntries);
 
-		var date = DateTime.Parse(columns[0]);
+		var date = DateTime.Parse(columns[0], DateTimeFormatInfo.InvariantInfo);
 
 		_ = float.TryParse(columns[1], out var open);
 		_ = float.TryParse(columns[1], out var high);
 		_ = float.TryParse(columns[1], out var low);
 		_ = float.TryParse(columns[1], out var close);
 
-		var volume = int.Parse(columns[5]);
+		var volume = int.Parse(columns[5], CultureInfo.InvariantCulture);
 		var symbol = columns[6];
 
 		return new StockData
