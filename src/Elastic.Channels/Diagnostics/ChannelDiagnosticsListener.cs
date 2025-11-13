@@ -17,7 +17,7 @@ public interface IChannelDiagnosticsListener
 	/// <summary>
 	/// Keeps track of the first observed exception to calls to <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>
 	/// </summary>
-	public Exception? ObservedException { get; }
+	Exception? ObservedException { get; }
 
 	/// <summary> Indicates if the overall publishing thus far was successful</summary>
 	bool PublishSuccess { get; }

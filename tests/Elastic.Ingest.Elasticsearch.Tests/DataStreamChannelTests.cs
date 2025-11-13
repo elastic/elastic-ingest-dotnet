@@ -14,7 +14,7 @@ namespace Elastic.Ingest.Elasticsearch.Tests;
 public class DataStreamChannelTests : ChannelTestWithSingleDocResponseBase
 {
 	[Fact]
-	public void DataStreamChannel_UsesCorrectUrlAndOperationHeader()
+	public void DataStreamChannelUsesCorrectUrlAndOperationHeader()
 	{
 		ApiCallDetails callDetails = null;
 

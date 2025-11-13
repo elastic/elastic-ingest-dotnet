@@ -64,7 +64,7 @@ public interface IChannelCallbacks<in TEvent, in TResponse>
 	///due to <see cref="BufferOptions.ExportMaxRetries"/> being 0.
 	/// </para>
 	/// </summary>
-	public Action<int>? ExportRetryableCountCallback { get; }
+	Action<int>? ExportRetryableCountCallback { get; }
 }
 
 internal class ChannelCallbackInvoker<TEvent, TResponse> : IChannelCallbacks<TEvent, TResponse>

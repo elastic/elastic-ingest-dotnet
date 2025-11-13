@@ -31,7 +31,7 @@ Console.WriteLine($"Begin: ({channel.OutboundStarted}) {channel.MaxConcurrency} 
 await Parallel.ForEachAsync(Enumerable.Range(0, int.MaxValue), new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount, CancellationToken = ctxs.Token }, async (i, ctx) =>
 {
 	var e = new NoopBufferedChannel.NoopEvent { Id = i };
-	if (await channel.WaitToWriteAsync(e))
+	if (await channel.WaitToWriteAsync(e, ctx))
 	{
 
 	}

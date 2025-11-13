@@ -15,6 +15,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Ingest.Elasticsearch.Indices;
+using static System.Globalization.CultureInfo;
 using static Elastic.Ingest.Elasticsearch.ElasticsearchChannelStatics;
 
 namespace Elastic.Ingest.Elasticsearch.Serialization;
@@ -143,6 +144,8 @@ public static class BulkRequestDataFactory
 #endif
 		// for is okay on ArraySegment, foreach performs bad:
 		// https://antao-almada.medium.com/how-to-use-span-t-and-memory-t-c0b126aae652
+		// TODO move to Memory<byte> overloads for WriteAsync (CA1835)
+#pragma warning disable CA1835
 		// ReSharper disable once ForCanBeConvertedToForeach
 		for (var i = 0; i < items.Count; i++)
 		{
@@ -203,6 +206,7 @@ public static class BulkRequestDataFactory
 
 			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
 		}
+#pragma warning restore CA1835
 	}
 
 	/// <summary>
@@ -219,7 +223,7 @@ public static class BulkRequestDataFactory
 		var indexTime = options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
 		if (options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(options.IndexOffset.Value);
 
-		var index = skipIndexName ? string.Empty : string.Format(options.IndexFormat, indexTime);
+		var index = skipIndexName ? string.Empty : string.Format(InvariantCulture, options.IndexFormat, indexTime);
 
 		var id = options.BulkOperationIdLookup?.Invoke(@event);
 

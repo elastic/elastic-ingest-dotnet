@@ -60,7 +60,7 @@ public class ScriptedHashUpdateOperation : BulkOperationHeader
 	public required HashedBulkUpdate UpdateInformation { get; init; }
 }
 
-internal class BulkOperationHeaderConverter<THeader> : JsonConverter<THeader>
+internal sealed class BulkOperationHeaderConverter<THeader> : JsonConverter<THeader>
 	where THeader : BulkOperationHeader
 {
 	public override THeader Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>

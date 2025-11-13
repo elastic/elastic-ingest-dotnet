@@ -11,6 +11,7 @@ using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Transport;
+using static System.Globalization.CultureInfo;
 
 namespace Elastic.Ingest.Elasticsearch.Catalog;
 
@@ -69,7 +70,7 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 		: base(options, callbackListeners)
 	{
 		var date = DateTimeOffset.UtcNow;
-		IndexName = string.Format(Options.IndexFormat, date);
+		IndexName = string.Format(InvariantCulture, Options.IndexFormat, date);
 
 		// If the index format is not a variable format, we can't use it for aliasing.
 		if (IndexName.Equals(Options.IndexFormat, StringComparison.Ordinal))
@@ -86,8 +87,8 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 	public string IndexName { get; private set; }
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
-	protected override BulkOperationHeader CreateBulkOperationHeader(TDocument @event) =>
-		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(@event, ChannelHash, Options, true);
+	protected override BulkOperationHeader CreateBulkOperationHeader(TDocument document) =>
+		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(document, ChannelHash, Options, true);
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
 	protected override string RefreshTargets => IndexName;
@@ -112,8 +113,8 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 		var indexTemplateExists = await IndexTemplateExistsAsync(TemplateName, ctx).ConfigureAwait(false);
 		var indexTemplateMatchesHash = indexTemplateExists && await IndexTemplateMatchesHashAsync(ChannelHash, ctx).ConfigureAwait(false);
 
-		var latestAlias = string.Format(Options.IndexFormat, "latest");
-		var matchingIndices = string.Format(Options.IndexFormat, "*");
+		var latestAlias = string.Format(InvariantCulture, Options.IndexFormat, "latest");
+		var matchingIndices = string.Format(InvariantCulture, Options.IndexFormat, "*");
 		var currentIndex = await ShouldRemovePreviousAliasAsync(matchingIndices, latestAlias, ctx).ConfigureAwait(false);
 		// ensure we index to the latest index unless we have no previous versions, or the index template has changed
 		if (string.IsNullOrEmpty(currentIndex) || !indexTemplateExists || !indexTemplateMatchesHash)
@@ -138,8 +139,8 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 		var indexTemplateExists = IndexTemplateExists(TemplateName);
 		var indexTemplateMatchesHash = indexTemplateExists && IndexTemplateMatchesHash(ChannelHash);
 
-		var latestAlias = string.Format(Options.IndexFormat, "latest");
-		var matchingIndices = string.Format(Options.IndexFormat, "*");
+		var latestAlias = string.Format(InvariantCulture, Options.IndexFormat, "latest");
+		var matchingIndices = string.Format(InvariantCulture, Options.IndexFormat, "*");
 		var currentIndex = ShouldRemovePreviousAlias(matchingIndices, latestAlias);
 		// ensure we index to the latest index unless we have no previous versions, or the index template has changed
 		if (string.IsNullOrEmpty(currentIndex) || !indexTemplateExists || !indexTemplateMatchesHash)
@@ -158,8 +159,8 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 	/// Applies the latest alias to the index.
 	public async Task<bool> ApplyLatestAliasAsync(CancellationToken ctx = default)
 	{
-		var latestAlias = string.Format(Options.IndexFormat, "latest");
-		var matchingIndices = string.Format(Options.IndexFormat, "*");
+		var latestAlias = string.Format(InvariantCulture, Options.IndexFormat, "latest");
+		var matchingIndices = string.Format(InvariantCulture, Options.IndexFormat, "*");
 
 		var removeAction = // language=json
 			$$"""
@@ -201,14 +202,14 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 	/// <param name="ctx"></param>
 	public async Task<bool> ApplyActiveSearchAliasAsync(string? indexPointingToLatestAlias = null, CancellationToken ctx = default)
 	{
-		var latestAlias = string.Format(Options.IndexFormat, "latest");
+		var latestAlias = string.Format(InvariantCulture, Options.IndexFormat, "latest");
 		indexPointingToLatestAlias ??= (await CatAsync($"_cat/aliases/{latestAlias}?h=index", ctx).ConfigureAwait(false))
 			.Trim(Environment.NewLine.ToCharArray());
 
 		if (string.IsNullOrEmpty(indexPointingToLatestAlias))
 			return false;
 
-		var matchingIndices = string.Format(Options.IndexFormat, "*");
+		var matchingIndices = string.Format(InvariantCulture, Options.IndexFormat, "*");
 		var removeAction = // language=json
 			$$"""
 			  {

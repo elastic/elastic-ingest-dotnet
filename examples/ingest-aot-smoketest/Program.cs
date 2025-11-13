@@ -35,10 +35,11 @@ Console.WriteLine();
 Console.WriteLine(channel);
 
 
+
 async Task PushToChannel(DataStreamChannel<MyDocument> c)
 {
 	var random = new Random();
-	if (c == null) throw new ArgumentNullException(nameof(c));
+	ArgumentNullException.ThrowIfNull(c);
 
 	foreach (var i in Enumerable.Range(0, numDocs))
 		await DoChannelWrite(i, cancellationTokenSource.Token);
@@ -57,7 +58,9 @@ async Task PushToChannel(DataStreamChannel<MyDocument> c)
 
 
 
+#pragma warning disable CA1050
 public class MyDocument
+#pragma warning restore CA1050
 {
 	[JsonPropertyName("@timestamp")]
 	public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
@@ -67,4 +70,4 @@ public class MyDocument
 }
 
 [JsonSerializable(typeof(MyDocument))]
-internal partial class ExampleJsonSerializerContext : JsonSerializerContext;
+internal sealed partial class ExampleJsonSerializerContext : JsonSerializerContext;

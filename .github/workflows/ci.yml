@@ -47,7 +47,7 @@ jobs:
       run: dotnet publish examples/ingest-aot-smoketest
 
     - name: Invoke AOT
-      run: ./examples/ingest-aot-smoketest/bin/Release/net8.0/${{ matrix.os.folder }}/${{ matrix.os.binary }}
+      run: ./examples/ingest-aot-smoketest/bin/Release/net10.0/${{ matrix.os.folder }}/${{ matrix.os.binary }}
 
   test-windows:
     runs-on: windows-latest

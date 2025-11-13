@@ -13,9 +13,9 @@ using Elastic.Transport;
 
 namespace Elastic.Ingest.Elasticsearch;
 
-public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
-	where TChannelOptions : ElasticsearchChannelOptionsBase<TEvent>
-	where TEvent : class
+public abstract partial class ElasticsearchChannelBase<TDocument, TChannelOptions>
+	where TChannelOptions : ElasticsearchChannelOptionsBase<TDocument>
+	where TDocument : class
 {
 	/// <summary> The index template name <see cref="BootstrapElasticsearch"/> should register.</summary>
 	protected abstract string TemplateName { get; }
@@ -310,7 +310,7 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		var settingsAsJson = string.Join(",\n", overallSettings.Select(kv => $"  \"{kv.Key}\": \"{kv.Value}\""));
 		if (!string.IsNullOrWhiteSpace(settingsAsJson))
 			settings.Append('\n').Append(settingsAsJson).Append('\n');
-		settings.Append("}");
+		settings.Append('}');
 
 		var settingsName = $"{indexTemplateName}-settings";
 		var settingsBody = $@"{{
@@ -350,10 +350,10 @@ public abstract partial class ElasticsearchChannelBase<TEvent, TChannelOptions>
 		return (settingsName, settingsBody);
 	}
 
-	/// Allows implementations of <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> to inject mappings for <typeparamref name="TEvent"/>
+	/// Allows implementations of <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> to inject mappings for <typeparamref name="TDocument"/>
 	protected virtual string? GetMappings() => null;
 
-	/// Allows implementations of <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> to inject settings allong with <see cref="GetMappings"/> for <typeparamref name="TEvent"/>
+	/// Allows implementations of <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> to inject settings allong with <see cref="GetMappings"/> for <typeparamref name="TDocument"/>
 	protected virtual string? GetMappingSettings() => null;
 
 }

@@ -15,11 +15,11 @@ namespace Elastic.Ingest.Elasticsearch.Tests;
 public class IndexChannelTests : ChannelTestWithSingleDocResponseBase
 {
 	[Fact]
-	public void IndexChannel_WithFixedIndexName_UsesCorrectUrlAndOperationHeader() =>
+	public void IndexChannelWithFixedIndexNameUsesCorrectUrlAndOperationHeader() =>
 		ExecuteAndAssert("/fixed-index/_bulk", "{\"create\":{}}", "fixed-index");
 
 	[Fact]
-	public void IndexChannel_WithDynamicIndexName_UsesCorrectUrlAndOperationHeader() =>
+	public void IndexChannelWithDynamicIndexNameUsesCorrectUrlAndOperationHeader() =>
 		ExecuteAndAssert("/_bulk", "{\"create\":{\"_index\":\"testdocument-2023.07.29\"}}");
 
 	private void ExecuteAndAssert(string expectedUrl, string expectedOperationHeader, string indexName = null)
