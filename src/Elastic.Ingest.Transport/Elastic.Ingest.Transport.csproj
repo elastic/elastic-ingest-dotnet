@@ -16,7 +16,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Elastic.Channels\Elastic.Channels.csproj" />
     <PackageReference Include="Elastic.Transport" Version="0.10.1" />
-    <PackageReference Include="System.Threading.Channels" Version="8.0.0" />
   </ItemGroup>
 
 </Project>
