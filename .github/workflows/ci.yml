@@ -108,7 +108,7 @@ jobs:
     - name: "Inspect public API changes"
       run: ./build.sh generateapichanges -s true
 
-    - uses: actions/upload-artifact@v5
+    - uses: actions/upload-artifact@v6
       with:
         name: build
         path: build/output/
@@ -130,7 +130,7 @@ jobs:
       with:
         global-json-file: ./global.json
 
-    - uses: actions/download-artifact@v6
+    - uses: actions/download-artifact@v7
       with:
         name: build
         path: build/output
@@ -170,7 +170,7 @@ jobs:
       with:
           global-json-file: ./global.json
 
-    - uses: actions/download-artifact@v6
+    - uses: actions/download-artifact@v7
       with:
         name: build
         path: build/output
