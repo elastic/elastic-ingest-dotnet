@@ -118,6 +118,7 @@ jobs:
     if: github.event_name == 'push' && startswith(github.ref, 'refs/heads')
     needs: [ build ]
     permissions:
+      artifact-metadata: write
       attestations: write
       contents: write
       id-token: write
@@ -155,6 +156,7 @@ jobs:
     if: github.event_name == 'push' && startswith(github.ref, 'refs/tags')
     needs: [ build ]
     permissions:
+      artifact-metadata: write
       attestations: write
       contents: write
       id-token: write
