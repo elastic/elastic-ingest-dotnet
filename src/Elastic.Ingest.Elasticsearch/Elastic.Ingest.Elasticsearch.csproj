@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Elastic.Ingest.Transport\Elastic.Ingest.Transport.csproj" />
+    <ProjectReference Include="..\..\..\Elastic.Esql\src\Elastic.Mapping\Elastic.Mapping.csproj" />
   </ItemGroup>
   <ItemGroup Condition="!$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">
     <PackageReference Include="PolySharp" Version="1.15.0" PrivateAssets="all"

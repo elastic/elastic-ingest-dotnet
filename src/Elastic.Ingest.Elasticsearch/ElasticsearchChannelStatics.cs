@@ -36,6 +36,8 @@ internal static class ElasticsearchChannelStatics
 
 	public static readonly byte[] ScriptedHashUpsertEnd = " } } }"u8.ToArray();
 
+	public const string DefaultBulkPathAndQuery = "_bulk?filter_path=error,items.*.status,items.*.error,items.*.result,items.*._version";
+
 	public static readonly HashSet<int> RetryStatusCodes = [502, 503, 504, 429];
 
 	public static readonly JsonSerializerOptions SerializerOptions = new ()

@@ -10,6 +10,7 @@ using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Serialization;
+using Elastic.Ingest.Elasticsearch.Strategies;
 using Elastic.Transport;
 using static System.Globalization.CultureInfo;
 
@@ -63,7 +64,8 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 	where TChannelOptions : CatalogIndexChannelOptionsBase<TDocument>
 	where TDocument : class
 {
-	private string _url;
+	private readonly CatalogIngestStrategy<TDocument> _ingestStrategy;
+	private readonly LatestAndSearchAliasStrategy _aliasStrategy;
 
 	/// <inheritdoc cref="CatalogIndexChannel{TDocument}"/>
 	public CatalogIndexChannel(TChannelOptions options, ICollection<IChannelCallbacks<TDocument, BulkResponse>>? callbackListeners = null)
@@ -79,7 +81,8 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 		if (string.IsNullOrEmpty(Options.ActiveSearchAlias))
 			throw new Exception($"{nameof(Options.ActiveSearchAlias)} may not be null or empty, has to be set to ensure alias helpers function correctly");
 
-		_url = $"{IndexName}/{base.BulkPathAndQuery}";
+		_ingestStrategy = new CatalogIngestStrategy<TDocument>(IndexName, base.BulkPathAndQuery, Options);
+		_aliasStrategy = new LatestAndSearchAliasStrategy(Options.IndexFormat);
 	}
 
 	/// The index name used for indexing. This the configured <see cref="IndexChannelOptions{TDocument}.IndexFormat"/> to compute a single index name for all operations.
@@ -88,13 +91,13 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
 	protected override BulkOperationHeader CreateBulkOperationHeader(TDocument document) =>
-		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(document, ChannelHash, Options, true);
+		_ingestStrategy.CreateBulkOperationHeader(document, ChannelHash);
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
-	protected override string RefreshTargets => IndexName;
+	protected override string RefreshTargets => _ingestStrategy.RefreshTargets;
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
-	protected override string BulkPathAndQuery => _url;
+	protected override string BulkPathAndQuery => _ingestStrategy.GetBulkUrl(base.BulkPathAndQuery);
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.AlwaysBootstrapComponentTemplates"/>
 	protected override bool AlwaysBootstrapComponentTemplates => true;
@@ -125,7 +128,7 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 		if (TryReuseIndex && indexTemplateExists && indexTemplateMatchesHash)
 		{
 			IndexName = currentIndex;
-			_url = $"{IndexName}/{base.BulkPathAndQuery}";
+			_ingestStrategy.UpdateIndexName(currentIndex, base.BulkPathAndQuery);
 		}
 		return await base.BootstrapElasticsearchAsync(bootstrapMethod, ilmPolicy, ctx).ConfigureAwait(false);
 	}
@@ -151,98 +154,36 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 		if (TryReuseIndex && indexTemplateExists && indexTemplateMatchesHash)
 		{
 			IndexName = currentIndex;
-			_url = $"{IndexName}/{base.BulkPathAndQuery}";
+			_ingestStrategy.UpdateIndexName(currentIndex, base.BulkPathAndQuery);
 		}
 		return base.BootstrapElasticsearch(bootstrapMethod, ilmPolicy);
 	}
 
 	/// Applies the latest alias to the index.
-	public async Task<bool> ApplyLatestAliasAsync(CancellationToken ctx = default)
-	{
-		var latestAlias = string.Format(InvariantCulture, Options.IndexFormat, "latest");
-		var matchingIndices = string.Format(InvariantCulture, Options.IndexFormat, "*");
-
-		var removeAction = // language=json
-			$$"""
-			  {
-			    "remove": {
-			      "index": "{{matchingIndices}}",
-			      "alias": "{{latestAlias}}"
-			    }
-			  }
-			  """;
-		var addAction = // language=json
-			$$"""
-			  {
-			    "add": {
-			      "index": "{{IndexName}}",
-			      "alias": "{{latestAlias}}"
-			    }
-			  }
-			  """;
-
-		var currentLatestAlias = await ShouldRemovePreviousAliasAsync(matchingIndices, latestAlias, ctx).ConfigureAwait(false);
-		var actions = !string.IsNullOrEmpty(currentLatestAlias) ? string.Join(",\n", removeAction, addAction) : addAction;
-
-		var putAliasesJson = // language=json
-			$$"""
-			  {
-			    "actions": [
-			      {{actions}}
-			    ]
-			  }
-			  """;
-		var response = await Options.Transport.PostAsync<StringResponse>($"_aliases", PostData.String(putAliasesJson), ctx).ConfigureAwait(false);
-		return response.ApiCallDetails.HasSuccessfulStatusCode;
-	}
+	public async Task<bool> ApplyLatestAliasAsync(CancellationToken ctx = default) =>
+		await _aliasStrategy.ApplyLatestAliasAsync(CreateAliasContext(), ctx).ConfigureAwait(false);
 
 	/// Applies the active alias to the index to the point of the latest index.
 	/// Uses <see cref="CatalogIndexChannelOptionsBase{TDocument}.ActiveSearchAlias"/> as the active alias
 	/// <param name="indexPointingToLatestAlias">If null, the backing index for the latest alias will be queried.</param>
 	/// <param name="ctx"></param>
-	public async Task<bool> ApplyActiveSearchAliasAsync(string? indexPointingToLatestAlias = null, CancellationToken ctx = default)
+	public async Task<bool> ApplyActiveSearchAliasAsync(string? indexPointingToLatestAlias = null, CancellationToken ctx = default) =>
+		await _aliasStrategy.ApplyActiveSearchAliasAsync(CreateAliasContext(), indexPointingToLatestAlias, ctx).ConfigureAwait(false);
+
+	/// Applies the latest and current aliases to <see cref="IndexName"/>. Use this if you want to ensure that the latest index is always the active index
+	/// immediately after writing to the index.
+	/// <para>If you want more control of the timing call <see cref="ApplyLatestAliasAsync"/> first immediately</para>
+	/// <para>You can then call <see cref="ApplyActiveSearchAliasAsync"/> to ensure the latest alias is current at your own leisure</para>
+	public async Task<bool> ApplyAliasesAsync(CancellationToken ctx = default) =>
+		await _aliasStrategy.ApplyAliasesAsync(CreateAliasContext(), ctx).ConfigureAwait(false);
+
+	private AliasContext CreateAliasContext() => new()
 	{
-		var latestAlias = string.Format(InvariantCulture, Options.IndexFormat, "latest");
-		indexPointingToLatestAlias ??= (await CatAsync($"_cat/aliases/{latestAlias}?h=index", ctx).ConfigureAwait(false))
-			.Trim(Environment.NewLine.ToCharArray());
-
-		if (string.IsNullOrEmpty(indexPointingToLatestAlias))
-			return false;
-
-		var matchingIndices = string.Format(InvariantCulture, Options.IndexFormat, "*");
-		var removeAction = // language=json
-			$$"""
-			  {
-			    "remove": {
-			      "index": "{{matchingIndices}}",
-			      "alias": "{{Options.ActiveSearchAlias}}"
-			    }
-			  }
-			  """;
-		var addAction = // language=json
-			$$"""
-			  {
-			    "add": {
-			      "index": "{{indexPointingToLatestAlias}}",
-			      "alias": "{{Options.ActiveSearchAlias}}"
-			    }
-			  }
-			  """;
-
-		var currentAlias = await ShouldRemovePreviousAliasAsync(matchingIndices, latestAlias, ctx).ConfigureAwait(false);
-		var actions = !string.IsNullOrEmpty(currentAlias) ? string.Join(",\n", removeAction, addAction) : addAction;
-
-		var putAliasesJson = // language=json
-			$$"""
-			  {
-			    "actions": [
-			      {{actions}}
-			    ]
-			  }
-			  """;
-		var response = await Options.Transport.PostAsync<StringResponse>($"_aliases", PostData.String(putAliasesJson), ctx).ConfigureAwait(false);
-		return response.ApiCallDetails.HasSuccessfulStatusCode;
-	}
+		Transport = Options.Transport,
+		IndexName = IndexName,
+		IndexPattern = string.Format(InvariantCulture, Options.IndexFormat, "*"),
+		ActiveSearchAlias = Options.ActiveSearchAlias
+	};
 
 	private async Task<string> ShouldRemovePreviousAliasAsync(string matchingIndices, string alias, CancellationToken ctx)
 	{
@@ -251,6 +192,7 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 			.Trim(Environment.NewLine.ToCharArray());
 		return hasPreviousVersions.ApiCallDetails.HttpStatusCode == 200 ? queryAliasIndex : string.Empty;
 	}
+
 	private string ShouldRemovePreviousAlias(string matchingIndices, string alias)
 	{
 		var hasPreviousVersions = Options.Transport.Head($"{matchingIndices}?allow_no_indices=false");
@@ -272,12 +214,4 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 		var catResponse = Options.Transport.Request<StringResponse>(new EndpointPath(HttpMethod.GET, url), postData: null, null, rq);
 		return catResponse.Body;
 	}
-
-
-	/// Applies the latest and current aliases to <see cref="IndexName"/>. Use this if you want to ensure that the latest index is always the active index
-	/// immediately after writing to the index.
-	/// <para>If you want more control of the timing call <see cref="ApplyLatestAliasAsync"/> first immediately</para>
-	/// <para>You can then call <see cref="ApplyActiveSearchAliasAsync"/> to ensure the latest alias is current at your own leisure</para>
-	public async Task<bool> ApplyAliasesAsync(CancellationToken ctx = default) =>
-		await ApplyLatestAliasAsync(ctx).ConfigureAwait(false) && await ApplyActiveSearchAliasAsync(IndexName, ctx).ConfigureAwait(false);
 }

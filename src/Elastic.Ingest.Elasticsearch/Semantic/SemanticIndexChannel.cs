@@ -10,6 +10,8 @@ using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.Catalog;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Serialization;
+using Elastic.Ingest.Elasticsearch.Strategies;
+using Elastic.Ingest.Elasticsearch.Strategies.BootstrapSteps;
 using Elastic.Transport;
 
 namespace Elastic.Ingest.Elasticsearch.Semantic;
@@ -57,6 +59,9 @@ public class SemanticIndexChannelOptions<TDocument>(ITransport transport) : Cata
 public class SemanticIndexChannel<TDocument> : CatalogIndexChannel<TDocument, SemanticIndexChannelOptions<TDocument>>
 	where TDocument : class
 {
+	private readonly InferenceEndpointStep _inferenceStep;
+	private readonly InferenceEndpointStep _searchInferenceStep;
+
 	/// <inheritdoc cref="SemanticIndexChannel{TDocument}"/>
 	public SemanticIndexChannel(SemanticIndexChannelOptions<TDocument> options) : this(options, null) { }
 
@@ -74,6 +79,9 @@ public class SemanticIndexChannel<TDocument> : CatalogIndexChannel<TDocument, Se
 
 		if (options.ScriptedHashBulkUpsertLookup is not null)
 			throw new ArgumentException("SemanticIndexChannel does not support ScriptedHashBulkUpsertLookup");
+
+		_inferenceStep = new InferenceEndpointStep(InferenceId, Options.IndexNumThreads, Options.UsePreexistingInferenceIds, Options.InferenceCreateTimeout);
+		_searchInferenceStep = new InferenceEndpointStep(SearchInferenceId, Options.SearchNumThreads, Options.UsePreexistingInferenceIds, Options.InferenceCreateTimeout);
 	}
 
 	/// The inference id used, either explicitly passed <see cref="SemanticIndexChannelOptions{TDocument}.InferenceId"/> or a precomputed one based on <typeparamref name="TDocument"/>
@@ -100,10 +108,12 @@ public class SemanticIndexChannel<TDocument> : CatalogIndexChannel<TDocument, Se
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.BootstrapElasticsearch"/>
 	public override bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod, string? ilmPolicy = null)
 	{
-		if (!BootstrapInference(bootstrapMethod, InferenceId, 1))
+		var context = CreateInferenceBootstrapContext(bootstrapMethod);
+
+		if (!_inferenceStep.Execute(context))
 			return false;
 
-		if (!BootstrapInference(bootstrapMethod, SearchInferenceId, Options.SearchNumThreads))
+		if (!_searchInferenceStep.Execute(context))
 			return false;
 
 		return base.BootstrapElasticsearch(bootstrapMethod, ilmPolicy);
@@ -112,99 +122,22 @@ public class SemanticIndexChannel<TDocument> : CatalogIndexChannel<TDocument, Se
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.BootstrapElasticsearchAsync"/>
 	public override async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, string? ilmPolicy = null, CancellationToken ctx = default)
 	{
-		if (!await BootstrapInferenceAsync(bootstrapMethod, InferenceId, Options.IndexNumThreads, ctx).ConfigureAwait(false))
+		var context = CreateInferenceBootstrapContext(bootstrapMethod);
+
+		if (!await _inferenceStep.ExecuteAsync(context, ctx).ConfigureAwait(false))
 			return false;
 
-		if (!await BootstrapInferenceAsync(bootstrapMethod, SearchInferenceId, Options.SearchNumThreads, ctx).ConfigureAwait(false))
+		if (!await _searchInferenceStep.ExecuteAsync(context, ctx).ConfigureAwait(false))
 			return false;
 
 		return await base.BootstrapElasticsearchAsync(bootstrapMethod, ilmPolicy, ctx).ConfigureAwait(false);
 	}
 
-	private bool BootstrapInference(BootstrapMethod bootstrapMethod, string inferenceId, int numThreads)
+	private BootstrapContext CreateInferenceBootstrapContext(BootstrapMethod bootstrapMethod) => new()
 	{
-		var inferenceExists = Options.Transport.Get<VoidResponse>($"_inference/sparse_embedding/{inferenceId}");
-		if (inferenceExists.ApiCallDetails.HttpStatusCode == 200 && Options.UsePreexistingInferenceIds)
-			return true;
-
-		if (inferenceExists.ApiCallDetails.HttpStatusCode != 200 && !Options.UsePreexistingInferenceIds)
-			return CreateElserInference(bootstrapMethod, inferenceId, numThreads);
-
-		if (inferenceExists.ApiCallDetails.HttpStatusCode == 200)
-			return true;
-
-		return bootstrapMethod == BootstrapMethod.Silent
-			? false
-			: throw new Exception($"Expected inference id {inferenceId} to exist: {inferenceExists}",
-				inferenceExists.ApiCallDetails.OriginalException
-			);
-	}
-
-	private async Task<bool> BootstrapInferenceAsync(BootstrapMethod bootstrapMethod, string inferenceId, int numThreads, CancellationToken ctx)
-	{
-		var inferenceExists = await Options.Transport.GetAsync<VoidResponse>($"_inference/sparse_embedding/{inferenceId}", ctx).ConfigureAwait(false);
-		if (inferenceExists.ApiCallDetails.HttpStatusCode == 200 && Options.UsePreexistingInferenceIds)
-			return true;
-
-		if (inferenceExists.ApiCallDetails.HttpStatusCode != 200 && !Options.UsePreexistingInferenceIds)
-			return await CreateElserInferenceAsync(bootstrapMethod, inferenceId, numThreads, ctx).ConfigureAwait(false);
-
-		if (inferenceExists.ApiCallDetails.HttpStatusCode == 200)
-			return true;
-
-		return bootstrapMethod == BootstrapMethod.Silent
-			? false
-			: throw new Exception($"Expected inference id {inferenceId} to exist: {inferenceExists}",
-				inferenceExists.ApiCallDetails.OriginalException
-			);
-	}
-
-	private bool CreateElserInference(BootstrapMethod bootstrapMethod, string inferenceId, int numThreads)
-	{
-		var data = ElserInferenceEndpointJson(numThreads);
-		var timeout = Options.InferenceCreateTimeout ?? RequestConfiguration.DefaultRequestTimeout;
-		var putInferenceResponse = Options.Transport.Put<StringResponse>($"_inference/sparse_embedding/{inferenceId}", PostData.String(data), timeout);
-		if ( putInferenceResponse.ApiCallDetails.HasSuccessfulStatusCode)
-			return true;
-
-		return bootstrapMethod == BootstrapMethod.Silent
-			? false
-			: throw new Exception(
-				$"Failure creating inference id {inferenceId}: {putInferenceResponse}",
-				putInferenceResponse.ApiCallDetails.OriginalException
-			);
-	}
-
-	private async Task<bool> CreateElserInferenceAsync(BootstrapMethod bootstrapMethod, string inferenceId, int numThreads, CancellationToken ctx = default)
-	{
-		var data = ElserInferenceEndpointJson(numThreads);
-		var timeout = Options.InferenceCreateTimeout ?? RequestConfiguration.DefaultRequestTimeout;
-		var putInferenceResponse = await Options.Transport.PutAsync<StringResponse>($"_inference/sparse_embedding/{inferenceId}", PostData.String(data), timeout, ctx)
-			.ConfigureAwait(false);
-		if ( putInferenceResponse.ApiCallDetails.HasSuccessfulStatusCode)
-			return true;
-
-		return bootstrapMethod == BootstrapMethod.Silent
-			? false
-			: throw new Exception(
-				$"Failure creating inference id {inferenceId}: {putInferenceResponse}",
-				putInferenceResponse.ApiCallDetails.OriginalException
-			);
-	}
-
-	// language=json
-	private static string ElserInferenceEndpointJson(int numThreads) =>
-		$$"""
-		{
-		  "service": "elser",
-		  "service_settings": {
-		    "adaptive_allocations": {
-		      "enabled": true,
-		      "min_number_of_allocations": 3,
-		      "max_number_of_allocations": 10
-		    },
-		    "num_threads": {{numThreads:N0}}
-		  }
-		}
-		""";
+		Transport = Options.Transport,
+		BootstrapMethod = bootstrapMethod,
+		TemplateName = TemplateName,
+		TemplateWildcard = TemplateWildcard
+	};
 }

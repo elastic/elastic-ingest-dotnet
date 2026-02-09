@@ -27,9 +27,12 @@
     <Project Path="examples/Elastic.Ingest.OpenTelemetry.Example/Elastic.Ingest.OpenTelemetry.Example.csproj" />
     <Project Path="examples/ingest-aot-smoketest/ingest-aot-smoketest.csproj" />
     <Project Path="examples/playground/playground.csproj" />
+    <Project Path="examples/Elastic.Ingest.MultiChannel/Elastic.Ingest.MultiChannel.csproj" />
   </Folder>
   <Folder Name="/src/">
     <File Path="src/Directory.Build.props" />
+    <Project Path="../Elastic.Esql/src/Elastic.Mapping.Generator/Elastic.Mapping.Generator.csproj" />
+    <Project Path="../Elastic.Esql/src/Elastic.Mapping/Elastic.Mapping.csproj" />
     <Project Path="src/Elastic.Channels/Elastic.Channels.csproj" />
     <Project Path="src/Elastic.Ingest.Apm/Elastic.Ingest.Apm.csproj" />
     <Project Path="src/Elastic.Ingest.Elasticsearch/Elastic.Ingest.Elasticsearch.csproj" />

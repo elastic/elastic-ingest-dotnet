@@ -1,11 +1,11 @@
 // Licensed to Elasticsearch B.V under one or more agreements.
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
-using System;
 using System.Collections.Generic;
 using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Serialization;
+using Elastic.Ingest.Elasticsearch.Strategies;
 using Elastic.Ingest.Transport;
 using static System.Globalization.CultureInfo;
 
@@ -29,9 +29,7 @@ public class IndexChannel<TEvent, TChannelOptions> : ElasticsearchChannelBase<TE
 	where TChannelOptions : IndexChannelOptions<TEvent>
 	where TEvent : class
 {
-	private readonly string _url;
-
-	private readonly bool _skipIndexNameOnOperations;
+	private readonly IndexIngestStrategy<TEvent> _ingestStrategy;
 
 	/// <inheritdoc cref="IndexChannel{TEvent}"/>
 	public IndexChannel(TChannelOptions options) : this(options, null) { }
@@ -39,29 +37,21 @@ public class IndexChannel<TEvent, TChannelOptions> : ElasticsearchChannelBase<TE
 	/// <inheritdoc cref="IndexChannel{TEvent}"/>
 	public IndexChannel(TChannelOptions options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners) : base(options, callbackListeners)
 	{
-		_url = base.BulkPathAndQuery;
-
-		// When the configured index format represents a fixed index name, we can optimize by providing a URL with the target index specified.
-		// We can later avoid the overhead of calculating and adding the index name to the operation headers.
-		if (string.Format(InvariantCulture, Options.IndexFormat, DateTimeOffset.UtcNow).Equals(Options.IndexFormat, StringComparison.Ordinal))
-		{
-			_url = $"{Options.IndexFormat}/{base.BulkPathAndQuery}";
-			_skipIndexNameOnOperations = true;
-		}
+		_ingestStrategy = new IndexIngestStrategy<TEvent>(options, base.BulkPathAndQuery);
 
 		TemplateName = string.Format(InvariantCulture, Options.IndexFormat, "template");
 		TemplateWildcard = string.Format(InvariantCulture, Options.IndexFormat, "*");
 	}
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
-	protected override string RefreshTargets => _skipIndexNameOnOperations ? Options.IndexFormat : string.Format(InvariantCulture, Options.IndexFormat, "*");
+	protected override string RefreshTargets => _ingestStrategy.RefreshTargets;
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
-	protected override string BulkPathAndQuery => _url;
+	protected override string BulkPathAndQuery => _ingestStrategy.GetBulkUrl(base.BulkPathAndQuery);
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
 	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent document) =>
-		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(document, ChannelHash, Options, _skipIndexNameOnOperations);
+		_ingestStrategy.CreateBulkOperationHeader(document, ChannelHash);
 
 	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName { get; }
