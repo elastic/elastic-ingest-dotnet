@@ -90,4 +90,18 @@ public class ElasticsearchChannelOptions<TEvent> : ElasticsearchChannelOptionsBa
 
 	/// <summary> Data stream type (e.g. "logs", "metrics") for inferring built-in component templates. </summary>
 	public string? DataStreamType { get; set; }
+
+	/// <summary>
+	/// Data stream lifecycle retention period (e.g. "30d").
+	/// When set, a <see cref="Strategies.BootstrapSteps.DataStreamLifecycleStep"/> is automatically
+	/// inserted before the data stream template step during bootstrap.
+	/// This is the serverless-compatible alternative to ILM.
+	/// </summary>
+	public string? DataStreamLifecycleRetention { get; set; }
+
+	/// <summary>
+	/// Rollover strategy for manually rolling over indices or data streams.
+	/// When not set, no rollover operations are performed.
+	/// </summary>
+	public IRolloverStrategy? RolloverStrategy { get; set; }
 }

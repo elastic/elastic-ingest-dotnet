@@ -28,6 +28,7 @@ public class ElasticsearchChannel<TEvent> : ElasticsearchChannelBase<TEvent, Ela
 	private readonly IBootstrapStrategy _bootstrapStrategy;
 	private readonly IIndexProvisioningStrategy _provisioningStrategy;
 	private readonly IAliasStrategy _aliasStrategy;
+	private readonly IRolloverStrategy? _rolloverStrategy;
 	private readonly string _bulkUrl;
 	private readonly string _templateName;
 	private readonly string _templateWildcard;
@@ -52,9 +53,10 @@ public class ElasticsearchChannel<TEvent> : ElasticsearchChannelBase<TEvent, Ela
 
 		// Resolve strategies
 		_ingestStrategy = options.IngestStrategy ?? ResolveIngestStrategy(tc, options);
-		_bootstrapStrategy = options.BootstrapStrategy ?? ResolveBootstrapStrategy(tc);
+		_bootstrapStrategy = options.BootstrapStrategy ?? ResolveBootstrapStrategy(tc, options);
 		_provisioningStrategy = options.ProvisioningStrategy ?? ResolveProvisioningStrategy(tc);
 		_aliasStrategy = options.AliasStrategy ?? ResolveAliasStrategy(tc);
+		_rolloverStrategy = options.RolloverStrategy;
 
 		// Resolve bootstrap configuration
 		_getMappingsJson = options.GetMappingsJson ?? tc?.GetMappingsJson;
@@ -134,6 +136,46 @@ public class ElasticsearchChannel<TEvent> : ElasticsearchChannelBase<TEvent, Ela
 	/// </summary>
 	public IIndexProvisioningStrategy ProvisioningStrategy => _provisioningStrategy;
 
+	/// <summary>
+	/// Triggers a manual rollover of the target index or data stream.
+	/// Requires <see cref="ElasticsearchChannelOptions{TEvent}.RolloverStrategy"/> to be set.
+	/// </summary>
+	public async Task<bool> RolloverAsync(string? maxAge = null, string? maxSize = null, long? maxDocs = null, CancellationToken ctx = default)
+	{
+		if (_rolloverStrategy == null)
+			throw new InvalidOperationException("RolloverStrategy is not configured.");
+
+		var context = new RolloverContext
+		{
+			Transport = Options.Transport,
+			Target = _ingestStrategy.RefreshTargets,
+			MaxAge = maxAge,
+			MaxSize = maxSize,
+			MaxDocs = maxDocs
+		};
+		return await _rolloverStrategy.RolloverAsync(context, ctx).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	/// Triggers a manual rollover of the target index or data stream.
+	/// Requires <see cref="ElasticsearchChannelOptions{TEvent}.RolloverStrategy"/> to be set.
+	/// </summary>
+	public bool Rollover(string? maxAge = null, string? maxSize = null, long? maxDocs = null)
+	{
+		if (_rolloverStrategy == null)
+			throw new InvalidOperationException("RolloverStrategy is not configured.");
+
+		var context = new RolloverContext
+		{
+			Transport = Options.Transport,
+			Target = _ingestStrategy.RefreshTargets,
+			MaxAge = maxAge,
+			MaxSize = maxSize,
+			MaxDocs = maxDocs
+		};
+		return _rolloverStrategy.Rollover(context);
+	}
+
 	/// <inheritdoc />
 	protected override (string, string) GetDefaultIndexTemplate(
 		string name, string match, string mappingsName, string settingsName, string hash)
@@ -163,7 +205,8 @@ public class ElasticsearchChannel<TEvent> : ElasticsearchChannelBase<TEvent, Ela
 			IlmPolicy = ilmPolicy ?? Options.IlmPolicy,
 			GetMappingsJson = _getMappingsJson,
 			GetMappingSettings = _getMappingSettings,
-			DataStreamType = _dataStreamType
+			DataStreamType = _dataStreamType,
+			DataStreamLifecycleRetention = Options.DataStreamLifecycleRetention
 		};
 	}
 
@@ -226,18 +269,26 @@ public class ElasticsearchChannel<TEvent> : ElasticsearchChannelBase<TEvent, Ela
 		};
 	}
 
-	private IBootstrapStrategy ResolveBootstrapStrategy(ElasticsearchTypeContext? tc)
+	private static IBootstrapStrategy ResolveBootstrapStrategy(ElasticsearchTypeContext? tc, ElasticsearchChannelOptions<TEvent> options)
 	{
 		if (tc == null)
 			return new DefaultBootstrapStrategy(new ComponentTemplateStep(), new IndexTemplateStep());
 
-		return tc.EntityTarget switch
+		if (tc.EntityTarget == EntityTarget.WiredStream)
+			return new DefaultBootstrapStrategy(new NoopBootstrapStep());
+
+		if (tc.EntityTarget == EntityTarget.DataStream)
 		{
-			EntityTarget.WiredStream => new DefaultBootstrapStrategy(new NoopBootstrapStep()),
-			EntityTarget.DataStream => new DefaultBootstrapStrategy(
-				new ComponentTemplateStep(), new DataStreamTemplateStep()),
-			_ => new DefaultBootstrapStrategy(new ComponentTemplateStep(), new IndexTemplateStep())
-		};
+			var steps = new List<IBootstrapStep> { new ComponentTemplateStep() };
+
+			if (!string.IsNullOrEmpty(options.DataStreamLifecycleRetention))
+				steps.Add(new DataStreamLifecycleStep(options.DataStreamLifecycleRetention!));
+
+			steps.Add(new DataStreamTemplateStep());
+			return new DefaultBootstrapStrategy(steps.ToArray());
+		}
+
+		return new DefaultBootstrapStrategy(new ComponentTemplateStep(), new IndexTemplateStep());
 	}
 
 	private static IIndexProvisioningStrategy ResolveProvisioningStrategy(ElasticsearchTypeContext? tc)

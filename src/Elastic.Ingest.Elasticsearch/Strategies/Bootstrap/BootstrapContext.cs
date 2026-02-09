@@ -59,6 +59,13 @@ public class BootstrapContext
 	public string? DataStreamType { get; init; }
 
 	/// <summary>
+	/// Data stream lifecycle retention period (e.g. "30d").
+	/// When set, the <c>DataStreamLifecycleStep</c> stores this in the template lifecycle block.
+	/// This is the serverless-compatible alternative to ILM.
+	/// </summary>
+	public string? DataStreamLifecycleRetention { get; init; }
+
+	/// <summary>
 	/// Additional properties that steps may use. Allows extensibility without modifying the context.
 	/// </summary>
 	public Dictionary<string, object>? Properties { get; set; }

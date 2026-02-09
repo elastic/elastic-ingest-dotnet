@@ -1,0 +1,9 @@
+project: elastic-ingest-dotnet
+cross_links:
+  - elasticsearch
+toc:
+  - file: index.md
+  - toc: channels
+  - toc: strategies
+  - toc: orchestration
+  - toc: advanced

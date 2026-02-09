@@ -26,9 +26,11 @@ public class DataStreamTemplateStep : IndexTemplateStep
 		var additionalComponents = GetInferredComponentTemplates(context);
 		var additionalComponentsJson = string.Join(", ", additionalComponents.Select(a => $"\"{a}\""));
 
+		var lifecycleBlock = GetLifecycleBlock(context);
+
 		return @$"{{
                 ""index_patterns"": [""{context.TemplateWildcard}""],
-                ""data_stream"": {{ }},
+                ""data_stream"": {{ }},{lifecycleBlock}
                 ""composed_of"": [ ""{mappingsName}"", ""{settingsName}"", {additionalComponentsJson} ],
                 ""priority"": 201,
                 ""_meta"": {{
@@ -37,6 +39,21 @@ public class DataStreamTemplateStep : IndexTemplateStep
                     ""hash"": ""{context.ChannelHash}""
                 }}
             }}";
+	}
+
+	private static string GetLifecycleBlock(BootstrapContext context)
+	{
+		// Check the strongly-typed property first, then fall back to Properties dictionary
+		var retention = context.DataStreamLifecycleRetention;
+		if (retention == null && context.Properties != null &&
+			context.Properties.TryGetValue("data_stream_lifecycle_retention", out var val))
+			retention = val as string;
+
+		if (string.IsNullOrEmpty(retention))
+			return "";
+
+		return $@"
+                ""template"": {{ ""lifecycle"": {{ ""data_retention"": ""{retention}"" }} }},";
 	}
 
 	/// <summary>

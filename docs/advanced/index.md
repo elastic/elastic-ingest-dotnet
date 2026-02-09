@@ -1,0 +1,12 @@
+---
+navigation_title: Advanced topics
+---
+
+# Advanced topics
+
+Detailed guides for advanced Elastic.Ingest.Elasticsearch features.
+
+## Topics
+
+- [ILM and Data Stream Lifecycle](ilm-and-lifecycle.md): choosing between ILM policies and serverless-compatible data stream lifecycle
+- [Custom strategies](custom-strategies.md): implementing your own strategy interfaces
