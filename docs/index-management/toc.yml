@@ -1,0 +1,7 @@
+toc:
+  - file: index.md
+  - file: single-index.md
+  - toc: rollover
+  - file: data-streams.md
+  - file: tsdb.md
+  - file: logsdb.md

@@ -1,7 +1,4 @@
 toc:
   - file: index.md
-  - file: data-stream-channel.md
-  - file: index-channel.md
-  - file: catalog-channel.md
-  - file: semantic-channel.md
   - file: composable-channel.md
+  - file: legacy-channels.md

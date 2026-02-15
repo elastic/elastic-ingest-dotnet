@@ -102,7 +102,7 @@ public class IncrementalSyncOrchestratorTests
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
 		using var orchestrator = CreateOrchestrator(transport);
 
-		orchestrator.Strategy.Should().Be(IngestStrategy.Reindex);
+		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Reindex);
 		orchestrator.LastUpdatedField.Should().Be("last_updated");
 		orchestrator.BatchIndexDateField.Should().Be("batch_index_date");
 		orchestrator.BatchTimestamp.Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromSeconds(5));
@@ -127,8 +127,8 @@ public class IncrementalSyncOrchestratorTests
 		using var orchestrator = CreateOrchestrator(transport);
 
 		var strategy = await orchestrator.StartAsync(BootstrapMethod.Silent);
-		strategy.Should().Be(IngestStrategy.Multiplex);
-		orchestrator.Strategy.Should().Be(IngestStrategy.Multiplex);
+		strategy.Should().Be(IngestSyncStrategy.Multiplex);
+		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Multiplex);
 	}
 
 	[Fact]
@@ -169,7 +169,7 @@ public class IncrementalSyncOrchestratorTests
 		using var orchestrator = CreateOrchestrator(transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
-		orchestrator.Strategy.Should().Be(IngestStrategy.Multiplex);
+		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Multiplex);
 
 		var result = orchestrator.TryWrite(new TestDocument { Timestamp = DateTimeOffset.UtcNow });
 		result.Should().BeTrue();
@@ -285,7 +285,6 @@ public class IncrementalSyncOrchestratorTests
 		orchestrator.ConfigurePrimary = opts =>
 		{
 			invoked = true;
-			opts.IlmPolicy = "custom-policy";
 		};
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
@@ -302,7 +301,6 @@ public class IncrementalSyncOrchestratorTests
 		orchestrator.ConfigureSecondary = opts =>
 		{
 			invoked = true;
-			opts.IlmPolicy = "secondary-policy";
 		};
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
@@ -316,7 +314,7 @@ public class IncrementalSyncOrchestratorTests
 		using var orchestrator = CreateSimpleOrchestrator(transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
-		orchestrator.Strategy.Should().Be(IngestStrategy.Multiplex);
+		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Multiplex);
 
 		orchestrator.TryWrite(new TestDocument { Timestamp = DateTimeOffset.UtcNow });
 

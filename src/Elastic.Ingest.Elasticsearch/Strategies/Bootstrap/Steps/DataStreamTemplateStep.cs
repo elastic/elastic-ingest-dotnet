@@ -43,11 +43,7 @@ public class DataStreamTemplateStep : IndexTemplateStep
 
 	private static string GetLifecycleBlock(BootstrapContext context)
 	{
-		// Check the strongly-typed property first, then fall back to Properties dictionary
 		var retention = context.DataStreamLifecycleRetention;
-		if (retention == null && context.Properties != null &&
-			context.Properties.TryGetValue("data_stream_lifecycle_retention", out var val))
-			retention = val as string;
 
 		if (string.IsNullOrEmpty(retention))
 			return "";

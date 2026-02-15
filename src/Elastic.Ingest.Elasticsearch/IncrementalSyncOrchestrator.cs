@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels;
 using Elastic.Channels.Diagnostics;
+using Elastic.Ingest.Elasticsearch.Strategies;
 using Elastic.Mapping;
 using Elastic.Transport;
 
@@ -22,7 +23,7 @@ public class OrchestratorContext<TEvent> where TEvent : class
 	public required ITransport Transport { get; init; }
 
 	/// <summary> The resolved ingest strategy (Reindex or Multiplex). </summary>
-	public required IngestStrategy Strategy { get; init; }
+	public required IngestSyncStrategy Strategy { get; init; }
 
 	/// <summary> The batch timestamp used for range queries during completion. </summary>
 	public required DateTimeOffset BatchTimestamp { get; init; }
@@ -39,12 +40,14 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	private readonly ITransport _transport;
 	private readonly ElasticsearchTypeContext _primaryTypeContext;
 	private readonly ElasticsearchTypeContext _secondaryTypeContext;
+	private readonly IIngestStrategy<TEvent>? _primaryStrategy;
+	private readonly IIngestStrategy<TEvent>? _secondaryStrategy;
 	private readonly DateTimeOffset _batchTimestamp = DateTimeOffset.UtcNow;
 	private readonly List<Func<ITransport, CancellationToken, Task>> _preBootstrapTasks = new();
 
-	private ElasticsearchChannel<TEvent>? _primaryChannel;
-	private ElasticsearchChannel<TEvent>? _secondaryChannel;
-	private IngestStrategy _strategy = IngestStrategy.Reindex;
+	private IngestChannel<TEvent>? _primaryChannel;
+	private IngestChannel<TEvent>? _secondaryChannel;
+	private IngestSyncStrategy _strategy = IngestSyncStrategy.Reindex;
 
 	private string? _primaryWriteAlias;
 	private string? _secondaryWriteAlias;
@@ -52,7 +55,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 
 	/// <summary>
 	/// Creates the orchestrator from two <see cref="ElasticsearchTypeContext"/> instances.
-	/// Channels are created internally during <see cref="StartAsync"/>.
+	/// Strategies are auto-resolved from the type contexts.
 	/// </summary>
 	public IncrementalSyncOrchestrator(
 		ITransport transport,
@@ -64,6 +67,23 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		_secondaryTypeContext = secondary;
 	}
 
+	/// <summary>
+	/// Creates the orchestrator with explicit strategies.
+	/// </summary>
+	public IncrementalSyncOrchestrator(
+		ITransport transport,
+		ElasticsearchTypeContext primary,
+		ElasticsearchTypeContext secondary,
+		IIngestStrategy<TEvent> primaryStrategy,
+		IIngestStrategy<TEvent> secondaryStrategy)
+	{
+		_transport = transport;
+		_primaryTypeContext = primary;
+		_secondaryTypeContext = secondary;
+		_primaryStrategy = primaryStrategy;
+		_secondaryStrategy = secondaryStrategy;
+	}
+
 	/// <summary> The field name used for last-updated range queries. </summary>
 	public string LastUpdatedField { get; set; } = "last_updated";
 
@@ -71,16 +91,16 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	public string BatchIndexDateField { get; set; } = "batch_index_date";
 
 	/// <summary> Optional configuration callback for the primary channel options. </summary>
-	public Action<ElasticsearchChannelOptions<TEvent>>? ConfigurePrimary { get; set; }
+	public Action<IngestChannelOptions<TEvent>>? ConfigurePrimary { get; set; }
 
 	/// <summary> Optional configuration callback for the secondary channel options. </summary>
-	public Action<ElasticsearchChannelOptions<TEvent>>? ConfigureSecondary { get; set; }
+	public Action<IngestChannelOptions<TEvent>>? ConfigureSecondary { get; set; }
 
 	/// <summary> Optional hook that runs after <see cref="CompleteAsync"/> finishes all operations. </summary>
 	public Func<OrchestratorContext<TEvent>, CancellationToken, Task>? OnPostComplete { get; set; }
 
 	/// <summary> The resolved ingest strategy after <see cref="StartAsync"/> completes. </summary>
-	public IngestStrategy Strategy => _strategy;
+	public IngestSyncStrategy Strategy => _strategy;
 
 	/// <summary> The batch timestamp assigned when the orchestrator was created. </summary>
 	public DateTimeOffset BatchTimestamp => _batchTimestamp;
@@ -99,44 +119,48 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	/// Creates channels, runs bootstrap, and determines the ingest strategy by comparing
 	/// template hashes and checking secondary alias existence.
 	/// </summary>
-	public async Task<IngestStrategy> StartAsync(
-		BootstrapMethod method, string? ilmPolicy = null, CancellationToken ctx = default)
+	public async Task<IngestSyncStrategy> StartAsync(
+		BootstrapMethod method, CancellationToken ctx = default)
 	{
 		// 1. Run pre-bootstrap tasks
 		foreach (var task in _preBootstrapTasks)
 			await task(_transport, ctx).ConfigureAwait(false);
 
 		// 2. Create and bootstrap primary channel
-		var primaryOpts = new ElasticsearchChannelOptions<TEvent>(_transport, _primaryTypeContext);
+		var primaryOpts = _primaryStrategy != null
+			? new IngestChannelOptions<TEvent>(_transport, _primaryStrategy, _primaryTypeContext)
+			: new IngestChannelOptions<TEvent>(_transport, _primaryTypeContext);
 		ConfigurePrimary?.Invoke(primaryOpts);
-		_primaryChannel = new ElasticsearchChannel<TEvent>(primaryOpts);
+		_primaryChannel = new IngestChannel<TEvent>(primaryOpts);
 
 		var primaryServerHash = await _primaryChannel.GetIndexTemplateHashAsync(ctx).ConfigureAwait(false) ?? string.Empty;
-		await _primaryChannel.BootstrapElasticsearchAsync(method, ilmPolicy, ctx).ConfigureAwait(false);
+		await _primaryChannel.BootstrapElasticsearchAsync(method, ctx).ConfigureAwait(false);
 
 		_primaryWriteAlias = ResolvePrimaryWriteAlias();
 		if (primaryServerHash != _primaryChannel.ChannelHash)
-			_strategy = IngestStrategy.Multiplex;
+			_strategy = IngestSyncStrategy.Multiplex;
 
 		// 3. Check secondary alias existence
 		_secondaryWriteAlias = ResolveSecondaryWriteAlias();
 		var head = await _transport.HeadAsync(_secondaryWriteAlias, ctx).ConfigureAwait(false);
 		if (head.ApiCallDetails.HttpStatusCode != 200)
-			_strategy = IngestStrategy.Multiplex;
+			_strategy = IngestSyncStrategy.Multiplex;
 
 		// 4. Create and bootstrap secondary channel
-		var secondaryOpts = new ElasticsearchChannelOptions<TEvent>(_transport, _secondaryTypeContext);
+		var secondaryOpts = _secondaryStrategy != null
+			? new IngestChannelOptions<TEvent>(_transport, _secondaryStrategy, _secondaryTypeContext)
+			: new IngestChannelOptions<TEvent>(_transport, _secondaryTypeContext);
 		ConfigureSecondary?.Invoke(secondaryOpts);
-		_secondaryChannel = new ElasticsearchChannel<TEvent>(secondaryOpts);
+		_secondaryChannel = new IngestChannel<TEvent>(secondaryOpts);
 
 		var secondaryServerHash = await _secondaryChannel.GetIndexTemplateHashAsync(ctx).ConfigureAwait(false) ?? string.Empty;
-		await _secondaryChannel.BootstrapElasticsearchAsync(method, ilmPolicy, ctx).ConfigureAwait(false);
+		await _secondaryChannel.BootstrapElasticsearchAsync(method, ctx).ConfigureAwait(false);
 
 		if (secondaryServerHash != _secondaryChannel.ChannelHash)
-			_strategy = IngestStrategy.Multiplex;
+			_strategy = IngestSyncStrategy.Multiplex;
 
 		// 5. Resolve reindex target for Reindex mode
-		if (_strategy == IngestStrategy.Reindex)
+		if (_strategy == IngestSyncStrategy.Reindex)
 			_secondaryReindexTarget = await ResolveExistingIndexAsync(_secondaryWriteAlias, ctx).ConfigureAwait(false);
 
 		return _strategy;
@@ -146,7 +170,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	public bool TryWrite(TEvent item)
 	{
 		EnsureStarted();
-		if (_strategy == IngestStrategy.Multiplex)
+		if (_strategy == IngestSyncStrategy.Multiplex)
 			return _primaryChannel!.TryWrite(item) && _secondaryChannel!.TryWrite(item);
 		return _primaryChannel!.TryWrite(item);
 	}
@@ -155,7 +179,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	public Task<bool> WaitToWriteAsync(TEvent item, CancellationToken ctx = default)
 	{
 		EnsureStarted();
-		if (_strategy == IngestStrategy.Multiplex)
+		if (_strategy == IngestSyncStrategy.Multiplex)
 			return WaitToWriteBothAsync(item, ctx);
 		return _primaryChannel!.WaitToWriteAsync(item, ctx);
 	}
@@ -202,7 +226,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		await _primaryChannel.RefreshAsync(ctx).ConfigureAwait(false);
 		await _primaryChannel.ApplyAliasesAsync(string.Empty, ctx).ConfigureAwait(false);
 
-		if (_strategy == IngestStrategy.Multiplex)
+		if (_strategy == IngestSyncStrategy.Multiplex)
 		{
 			// 2a. Drain + refresh + alias secondary
 			await _secondaryChannel!.WaitForDrainAsync(drainMaxWait, ctx).ConfigureAwait(false);
@@ -220,7 +244,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			var secondaryHead = await _transport.HeadAsync(_secondaryWriteAlias!, ctx).ConfigureAwait(false);
 			if (secondaryHead.ApiCallDetails.HttpStatusCode != 200)
 			{
-				await _secondaryChannel!.BootstrapElasticsearchAsync(BootstrapMethod.Failure, null, ctx).ConfigureAwait(false);
+				await _secondaryChannel!.BootstrapElasticsearchAsync(BootstrapMethod.Failure, ctx).ConfigureAwait(false);
 				// Create the target index with empty body to trigger template
 				secondaryTarget = _secondaryWriteAlias;
 				await _transport.PutAsync<StringResponse>(secondaryTarget!, PostData.String("{}"), ctx).ConfigureAwait(false);
@@ -269,7 +293,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	{
 		EnsureStarted();
 		await _primaryChannel!.WaitForDrainAsync(maxWait, ctx).ConfigureAwait(false);
-		if (_strategy == IngestStrategy.Multiplex)
+		if (_strategy == IngestSyncStrategy.Multiplex)
 			await _secondaryChannel!.WaitForDrainAsync(maxWait, ctx).ConfigureAwait(false);
 	}
 

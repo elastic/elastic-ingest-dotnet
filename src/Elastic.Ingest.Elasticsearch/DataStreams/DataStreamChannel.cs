@@ -13,7 +13,7 @@ using static System.StringComparison;
 namespace Elastic.Ingest.Elasticsearch.DataStreams;
 
 /// <summary> A channel to push messages to Elasticsearch data streams </summary>
-public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataStreamChannelOptions<TEvent>>
+public class DataStreamChannel<TEvent> : IngestChannelBase<TEvent, DataStreamChannelOptions<TEvent>>
 	where TEvent : class
 {
 	private readonly DataStreamIngestStrategy<TEvent> _ingestStrategy;
@@ -26,19 +26,19 @@ public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataSt
 		: base(options, callbackListeners) =>
 		_ingestStrategy = new DataStreamIngestStrategy<TEvent>(Options.DataStream.ToString(), base.BulkPathAndQuery);
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
 	protected override string RefreshTargets => _ingestStrategy.RefreshTargets;
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
 	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent document) =>
 		_ingestStrategy.CreateBulkOperationHeader(document, ChannelHash);
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName => Options.DataStream.GetTemplateName();
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateWildcard"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.TemplateWildcard"/>
 	protected override string TemplateWildcard => Options.DataStream.GetNamespaceWildcard();
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
 	protected override string BulkPathAndQuery => _ingestStrategy.GetBulkUrl(base.BulkPathAndQuery);
 
 	/// <summary>

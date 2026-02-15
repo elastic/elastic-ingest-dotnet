@@ -8,7 +8,7 @@ namespace Elastic.Ingest.Elasticsearch;
 /// Determines how the <see cref="IncrementalSyncOrchestrator{TEvent}"/> synchronizes
 /// the secondary index with the primary.
 /// </summary>
-public enum IngestStrategy
+public enum IngestSyncStrategy
 {
 	/// <summary>
 	/// Primary receives writes; secondary is updated via _reindex after drain.

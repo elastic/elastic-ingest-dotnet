@@ -49,8 +49,8 @@ public class SemanticIndexChannelOptions<TDocument>(ITransport transport) : Cata
 	/// <para>If specified, the timeout is used for both the inference id and search inference id.</para>
 	public TimeSpan? InferenceCreateTimeout { get; init; }
 
-	/// <summary> Set this to true before calling <see cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.BootstrapElasticsearchAsync"/> to attempt to reuse an existing index.
-	/// <para> Setting this to true does not force the behavior the <see cref="ElasticsearchChannelBase{TDocument, TChannelOptions}.ChannelHash"/> should also match the hash stored in the index template _meta</para>
+	/// <summary> Set this to true before calling <see cref="IngestChannelBase{TEvent,TChannelOptions}.BootstrapElasticsearchAsync"/> to attempt to reuse an existing index.
+	/// <para> Setting this to true does not force the behavior the <see cref="IngestChannelBase{TDocument, TChannelOptions}.ChannelHash"/> should also match the hash stored in the index template _meta</para>
 	/// </summary>
 	public bool TryReuseIndex { get; set; }
 }
@@ -90,23 +90,23 @@ public class SemanticIndexChannel<TDocument> : CatalogIndexChannel<TDocument, Se
 	/// The search inference id used, either explicitly passed <see cref="SemanticIndexChannelOptions{TDocument}.InferenceId"/> or a precomputed one based on <typeparamref name="TDocument"/>
 	public string SearchInferenceId { get; }
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.AlwaysBootstrapComponentTemplates"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.AlwaysBootstrapComponentTemplates"/>
 	protected override bool AlwaysBootstrapComponentTemplates => true;
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.GetMappings"/>>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.GetMappings"/>>
 	protected override string? GetMappings() => Options.GetMapping?.Invoke(InferenceId, SearchInferenceId);
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.GetMappingSettings"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.GetMappingSettings"/>
 	protected override string? GetMappingSettings() => Options.GetMappingSettings?.Invoke(InferenceId, SearchInferenceId);
 
 	/// <summary>
 	/// Returns whether the channel will attempt to reuse an existing index. Only true if <see cref="SemanticIndexChannelOptions{TDocument}.TryReuseIndex"/> is specified.
-	/// <para> If this returns true it does not guarantee reuse, the <see cref="ElasticsearchChannelBase{TDocument, TChannelOptions}.ChannelHash"/> should still match the hash stored in the index template _meta</para>
+	/// <para> If this returns true it does not guarantee reuse, the <see cref="IngestChannelBase{TDocument, TChannelOptions}.ChannelHash"/> should still match the hash stored in the index template _meta</para>
 	/// </summary>
 	public override bool TryReuseIndex => Options.TryReuseIndex;
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.BootstrapElasticsearch"/>
-	public override bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod, string? ilmPolicy = null)
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.BootstrapElasticsearch"/>
+	public override bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod)
 	{
 		var context = CreateInferenceBootstrapContext(bootstrapMethod);
 
@@ -116,11 +116,11 @@ public class SemanticIndexChannel<TDocument> : CatalogIndexChannel<TDocument, Se
 		if (!_searchInferenceStep.Execute(context))
 			return false;
 
-		return base.BootstrapElasticsearch(bootstrapMethod, ilmPolicy);
+		return base.BootstrapElasticsearch(bootstrapMethod);
 	}
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.BootstrapElasticsearchAsync"/>
-	public override async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, string? ilmPolicy = null, CancellationToken ctx = default)
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.BootstrapElasticsearchAsync"/>
+	public override async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, CancellationToken ctx = default)
 	{
 		var context = CreateInferenceBootstrapContext(bootstrapMethod);
 
@@ -130,7 +130,7 @@ public class SemanticIndexChannel<TDocument> : CatalogIndexChannel<TDocument, Se
 		if (!await _searchInferenceStep.ExecuteAsync(context, ctx).ConfigureAwait(false))
 			return false;
 
-		return await base.BootstrapElasticsearchAsync(bootstrapMethod, ilmPolicy, ctx).ConfigureAwait(false);
+		return await base.BootstrapElasticsearchAsync(bootstrapMethod, ctx).ConfigureAwait(false);
 	}
 
 	private BootstrapContext CreateInferenceBootstrapContext(BootstrapMethod bootstrapMethod) => new()

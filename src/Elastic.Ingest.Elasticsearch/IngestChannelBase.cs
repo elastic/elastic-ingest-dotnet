@@ -15,7 +15,7 @@ using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
 using Elastic.Transport;
 using Elastic.Transport.Products.Elasticsearch;
-using static Elastic.Ingest.Elasticsearch.ElasticsearchChannelStatics;
+using static Elastic.Ingest.Elasticsearch.IngestChannelStatics;
 
 namespace Elastic.Ingest.Elasticsearch;
 
@@ -23,17 +23,17 @@ namespace Elastic.Ingest.Elasticsearch;
 /// An abstract base class for both <see cref="DataStreamChannel{TEvent}"/> and <see cref="IndexChannel{TEvent}"/>
 /// <para>Coordinates most of the sending to- and bootstrapping of Elasticsearch</para>
 /// </summary>
-public abstract partial class ElasticsearchChannelBase<TDocument, TChannelOptions>
+public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 	: TransportChannelBase<TChannelOptions, TDocument, BulkResponse, BulkResponseItem>
-	where TChannelOptions : ElasticsearchChannelOptionsBase<TDocument>
+	where TChannelOptions : IngestChannelOptionsBase<TDocument>
 	where TDocument : class
 {
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/>
-	protected ElasticsearchChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TDocument, BulkResponse>>? callbackListeners)
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}"/>
+	protected IngestChannelBase(TChannelOptions options, ICollection<IChannelCallbacks<TDocument, BulkResponse>>? callbackListeners)
 		: base(options, callbackListeners) { }
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/>
-	protected ElasticsearchChannelBase(TChannelOptions options)
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}"/>
+	protected IngestChannelBase(TChannelOptions options)
 		: base(options) { }
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Retry"/>

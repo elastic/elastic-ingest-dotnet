@@ -81,7 +81,7 @@ public class SemanticIndexIngestionTests(IngestionCluster cluster, ITestOutputHe
 		};
 
 		var channel = new SemanticIndexChannel<CatalogDocument>(options);
-		var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
+		var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		bootstrapped.Should().BeTrue("Expected to be able to bootstrap semantic index channel");
 
 		// Verify inference endpoints were created

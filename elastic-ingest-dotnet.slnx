@@ -31,8 +31,6 @@
   </Folder>
   <Folder Name="/src/">
     <File Path="src/Directory.Build.props" />
-    <Project Path="../Elastic.Esql/src/Elastic.Mapping.Generator/Elastic.Mapping.Generator.csproj" />
-    <Project Path="../Elastic.Esql/src/Elastic.Mapping/Elastic.Mapping.csproj" />
     <Project Path="src/Elastic.Channels/Elastic.Channels.csproj" />
     <Project Path="src/Elastic.Ingest.Apm/Elastic.Ingest.Apm.csproj" />
     <Project Path="src/Elastic.Ingest.Elasticsearch/Elastic.Ingest.Elasticsearch.csproj" />
@@ -45,4 +43,5 @@
     <Project Path="tests/Elastic.Ingest.Elasticsearch.IntegrationTests/Elastic.Ingest.Elasticsearch.IntegrationTests.csproj" />
     <Project Path="tests/Elastic.Ingest.Elasticsearch.Tests/Elastic.Ingest.Elasticsearch.Tests.csproj" />
   </Folder>
+  <Project Path="docs/docs.csproj" />
 </Solution>

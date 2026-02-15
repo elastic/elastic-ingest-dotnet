@@ -16,7 +16,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Ingest.Elasticsearch.Indices;
 using static System.Globalization.CultureInfo;
-using static Elastic.Ingest.Elasticsearch.ElasticsearchChannelStatics;
+using static Elastic.Ingest.Elasticsearch.IngestChannelStatics;
 
 namespace Elastic.Ingest.Elasticsearch.Serialization;
 
@@ -31,13 +31,13 @@ public static class BulkRequestDataFactory
 	/// </summary>
 	/// <typeparam name="TEvent">The type for the event being ingested.</typeparam>
 	/// <param name="page">A page of <typeparamref name="TEvent"/> events.</param>
-	/// <param name="options">The <see cref="ElasticsearchChannelOptionsBase{TEvent}"/> for the channel where the request will be written.</param>
+	/// <param name="options">The <see cref="IngestChannelOptionsBase{TEvent}"/> for the channel where the request will be written.</param>
 	/// <param name="createHeaderFactory">A function which takes an instance of <typeparamref name="TEvent"/> and produces the operation header containing the action and optional meta data.</param>
 	/// <returns>A <see cref="ReadOnlyMemory{T}"/> of <see cref="byte"/> representing the entire request body in NDJSON format.</returns>
 	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "We always provide a static JsonTypeInfoResolver")]
 	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "We always provide a static JsonTypeInfoResolver")]
 	public static ReadOnlyMemory<byte> GetBytes<TEvent>(ArraySegment<TEvent> page,
-		ElasticsearchChannelOptionsBase<TEvent> options, Func<TEvent, BulkOperationHeader> createHeaderFactory)
+		IngestChannelOptionsBase<TEvent> options, Func<TEvent, BulkOperationHeader> createHeaderFactory)
 	{
 		// ArrayBufferWriter inserts comma's when serializing multiple times
 		// Hence the multiple writer.Resets() as advised on this feature request
@@ -126,14 +126,14 @@ public static class BulkRequestDataFactory
 	/// <typeparam name="TEvent">The type for the event being ingested.</typeparam>
 	/// <param name="page">A page of <typeparamref name="TEvent"/> events.</param>
 	/// <param name="stream">The target <see cref="Stream"/> for the request.</param>
-	/// <param name="options">The <see cref="ElasticsearchChannelOptionsBase{TEvent}"/> for the channel where the request will be written.</param>
+	/// <param name="options">The <see cref="IngestChannelOptionsBase{TEvent}"/> for the channel where the request will be written.</param>
 	/// <param name="createHeaderFactory">A function which takes an instance of <typeparamref name="TEvent"/> and produces the operation header containing the action and optional meta data.</param>
 	/// <param name="ctx">The cancellation token to cancel operation.</param>
 	/// <returns></returns>
 	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "We always provide a static JsonTypeInfoResolver")]
 	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "We always provide a static JsonTypeInfoResolver")]
 	public static async Task WriteBufferToStreamAsync<TEvent>(ArraySegment<TEvent> page, Stream stream,
-		ElasticsearchChannelOptionsBase<TEvent> options, Func<TEvent, BulkOperationHeader> createHeaderFactory,
+		IngestChannelOptionsBase<TEvent> options, Func<TEvent, BulkOperationHeader> createHeaderFactory,
 		CancellationToken ctx = default)
 	{
 #if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER

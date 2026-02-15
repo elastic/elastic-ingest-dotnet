@@ -3,7 +3,10 @@ cross_links:
   - elasticsearch
 toc:
   - file: index.md
+  - toc: getting-started
+  - toc: index-management
   - toc: channels
   - toc: strategies
+  - toc: architecture
   - toc: orchestration
   - toc: advanced

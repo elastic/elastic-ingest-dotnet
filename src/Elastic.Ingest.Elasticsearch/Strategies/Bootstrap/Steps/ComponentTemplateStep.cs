@@ -19,6 +19,20 @@ namespace Elastic.Ingest.Elasticsearch.Strategies.BootstrapSteps;
 /// </summary>
 public class ComponentTemplateStep : IBootstrapStep
 {
+	private readonly string? _ilmPolicy;
+
+	/// <summary>
+	/// Creates a component template step with no ILM policy.
+	/// </summary>
+	public ComponentTemplateStep() { }
+
+	/// <summary>
+	/// Creates a component template step that includes the specified ILM policy
+	/// in the settings component template via <c>index.lifecycle.name</c>.
+	/// </summary>
+	public ComponentTemplateStep(string ilmPolicy) =>
+		_ilmPolicy = ilmPolicy ?? throw new ArgumentNullException(nameof(ilmPolicy));
+
 	/// <inheritdoc />
 	public string Name => "ComponentTemplate";
 
@@ -53,13 +67,11 @@ public class ComponentTemplateStep : IBootstrapStep
 		return true;
 	}
 
-	private static (string name, string body) GetSettingsComponentTemplate(BootstrapContext context)
+	private (string name, string body) GetSettingsComponentTemplate(BootstrapContext context)
 	{
-		var ilmPolicy = string.IsNullOrWhiteSpace(context.IlmPolicy) ? "logs" : context.IlmPolicy;
-
 		var overallSettings = new Dictionary<string, string>();
-		if (!context.IsServerless && ilmPolicy is not null)
-			overallSettings["index.lifecycle.name"] = ilmPolicy;
+		if (!context.IsServerless && _ilmPolicy is not null)
+			overallSettings["index.lifecycle.name"] = _ilmPolicy;
 
 		var settings = new StringBuilder("{");
 		var settingsAsJson = string.Join(",\n", overallSettings.Select(kv => $"  \"{kv.Key}\": \"{kv.Value}\""));

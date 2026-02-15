@@ -1,37 +1,45 @@
 ---
-navigation_title: Channel types
+navigation_title: Channels
 ---
 
-# Channel types
+# Channels
 
-Elastic.Ingest.Elasticsearch provides several channel types for different Elasticsearch ingestion patterns. Each channel handles buffering, batching, and bulk API calls automatically.
+`IngestChannel<T>` is the primary channel type for ingesting documents into Elasticsearch. It uses a [composable strategy pattern](../strategies/index.md) for all behaviors and auto-configures from `ElasticsearchTypeContext` when available.
 
-## Composable channel
-
-`ElasticsearchChannel<T>` is the recommended channel for new projects. It uses pluggable strategies for all behaviors and auto-configures from `ElasticsearchTypeContext` when available.
+## Quick example
 
 ```csharp
-var options = new ElasticsearchChannelOptions<MyDocument>(transport, MyContext.MyDocument);
-var channel = new ElasticsearchChannel<MyDocument>(options);
+var options = new IngestChannelOptions<Product>(transport, MyContext.Product.Context);
+using var channel = new IngestChannel<Product>(options);
+
+await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
+
+channel.TryWrite(new Product { Sku = "ABC", Name = "Widget" });
+await channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), ctx);
 ```
 
-[Learn more ->](composable-channel.md)
+## Topics
 
-## Specialized channels
+- [Channel configuration](composable-channel.md): options, buffer configuration, strategies, callbacks
+- [Legacy channels](legacy-channels.md): migration guide for `DataStreamChannel`, `IndexChannel`, `CatalogChannel`, and semantic channels
 
-For simpler use cases or when you don't need the full strategy pattern:
+## Channel lifecycle
 
-| Channel | Use case |
-|---------|----------|
-| [DataStreamChannel](data-stream-channel.md) | Data streams with automatic naming |
-| [IndexChannel](index-channel.md) | Traditional indices with date-based naming |
-| [CatalogChannel](catalog-channel.md) | Catalog/entity storage indices |
-| [SemanticChannel](semantic-channel.md) | Indices with ELSER inference endpoints |
+1. **Create**: instantiate with options (and optional `ElasticsearchTypeContext` for auto-configuration)
+2. **Bootstrap**: call `BootstrapElasticsearchAsync` to create templates and indices
+3. **Write**: use `TryWrite` (non-blocking) or `WaitToWriteAsync` (with backpressure) to buffer documents
+4. **Drain**: call `WaitForDrainAsync` to flush all buffered documents
+5. **Alias** (optional): call `ApplyAliasesAsync` to swap aliases after indexing
+6. **Rollover** (optional): call `RolloverAsync` to trigger manual index rollover
+7. **Dispose**: the channel implements `IDisposable`
 
-## Common patterns
+## Writing documents
 
-All channels share these capabilities:
+| Method | Behavior |
+|--------|----------|
+| `TryWrite(doc)` | Non-blocking. Returns `false` if buffer is full. |
+| `WaitToWriteAsync(doc, ctx)` | Async with backpressure. Blocks if buffer is full. |
+| `TryWriteMany(docs)` | Non-blocking batch write. |
+| `WaitToWriteManyAsync(docs, ctx)` | Async batch write with backpressure. |
 
-- **Buffered writes**: `channel.TryWrite(document)` buffers documents and flushes in batches
-- **Bootstrap**: `channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure)` creates templates and indices
-- **Drain**: `channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), ctx)` waits for all buffered documents to be sent
+See [push model](../architecture/push-model.md) for details on buffering, batching, and concurrent export.

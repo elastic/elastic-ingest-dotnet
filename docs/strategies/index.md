@@ -18,7 +18,7 @@ Elastic.Ingest.Elasticsearch uses a composable strategy pattern. Each aspect of 
 
 ## Auto-resolution
 
-When using `ElasticsearchChannel<T>` with an `ElasticsearchTypeContext`, strategies are auto-resolved based on the entity target:
+When using `IngestChannel<T>` with an `ElasticsearchTypeContext`, strategies are auto-resolved based on the entity target:
 
 | Entity target | Ingest | Bootstrap | Provisioning | Alias |
 |---------------|--------|-----------|-------------|-------|

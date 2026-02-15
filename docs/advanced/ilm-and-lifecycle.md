@@ -56,11 +56,11 @@ DSL is the serverless-compatible alternative to ILM. It specifies a data retenti
 The simplest approach -- set the option and the channel auto-inserts the step:
 
 ```csharp
-var options = new ElasticsearchChannelOptions<LogEntry>(transport, MyContext.LogEntry)
+var options = new IngestChannelOptions<LogEntry>(transport, MyContext.LogEntry)
 {
     DataStreamLifecycleRetention = "30d"
 };
-var channel = new ElasticsearchChannel<LogEntry>(options);
+var channel = new IngestChannel<LogEntry>(options);
 ```
 
 This produces a template with:

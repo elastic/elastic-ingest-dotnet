@@ -29,7 +29,7 @@ public class BootstrapFailureTests(SecurityCluster cluster, ITestOutputHelper ou
 			BufferOptions = new BufferOptions { WaitHandle = slim, OutboundBufferMaxSize = 1 }
 		};
 		var channel = new DataStreamChannel<TimeSeriesDocument>(options);
-		var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Silent, "7-days-default");
+		var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Silent);
 		bootstrapped.Should().BeFalse("Insufficient rights");
 	}
 
@@ -48,7 +48,7 @@ public class BootstrapFailureTests(SecurityCluster cluster, ITestOutputHelper ou
 		Exception? caughtException = null;
 		try
 		{
-			await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
+			await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		}
 		catch (Exception e)
 		{

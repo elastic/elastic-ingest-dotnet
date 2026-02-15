@@ -27,11 +27,11 @@ No-op. Always returns `true` without performing any rollover.
 Calls `POST {target}/_rollover` with optional conditions:
 
 ```csharp
-var options = new ElasticsearchChannelOptions<LogEntry>(transport, MyContext.LogEntry)
+var options = new IngestChannelOptions<LogEntry>(transport, MyContext.LogEntry)
 {
     RolloverStrategy = new ManualRolloverStrategy()
 };
-var channel = new ElasticsearchChannel<LogEntry>(options);
+var channel = new IngestChannel<LogEntry>(options);
 
 // Rollover with conditions
 await channel.RolloverAsync(maxAge: "7d", maxSize: "50gb");

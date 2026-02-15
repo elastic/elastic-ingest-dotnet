@@ -25,7 +25,7 @@ public class ChannelHashTests(IngestionCluster cluster, ITestOutputHelper output
 		var indexPrefix = "hash-data-";
 		var slim = new CountdownEvent(1);
 		var channel = CreateChannel(indexPrefix, slim);
-		var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
+		var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		bootstrapped.Should().BeTrue("Expected to be able to bootstrap index channel");
 
 		var indexName = channel.IndexName;
@@ -39,12 +39,12 @@ public class ChannelHashTests(IngestionCluster cluster, ITestOutputHelper output
 
 		// when using a new Channel, it should pick up the existing index because we are using scripted upserts
 		channel = CreateChannel(indexPrefix, slim);
-		await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
+		await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		channel.IndexName.Should().Be(indexName);
 
 		// If we change settings we should create a new index
 		channel = CreateChannel(indexPrefix, slim, changeSettings: true);
-		await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
+		await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		channel.IndexName.Should().NotBe(indexName);
 
 	}

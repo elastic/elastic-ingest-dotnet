@@ -25,7 +25,7 @@ public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster, ITestOut
 		var indexPrefix = "update-data-";
 		var slim = new CountdownEvent(1);
 		var channel = CreateChannel(indexPrefix, slim);
-		var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
+		var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		bootstrapped.Should().BeTrue("Expected to be able to bootstrap index channel");
 
 		var indexName = channel.IndexName;
@@ -54,14 +54,14 @@ public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster, ITestOut
 
 		// when using a new Channel, it should pick up the existing index because we are using scripted upserts
 		channel = CreateChannel(indexPrefix, slim);
-		await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
+		await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		channel.IndexName.Should().Be(indexName);
 		// Now only update the same half the documents, assert the version is 3 for half of the documents and 1 for the untouched documents
 		await UpdateHalfOfDocuments(channel, slim, searchIndex, indexName, expectedVersion: 3);
 
 		// We can force a fresh new index to be created by disabling scripted hash updates
 		channel = CreateChannel(indexPrefix, slim, useScriptedHashBulkUpsert: false);
-		await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
+		await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		channel.IndexName.Should().NotBe(indexName);
 		indexName = channel.IndexName;
 		// Now only update the same half the documents, assert the version is 3 for half of the documents and 1 for the untouched documents

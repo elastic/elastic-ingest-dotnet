@@ -25,7 +25,7 @@ public class IndexChannel<TEvent> : IndexChannel<TEvent, IndexChannelOptions<TEv
 }
 
 /// <inheritdoc cref="IndexChannel{TEvent}"/>
-public class IndexChannel<TEvent, TChannelOptions> : ElasticsearchChannelBase<TEvent, TChannelOptions>
+public class IndexChannel<TEvent, TChannelOptions> : IngestChannelBase<TEvent, TChannelOptions>
 	where TChannelOptions : IndexChannelOptions<TEvent>
 	where TEvent : class
 {
@@ -43,20 +43,20 @@ public class IndexChannel<TEvent, TChannelOptions> : ElasticsearchChannelBase<TE
 		TemplateWildcard = string.Format(InvariantCulture, Options.IndexFormat, "*");
 	}
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
 	protected override string RefreshTargets => _ingestStrategy.RefreshTargets;
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
 	protected override string BulkPathAndQuery => _ingestStrategy.GetBulkUrl(base.BulkPathAndQuery);
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
 	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent document) =>
 		_ingestStrategy.CreateBulkOperationHeader(document, ChannelHash);
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName { get; }
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateWildcard"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.TemplateWildcard"/>
 	protected override string TemplateWildcard { get; }
 
 	/// <summary>

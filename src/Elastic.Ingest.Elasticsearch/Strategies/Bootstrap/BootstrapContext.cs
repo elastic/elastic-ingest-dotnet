@@ -3,7 +3,6 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Collections.Generic;
 using Elastic.Transport;
 
 namespace Elastic.Ingest.Elasticsearch.Strategies;
@@ -22,26 +21,18 @@ public class BootstrapContext
 
 	/// <summary>
 	/// The hash of the channel's settings and mappings.
-	/// Set by the bootstrap process before steps run.
+	/// Set by the bootstrap process (e.g. <c>ComponentTemplateStep</c>) before template steps run.
 	/// </summary>
-	public string ChannelHash { get; set; } = string.Empty;
-
-	/// <summary> Optional ILM policy name. </summary>
-	public string? IlmPolicy { get; init; }
+	public string ChannelHash { get; internal set; } = string.Empty;
 
 	/// <summary> Whether the Elasticsearch instance is serverless. Lazily detected. </summary>
-	public bool IsServerless { get; set; }
+	public bool IsServerless { get; internal set; }
 
 	/// <summary> The template name for bootstrap. </summary>
 	public required string TemplateName { get; init; }
 
 	/// <summary> The template wildcard pattern for bootstrap. </summary>
 	public required string TemplateWildcard { get; init; }
-
-	/// <summary>
-	/// Function to get the settings JSON for the component template.
-	/// </summary>
-	public Func<string>? GetSettingsJson { get; init; }
 
 	/// <summary>
 	/// Function to get the mappings JSON for the component template.
@@ -60,13 +51,7 @@ public class BootstrapContext
 
 	/// <summary>
 	/// Data stream lifecycle retention period (e.g. "30d").
-	/// When set, the <c>DataStreamLifecycleStep</c> stores this in the template lifecycle block.
-	/// This is the serverless-compatible alternative to ILM.
+	/// Set by <c>DataStreamLifecycleStep</c> for <c>DataStreamTemplateStep</c> to embed.
 	/// </summary>
-	public string? DataStreamLifecycleRetention { get; init; }
-
-	/// <summary>
-	/// Additional properties that steps may use. Allows extensibility without modifying the context.
-	/// </summary>
-	public Dictionary<string, object>? Properties { get; set; }
+	public string? DataStreamLifecycleRetention { get; internal set; }
 }

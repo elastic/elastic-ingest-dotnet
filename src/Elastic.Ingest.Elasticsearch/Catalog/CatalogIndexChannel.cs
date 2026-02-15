@@ -46,10 +46,10 @@ public class CatalogIndexChannel<TDocument> : CatalogIndexChannel<TDocument, Cat
 	public CatalogIndexChannel(CatalogIndexChannelOptions<TDocument> options, ICollection<IChannelCallbacks<TDocument, BulkResponse>>? callbackListeners = null)
 		: base(options, callbackListeners) { }
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.GetMappings"/>>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.GetMappings"/>>
 	protected override string? GetMappings() => Options.GetMapping?.Invoke();
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.GetMappings"/>>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.GetMappings"/>>
 	/// <inheritdoc />
 	protected override string? GetMappingSettings() => Options.GetMappingSettings?.Invoke();
 }
@@ -89,29 +89,29 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 	/// <para>Since this is catalog data and not time series data, all data needs to end up in a single index</para>
 	public string IndexName { get; private set; }
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
 	protected override BulkOperationHeader CreateBulkOperationHeader(TDocument document) =>
 		_ingestStrategy.CreateBulkOperationHeader(document, ChannelHash);
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
 	protected override string RefreshTargets => _ingestStrategy.RefreshTargets;
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
 	protected override string BulkPathAndQuery => _ingestStrategy.GetBulkUrl(base.BulkPathAndQuery);
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.AlwaysBootstrapComponentTemplates"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.AlwaysBootstrapComponentTemplates"/>
 	protected override bool AlwaysBootstrapComponentTemplates => true;
 
 	/// <summary> Returns whether the channel is trying to reuse an existing index. Only true if <see cref="IndexChannelOptions{TEvent}.ScriptedHashBulkUpsertLookup"/> is specified.
-	/// <para> If this returns true it does not guarantee reuse, the <see cref="ElasticsearchChannelBase{TDocument, TChannelOptions}.ChannelHash"/> should still match the hash stored in the index template _meta</para>
+	/// <para> If this returns true it does not guarantee reuse, the <see cref="IngestChannelBase{TDocument, TChannelOptions}.ChannelHash"/> should still match the hash stored in the index template _meta</para>
 	/// </summary>
 	public virtual bool TryReuseIndex => Options.ScriptedHashBulkUpsertLookup is not null;
 
 	/// <inheritdoc />
-	public override async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, string? ilmPolicy = null, CancellationToken ctx = default)
+	public override async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, CancellationToken ctx = default)
 	{
 		// Ensure channel hash is set before bootstrapping, normally done as part of the bootstrap process
-		GenerateChannelHash(bootstrapMethod, ilmPolicy, out _, out _, out _, out _);
+		GenerateChannelHash(bootstrapMethod, out _, out _, out _, out _);
 
 		var indexTemplateExists = await IndexTemplateExistsAsync(TemplateName, ctx).ConfigureAwait(false);
 		var indexTemplateMatchesHash = indexTemplateExists && await IndexTemplateMatchesHashAsync(ChannelHash, ctx).ConfigureAwait(false);
@@ -121,7 +121,7 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 		var currentIndex = await ShouldRemovePreviousAliasAsync(matchingIndices, latestAlias, ctx).ConfigureAwait(false);
 		// ensure we index to the latest index unless we have no previous versions, or the index template has changed
 		if (string.IsNullOrEmpty(currentIndex) || !indexTemplateExists || !indexTemplateMatchesHash)
-			return await base.BootstrapElasticsearchAsync(bootstrapMethod, ilmPolicy, ctx).ConfigureAwait(false);
+			return await base.BootstrapElasticsearchAsync(bootstrapMethod, ctx).ConfigureAwait(false);
 
 		// When doing scripted hash upsert lookup, we need to override the bulk path and query to use the current index
 		// if the index template has changed, we index to the index name determined in the constructor
@@ -130,14 +130,14 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 			IndexName = currentIndex;
 			_ingestStrategy.UpdateIndexName(currentIndex, base.BulkPathAndQuery);
 		}
-		return await base.BootstrapElasticsearchAsync(bootstrapMethod, ilmPolicy, ctx).ConfigureAwait(false);
+		return await base.BootstrapElasticsearchAsync(bootstrapMethod, ctx).ConfigureAwait(false);
 	}
 
 	/// <inheritdoc />
-	public override bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod, string? ilmPolicy = null)
+	public override bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod)
 	{
 		// Ensure channel hash is set before bootstrapping, normally done as part of the bootstrap process
-		GenerateChannelHash(bootstrapMethod, ilmPolicy, out _, out _, out _, out _);
+		GenerateChannelHash(bootstrapMethod, out _, out _, out _, out _);
 
 		var indexTemplateExists = IndexTemplateExists(TemplateName);
 		var indexTemplateMatchesHash = indexTemplateExists && IndexTemplateMatchesHash(ChannelHash);
@@ -147,7 +147,7 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 		var currentIndex = ShouldRemovePreviousAlias(matchingIndices, latestAlias);
 		// ensure we index to the latest index unless we have no previous versions, or the index template has changed
 		if (string.IsNullOrEmpty(currentIndex) || !indexTemplateExists || !indexTemplateMatchesHash)
-			return base.BootstrapElasticsearch(bootstrapMethod, ilmPolicy);
+			return base.BootstrapElasticsearch(bootstrapMethod);
 
 		// When doing scripted hash upsert lookup, we need to override the bulk path and query to use the current index
 		// if the index template has changed, we index to the index name determined in the constructor
@@ -156,7 +156,7 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 			IndexName = currentIndex;
 			_ingestStrategy.UpdateIndexName(currentIndex, base.BulkPathAndQuery);
 		}
-		return base.BootstrapElasticsearch(bootstrapMethod, ilmPolicy);
+		return base.BootstrapElasticsearch(bootstrapMethod);
 	}
 
 	/// Applies the latest alias to the index.

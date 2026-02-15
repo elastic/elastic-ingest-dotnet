@@ -35,7 +35,7 @@ public class IndexIngestionTests(IngestionCluster cluster, ITestOutputHelper out
 			}
 		};
 		var channel = new IndexChannel<CatalogDocument>(options);
-		var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
+		var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		bootstrapped.Should().BeTrue("Expected to be able to bootstrap index channel");
 
 		var date = DateTimeOffset.Now;

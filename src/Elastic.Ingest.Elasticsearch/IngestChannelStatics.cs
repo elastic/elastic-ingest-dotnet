@@ -11,7 +11,7 @@ using System.Text.Json.Serialization;
 
 namespace Elastic.Ingest.Elasticsearch;
 
-internal static class ElasticsearchChannelStatics
+internal static class IngestChannelStatics
 {
 	public static readonly byte[] LineFeed = [(byte)'\n'];
 

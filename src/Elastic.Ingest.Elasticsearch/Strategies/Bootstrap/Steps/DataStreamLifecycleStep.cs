@@ -3,7 +3,6 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -32,20 +31,14 @@ public class DataStreamLifecycleStep : IBootstrapStep
 	/// <inheritdoc />
 	public Task<bool> ExecuteAsync(BootstrapContext context, CancellationToken ctx = default)
 	{
-		StoreRetention(context);
+		context.DataStreamLifecycleRetention = _dataRetention;
 		return Task.FromResult(true);
 	}
 
 	/// <inheritdoc />
 	public bool Execute(BootstrapContext context)
 	{
-		StoreRetention(context);
+		context.DataStreamLifecycleRetention = _dataRetention;
 		return true;
-	}
-
-	private void StoreRetention(BootstrapContext context)
-	{
-		context.Properties ??= new Dictionary<string, object>();
-		context.Properties["data_stream_lifecycle_retention"] = _dataRetention;
 	}
 }

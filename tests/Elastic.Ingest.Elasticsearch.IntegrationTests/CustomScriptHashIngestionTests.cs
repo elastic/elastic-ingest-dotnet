@@ -39,7 +39,7 @@ public class CustomScriptHashIngestionTests
 	/// <inheritdoc />
 	public async Task InitializeAsync()
 	{
-		await Channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
+		await Channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		IndexName = Channel.IndexName;
 	}
 
@@ -53,7 +53,7 @@ public class CustomScriptHashIngestionTests
 	[Fact]
 	public async Task EnsureDocumentsEndUpInIndex()
 	{
-		var bootstrapped = await Channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure, "7-days-default");
+		var bootstrapped = await Channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		bootstrapped.Should().BeTrue("Expected to be able to bootstrap index channel");
 
 		var searchIndex = Channel.Options.ActiveSearchAlias;
