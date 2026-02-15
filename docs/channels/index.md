@@ -4,7 +4,9 @@ navigation_title: Channels
 
 # Channels
 
-`IngestChannel<T>` is the primary channel type for ingesting documents into Elasticsearch. It uses a [composable strategy pattern](../strategies/index.md) for all behaviors and auto-configures from `ElasticsearchTypeContext` when available.
+Channels handle the mechanics of getting your documents into Elasticsearch reliably: buffering, batching into `_bulk` requests, concurrent export, retries with backoff, and backpressure -- so you can focus on producing documents and let the channel handle delivery.
+
+`IngestChannel<T>` is the primary channel type. It uses a [composable strategy pattern](../strategies/index.md) for all behaviors and auto-configures from `ElasticsearchTypeContext` when available.
 
 ## Quick example
 

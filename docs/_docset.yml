@@ -4,9 +4,10 @@ cross_links:
 toc:
   - file: index.md
   - toc: getting-started
-  - toc: index-management
   - toc: channels
-  - toc: strategies
   - toc: architecture
+  - toc: index-management
+  - toc: strategies
   - toc: orchestration
+  - toc: use-cases
   - toc: advanced

@@ -55,10 +55,8 @@ public static partial class MetricsContext;
 ## Channel setup
 
 ```csharp
-var options = new IngestChannelOptions<MetricEvent>(transport, MetricsContext.MetricEvent.Context)
-{
-    DataStreamLifecycleRetention = "90d"
-};
+var strategy = IngestStrategies.DataStream<MetricEvent>(MetricsContext.MetricEvent.Context, "90d");
+var options = new IngestChannelOptions<MetricEvent>(transport, strategy, MetricsContext.MetricEvent.Context);
 using var channel = new IngestChannel<MetricEvent>(options);
 
 await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
@@ -73,4 +71,4 @@ await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 ## Related
 
 - [Data streams](data-streams.md): general data stream concepts
-- [Time-series](../getting-started/time-series.md): end-to-end time-series guide
+- [Time-series](../use-cases/time-series.md): end-to-end time-series guide

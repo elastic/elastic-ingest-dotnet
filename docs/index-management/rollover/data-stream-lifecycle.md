@@ -8,13 +8,11 @@ Data stream lifecycle (DSL) is a serverless-compatible alternative to ILM. It em
 
 ## Quick setup
 
-The simplest approach -- set the option on the channel:
+Use the `IngestStrategies.DataStream` factory with a retention period:
 
 ```csharp
-var options = new IngestChannelOptions<LogEntry>(transport, MyContext.LogEntry.Context)
-{
-    DataStreamLifecycleRetention = "30d"
-};
+var strategy = IngestStrategies.DataStream<LogEntry>(LoggingContext.LogEntry.Context, "30d");
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, LoggingContext.LogEntry.Context);
 using var channel = new IngestChannel<LogEntry>(options);
 
 await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
@@ -31,17 +29,13 @@ This produces an index template with:
 
 ## Explicit step
 
-For manual bootstrap strategy composition:
+For manual bootstrap strategy composition, use `BootstrapStrategies.DataStream` with a retention argument:
 
 ```csharp
-var options = new IngestChannelOptions<LogEntry>(transport)
-{
-    BootstrapStrategy = new DefaultBootstrapStrategy(
-        new ComponentTemplateStep(),
-        new DataStreamLifecycleStep("30d"),
-        new DataStreamTemplateStep()
-    )
-};
+var strategy = IngestStrategies.DataStream<LogEntry>(
+    LoggingContext.LogEntry.Context,
+    BootstrapStrategies.DataStream("30d"));
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, LoggingContext.LogEntry.Context);
 ```
 
 The `DataStreamLifecycleStep` must execute **before** `DataStreamTemplateStep`, because it sets the retention value that the template step embeds in the template.
@@ -63,4 +57,4 @@ The `DataStreamLifecycleStep` must execute **before** `DataStreamTemplateStep`, 
 
 - [ILM managed](ilm-managed.md): multi-phase lifecycle for self-managed clusters
 - [ILM and lifecycle](../../advanced/ilm-and-lifecycle.md): detailed comparison
-- [Time-series](../../getting-started/time-series.md): using DSL with time-series data
+- [Time-series](../../use-cases/time-series.md): using DSL with time-series data

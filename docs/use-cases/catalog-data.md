@@ -6,6 +6,10 @@ navigation_title: Catalog data
 
 This guide covers versioned reference data with dual-index orchestration -- for example, a knowledge base where you maintain both a lexical search index and a semantic search index.
 
+## Why
+
+Versioned snapshots of reference data need zero-downtime schema changes. When you maintain multiple search indices over the same data (for example, lexical and semantic), you need a way to coordinate writes, detect schema changes, and swap aliases atomically -- without manual orchestration code.
+
 ## Scenario
 
 - Reference data is synced periodically from a source system
@@ -13,6 +17,36 @@ This guide covers versioned reference data with dual-index orchestration -- for 
 - Two indices are maintained: one for lexical search, one for semantic search (different mappings)
 - Index swaps should be atomic via aliases
 - Unchanged schemas should reuse existing indices (no unnecessary reindexing)
+
+## Single-channel pattern
+
+Start with a single index before adding orchestration complexity:
+
+```csharp
+[ElasticsearchMappingContext]
+[Entity<KnowledgeArticle>(
+    Target = EntityTarget.Index,
+    Name = "knowledge",
+    WriteAlias = "knowledge",
+    ReadAlias = "knowledge-search",
+    SearchPattern = "knowledge-*",
+    DatePattern = "yyyy.MM.dd.HHmmss"
+)]
+public static partial class KnowledgeContext;
+
+var options = new IngestChannelOptions<KnowledgeArticle>(transport, KnowledgeContext.KnowledgeArticle.Context);
+using var channel = new IngestChannel<KnowledgeArticle>(options);
+
+await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
+
+foreach (var article in await GetArticlesFromSource())
+    channel.TryWrite(article);
+
+await channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), ctx);
+await channel.ApplyAliasesAsync(string.Empty, ctx);
+```
+
+This gives you hash-based index reuse, alias swapping, and upserts -- all from the entity declaration.
 
 ## Document type
 
@@ -39,7 +73,11 @@ public class KnowledgeArticle
 }
 ```
 
-## Mapping context with variants
+## Dual-index orchestration
+
+When you need a second index with different mappings (for example, semantic search), use `IncrementalSyncOrchestrator` to coordinate both indices automatically.
+
+### Mapping context with variants
 
 Use the `Variant` parameter to define multiple index configurations for the same document type:
 
@@ -69,9 +107,9 @@ This generates two type contexts:
 - `ExampleMappingContext.KnowledgeArticle.Context` (lexical)
 - `ExampleMappingContext.KnowledgeArticleSemantic.Context` (semantic variant)
 
-## IncrementalSyncOrchestrator
+### IncrementalSyncOrchestrator
 
-The `IncrementalSyncOrchestrator` coordinates both indices, handling schema change detection and the decision between reindex and multiplex modes automatically:
+The orchestrator coordinates both indices, handling schema change detection and the decision between reindex and multiplex modes automatically:
 
 ```csharp
 var transport = new DistributedTransport(

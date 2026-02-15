@@ -69,4 +69,4 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(10), ctx);
 ## Related
 
 - [Data streams](data-streams.md): standard data stream bootstrapping
-- [Time-series](../getting-started/time-series.md): end-to-end time-series guide
+- [Time-series](../use-cases/time-series.md): end-to-end time-series guide

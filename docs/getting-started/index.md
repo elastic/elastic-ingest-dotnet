@@ -4,7 +4,7 @@ navigation_title: Getting started
 
 # Getting started
 
-This guide walks you through installing Elastic.Ingest.Elasticsearch, defining a document type, and writing your first documents.
+`Elastic.Ingest.Elasticsearch` gives you a production-ready, buffered ingestion pipeline for Elasticsearch. It batches documents into `_bulk` requests, retries failures, applies backpressure, and auto-configures index templates -- from a simple mapping declaration on your document type.
 
 ## Install
 
@@ -12,11 +12,7 @@ This guide walks you through installing Elastic.Ingest.Elasticsearch, defining a
 dotnet add package Elastic.Ingest.Elasticsearch
 ```
 
-You also need `Elastic.Mapping` for source-generated type contexts:
-
-```shell
-dotnet add package Elastic.Mapping
-```
+This pulls in `Elastic.Mapping` (source-generated mapping contexts) and `Elastic.Channels` (buffered channel infrastructure) as transitive dependencies.
 
 ## Define a document type
 
@@ -34,27 +30,29 @@ public class Product
 
     [Keyword]
     public string Category { get; set; }
-
-    [Timestamp]
-    [JsonPropertyName("@timestamp")]
-    public DateTimeOffset UpdatedAt { get; set; }
 }
 ```
 
-## Register in a mapping context
+| Attribute | What it does |
+|-----------|-------------|
+| `[Id]` | Uses this field as the Elasticsearch `_id` (enables upserts) |
+| `[Keyword]` | Maps to a keyword field (exact match, aggregations) |
+| `[Text]` | Maps to a text field (full-text search) |
+| `[Timestamp]` | Marks the timestamp field (required for data streams, used for date-based index naming) |
 
-Create a source-generated mapping context that tells the channel how to configure itself:
+## Create a mapping context
+
+The mapping context is a source-generated class that tells the channel what to create in Elasticsearch:
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<Product>(
-    Target = EntityTarget.Index,
-    Name = "products"
-)]
-public static partial class MyMappingContext;
+[Entity<Product>]
+public static partial class MyContext;
 ```
 
-The source generator produces `MyMappingContext.Product` with an `ElasticsearchTypeContext` containing mappings JSON, settings, and accessor delegates.
+`[Entity<Product>]` with no parameters targets an index named `product` (the type name, lowercased). The source generator produces `MyContext.Product.Context` -- an `ElasticsearchTypeContext` containing mappings JSON, settings, and accessor delegates.
+
+See [mapping context](mapping-context.md) for the full `[Entity<>]` parameter reference and how each option drives strategy selection.
 
 ## Create and use a channel
 
@@ -63,13 +61,13 @@ var transport = new DistributedTransport(
     new TransportConfiguration(new Uri("http://localhost:9200"))
 );
 
-var options = new IngestChannelOptions<Product>(transport, MyMappingContext.Product.Context);
+var options = new IngestChannelOptions<Product>(transport, MyContext.Product.Context);
 using var channel = new IngestChannel<Product>(options);
 
-// Create templates and index
+// Create templates and index in Elasticsearch
 await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 
-// Write documents
+// Write documents (buffered, batched automatically)
 foreach (var product in products)
     channel.TryWrite(product);
 
@@ -77,7 +75,21 @@ foreach (var product in products)
 await channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), ctx);
 ```
 
-## What happens
+## What the channel inferred
+
+From `[Entity<Product>]` and the document attributes, the channel auto-resolved:
+
+| Behavior | Resolved to | Why |
+|----------|------------|-----|
+| Entity target | `EntityTarget.Index` | Default when no `Target` specified |
+| Ingest | `TypeContextIndexIngestStrategy` | `[Id]` present: uses `index` operations (upserts) |
+| Bootstrap | `ComponentTemplateStep` + `IndexTemplateStep` | Index target needs component and index templates |
+| Provisioning | `AlwaysCreateProvisioning` | No `[ContentHash]` on the document |
+| Alias | `NoAliasStrategy` | No `WriteAlias`/`ReadAlias` configured |
+
+Different `[Entity<>]` parameters resolve to different strategies. See [mapping context](mapping-context.md) for the full resolution table, or [index management](../index-management/index.md) for more control over indices, data streams, and lifecycle.
+
+## What happens at runtime
 
 1. **Bootstrap** creates component templates (settings + mappings) and an index template in Elasticsearch. If the template already exists with the same content hash, it skips the update.
 2. **TryWrite** buffers documents in memory. When the batch reaches 1,000 items or 5 seconds elapse, the channel sends a `_bulk` request.
@@ -85,15 +97,6 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), ctx);
 
 ## Next steps
 
-Choose the guide that matches your use case:
-
-- [E-commerce and product catalogs](e-commerce.md): periodic sync of product data with upserts
-- [Catalog and reference data](catalog-data.md): versioned snapshots with dual-index orchestration
-- [Time-series data](time-series.md): high-volume append-only logs and metrics
-
-Or explore the library in depth:
-
-- [Index management](../index-management/index.md): strategies for managing indices, data streams, and lifecycle
-- [Channels](../channels/index.md): channel configuration and options
-- [Strategies](../strategies/index.md): composable strategy pattern
-- [Architecture](../architecture/index.md): how the buffered pipeline works
+- [Mapping context](mapping-context.md): full `[Entity<>]` reference and strategy resolution
+- [Channels](../channels/index.md): buffer tuning, callbacks, and channel lifecycle
+- [Use cases](../use-cases/index.md): end-to-end guides for every ingestion pattern

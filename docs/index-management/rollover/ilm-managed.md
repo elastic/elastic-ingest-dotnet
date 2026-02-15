@@ -8,21 +8,28 @@ Index Lifecycle Management (ILM) automates rollover and data retention on self-m
 
 ## Configuration
 
-Add an `IlmPolicyStep` to the bootstrap strategy, ordered **before** the component template step:
+Use the `BootstrapStrategies.DataStreamWithIlm` factory to create a strategy with an ILM policy:
 
 ```csharp
-var options = new IngestChannelOptions<LogEntry>(transport, MyContext.LogEntry.Context)
-{
-    IlmPolicy = "logs-policy",
-    BootstrapStrategy = new DefaultBootstrapStrategy(
-        new IlmPolicyStep("logs-policy", hotMaxAge: "7d", deleteMinAge: "90d"),
-        new ComponentTemplateStep(),
-        new DataStreamTemplateStep()
-    )
-};
+var strategy = IngestStrategies.DataStream<LogEntry>(
+    LoggingContext.LogEntry.Context,
+    BootstrapStrategies.DataStreamWithIlm("logs-policy", hotMaxAge: "7d", deleteMinAge: "90d"));
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, LoggingContext.LogEntry.Context);
+using var channel = new IngestChannel<LogEntry>(options);
+
+await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 ```
 
-The `ComponentTemplateStep` automatically adds `index.lifecycle.name` to the settings component template when `IlmPolicy` is set.
+The `BootstrapStrategies.DataStreamWithIlm` factory creates an `IlmPolicyStep` ordered **before** the component template step, so the `ComponentTemplateStep` can automatically add `index.lifecycle.name` to the settings component template.
+
+For indices (not data streams), use `BootstrapStrategies.IndexWithIlm`:
+
+```csharp
+var strategy = IngestStrategies.Index<Product>(
+    CatalogContext.Product.Context,
+    BootstrapStrategies.IndexWithIlm("products-policy", hotMaxAge: "30d", deleteMinAge: "180d"));
+var options = new IngestChannelOptions<Product>(transport, strategy, CatalogContext.Product.Context);
+```
 
 ## ILM phases
 
@@ -38,7 +45,7 @@ ILM supports multiple phases:
 
 ## Custom policy JSON
 
-For full control over phases and actions:
+For full control over phases and actions, use `IlmPolicyStep` with raw JSON and compose a `DefaultBootstrapStrategy` manually:
 
 ```csharp
 var policyJson = """
@@ -60,7 +67,14 @@ var policyJson = """
     }
 }
 """;
-var step = new IlmPolicyStep("logs-policy", policyJson);
+var bootstrap = new DefaultBootstrapStrategy(
+    new IlmPolicyStep("logs-policy", policyJson),
+    new ComponentTemplateStep("logs-policy"),
+    new DataStreamTemplateStep()
+);
+var strategy = IngestStrategies.DataStream<LogEntry>(
+    LoggingContext.LogEntry.Context, bootstrap);
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, LoggingContext.LogEntry.Context);
 ```
 
 ## Behavior

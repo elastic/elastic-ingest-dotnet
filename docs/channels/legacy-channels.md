@@ -6,9 +6,9 @@ navigation_title: Legacy channels
 
 The specialized channel types (`DataStreamChannel`, `IndexChannel`, `CatalogChannel`, and semantic channel patterns) are superseded by `IngestChannel<T>` with composable strategies. This page shows how to migrate each legacy pattern.
 
-## DataStreamChannel &rarr; IngestChannel
+## DataStreamChannel -> IngestChannel
 
-**Before:**
+**Before (deprecated):**
 
 ```csharp
 var channel = new DataStreamChannel<LogEvent>(
@@ -37,9 +37,9 @@ using var channel = new IngestChannel<LogEvent>(options);
 
 The channel auto-selects `DataStreamIngestStrategy` and creates data stream templates during bootstrap.
 
-## IndexChannel &rarr; IngestChannel
+## IndexChannel -> IngestChannel
 
-**Before:**
+**Before (deprecated):**
 
 ```csharp
 var channel = new IndexChannel<Product>(
@@ -68,9 +68,9 @@ using var channel = new IngestChannel<Product>(options);
 
 The `[Timestamp]` attribute on your document type replaces `TimestampLookup`. The `DatePattern` replaces the format string.
 
-## CatalogChannel &rarr; IngestChannel
+## CatalogChannel -> IngestChannel
 
-**Before:**
+**Before (deprecated):**
 
 ```csharp
 var options = new IngestChannelOptions<Product>(transport, MyContext.Product);
@@ -100,9 +100,9 @@ using var channel = new IngestChannel<Product>(options);
 
 With `[Id]` on the document, the `TypeContextIndexIngestStrategy` uses `index` operations (upserts) automatically. Add `[ContentHash]` for hash-based provisioning, and configure `WriteAlias`/`ReadAlias` for alias management.
 
-## Semantic channel &rarr; IngestChannel
+## Semantic channel -> IngestChannel
 
-**Before:**
+**Before (deprecated):**
 
 ```csharp
 var options = new IngestChannelOptions<Article>(transport, MyContext.Article);
@@ -114,19 +114,20 @@ options.BootstrapStrategy = new DefaultBootstrapStrategy(
 var channel = new IngestChannel<Article>(options);
 ```
 
-**After (no change needed):**
+**After:**
 
-The semantic channel was already using `IngestChannel<T>` with `InferenceEndpointStep`. This pattern remains the recommended approach. Add the step to your bootstrap strategy when you need inference endpoints:
+The semantic channel was already using `IngestChannel<T>` with `InferenceEndpointStep`. Use the `IngestStrategies` factory and pass a custom bootstrap strategy:
 
 ```csharp
-var options = new IngestChannelOptions<Article>(transport, MyContext.Article.Context)
-{
-    BootstrapStrategy = new DefaultBootstrapStrategy(
-        new InferenceEndpointStep("my-elser-endpoint", numThreads: 2),
-        new ComponentTemplateStep(),
-        new IndexTemplateStep()
-    )
-};
+var bootstrap = new DefaultBootstrapStrategy(
+    new InferenceEndpointStep("my-elser-endpoint", numThreads: 2),
+    new ComponentTemplateStep(),
+    new IndexTemplateStep()
+);
+var strategy = IngestStrategies.Index<Article>(
+    MyContext.Article.Context, bootstrap);
+var options = new IngestChannelOptions<Article>(transport, strategy,
+    MyContext.Article.Context);
 using var channel = new IngestChannel<Article>(options);
 ```
 

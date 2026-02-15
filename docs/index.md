@@ -1,70 +1,120 @@
 # Elastic.Ingest.Elasticsearch
 
-A .NET library for reliable, buffered document ingestion into Elasticsearch. It handles batching, concurrent export, retries, and backpressure automatically, so you can focus on your data.
+## Why this library?
 
-## Choose your path
+The Elasticsearch `_bulk` API is the fast path for writing documents, but using it well is hard. You need to batch documents efficiently, handle backpressure when the cluster is overloaded, retry transient failures with exponential backoff, manage index templates and component templates, and coordinate lifecycle policies -- all while keeping your application responsive.
 
-| I want to... | Guide |
-|--------------|-------|
-| Sync a product catalog or e-commerce data | [E-commerce use case](getting-started/e-commerce.md) |
-| Index reference data with versioned snapshots | [Catalog data use case](getting-started/catalog-data.md) |
-| Ingest logs, metrics, or time-series events | [Time-series use case](getting-started/time-series.md) |
+`Elastic.Ingest.Elasticsearch` handles all of that. You define your document type, declare how it maps to Elasticsearch, and the library gives you a production-ready ingestion channel that auto-configures itself from your declaration.
 
-## Quick start
+## Simplest example
 
-```shell
-dotnet add package Elastic.Ingest.Elasticsearch
-dotnet add package Elastic.Mapping
+**1. Define a document and its Elasticsearch mapping:**
+
+```csharp
+public class Product
+{
+    [Keyword]
+    public string Sku { get; set; }
+
+    [Text]
+    public string Name { get; set; }
+
+    [Keyword]
+    public string Category { get; set; }
+}
 ```
+
+**2. Declare a mapping context:**
+
+```csharp
+[ElasticsearchMappingContext]
+[Entity<Product>]
+public static partial class MyContext;
+```
+
+**3. Create a channel and write documents:**
 
 ```csharp
 var transport = new DistributedTransport(
     new TransportConfiguration(new Uri("http://localhost:9200"))
 );
 
-var options = new IngestChannelOptions<MyDocument>(transport, MyContext.MyDocument.Context);
-using var channel = new IngestChannel<MyDocument>(options);
+var options = new IngestChannelOptions<Product>(transport, MyContext.Product.Context);
+using var channel = new IngestChannel<Product>(options);
 
 await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 
-foreach (var doc in documents)
-    channel.TryWrite(doc);
+foreach (var product in products)
+    channel.TryWrite(product);
 
-await channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), ctx);
+await channel.WaitForDrainAsync(TimeSpan.FromSeconds(10), ctx);
 ```
 
-## Key features
+That's it. No strategy configuration, no template JSON, no bulk request assembly. From `[Entity<Product>]`, the channel inferred: target an index named `product`, create component and index templates, use `index` operations for the bulk API, and create a new index on each bootstrap.
 
-- **Buffered ingestion**: automatic batching with configurable buffer sizes and flush intervals
-- **Composable strategies**: plug in custom bootstrap, ingest, provisioning, alias, and rollover behaviors
-- **Auto-configuration**: define mappings with `Elastic.Mapping` attributes and let the channel configure itself
-- **Data stream lifecycle**: serverless-compatible retention management
-- **Hash-based change detection**: skip redundant template updates and reuse unchanged indices
-- **Multi-channel orchestration**: coordinate primary and secondary indices with `IncrementalSyncOrchestrator`
-- **AOT support**: source-generated serialization contexts for Native AOT
+## How the pieces connect
 
-## Packages
+```
+  Elastic.Mapping                Elastic.Ingest.Elasticsearch          Elasticsearch
+  ──────────────                 ────────────────────────────          ──────────────
+  Document attributes     →     IngestChannelOptions               →  Component templates
+  [Entity<>] declaration          ↓                                    Index templates
+                                IngestChannel                       →  _bulk API
+                                  ↓
+                                Auto-resolved strategy:
+                                  • EntityTarget    → Index / DataStream / WiredStream
+                                  • Bootstrap       → Templates, ILM, lifecycle
+                                  • Ingest          → Bulk operation headers
+                                  • Provisioning    → Create or reuse indices
+                                  • Alias           → Read/write aliases
+```
+
+`Elastic.Mapping` attributes on your document class describe the Elasticsearch field mapping. The `[Entity<>]` attribute on your mapping context declares the target, naming, and optional aliases. The channel reads this context and auto-resolves a complete strategy.
+
+See [mapping context](getting-started/mapping-context.md) for the full reference on how `[Entity<>]` parameters drive strategy selection.
+
+## Common strategies
+
+When you need more control than zero-config provides, use the `IngestStrategies` and `BootstrapStrategies` factory methods:
+
+```csharp
+// Data stream with 30-day retention
+var strategy = IngestStrategies.DataStream<LogEntry>(context, "30d");
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, context);
+
+// Data stream with ILM policy
+var strategy = IngestStrategies.DataStream<LogEntry>(context,
+    BootstrapStrategies.DataStreamWithIlm("logs-policy", hotMaxAge: "7d", deleteMinAge: "90d"));
+
+// Index with ILM policy
+var strategy = IngestStrategies.Index<Product>(context,
+    BootstrapStrategies.IndexWithIlm("products-policy"));
+```
+
+See [strategies](strategies/index.md) for the full list of factory methods and customization options.
+
+## Install
+
+```shell
+dotnet add package Elastic.Ingest.Elasticsearch
+```
+
+`Elastic.Mapping` is included as a transitive dependency.
 
 | Package | Description |
 |---------|-------------|
-| `Elastic.Ingest.Elasticsearch` | Elasticsearch channels, strategies, and orchestrators |
-| `Elastic.Channels` | Base buffered channel infrastructure (transitive dependency) |
-| `Elastic.Ingest.Transport` | Transport extensions for Elasticsearch API calls (transitive dependency) |
-
-You only need to install `Elastic.Ingest.Elasticsearch`. The other packages are pulled in automatically.
-
-## How it works
-
-Documents flow through a [two-stage buffered pipeline](architecture/push-model.md): producers write to an inbound channel, the library batches items and exports them concurrently via the Elasticsearch `_bulk` API, with automatic retry and backpressure.
-
-The [composable strategy pattern](strategies/index.md) lets you control every aspect of the channel's behavior -- from how documents are serialized to how indices are created and aliases are managed -- or let the channel auto-configure from your `ElasticsearchTypeContext`.
+| `Elastic.Ingest.Elasticsearch` | Channels, strategies, and orchestrators |
+| `Elastic.Mapping` | Source-generated mapping contexts (transitive) |
+| `Elastic.Channels` | Buffered channel infrastructure (transitive) |
+| `Elastic.Ingest.Transport` | Transport extensions (transitive) |
 
 ## Documentation
 
 - [Getting started](getting-started/index.md): install, define documents, create your first channel
-- [Index management](index-management/index.md): strategies for indices, data streams, rollover, and lifecycle
-- [Channels](channels/index.md): channel configuration and options
-- [Strategies](strategies/index.md): composable strategy pattern
-- [Architecture](architecture/index.md): how the buffered pipeline works
+- [Channels](channels/index.md): buffer tuning, callbacks, serialization
+- [Architecture](architecture/index.md): how the two-stage buffered pipeline works
+- [Index management](index-management/index.md): indices, data streams, rollover, and lifecycle
+- [Strategies](strategies/index.md): composable strategy pattern and factory methods
 - [Orchestration](orchestration/index.md): coordinating multiple channels
+- [Use cases](use-cases/index.md): end-to-end guides for every ingestion pattern
 - [Advanced topics](advanced/index.md): ILM, custom strategies, serialization

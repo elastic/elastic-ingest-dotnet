@@ -61,19 +61,17 @@ var transport = new DistributedTransport(
     new TransportConfiguration(new Uri("http://localhost:9200"))
 );
 
-var options = new IngestChannelOptions<LogEntry>(transport, LoggingContext.LogEntry.Context)
-{
-    DataStreamLifecycleRetention = "30d"  // retain data for 30 days
-};
+var strategy = IngestStrategies.DataStream<LogEntry>(LoggingContext.LogEntry.Context, "30d");
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, LoggingContext.LogEntry.Context);
 using var channel = new IngestChannel<LogEntry>(options);
 
 await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 ```
 
-The channel auto-selects:
-- `DataStreamIngestStrategy`: uses `create` operations (append-only)
-- `DefaultBootstrapStrategy` with `ComponentTemplateStep` + `DataStreamTemplateStep`
-- Data stream lifecycle with 30-day retention
+The `IngestStrategies.DataStream` factory creates a strategy that:
+- Uses `DataStreamIngestStrategy`: `create` operations (append-only)
+- Bootstraps with `ComponentTemplateStep` + `DataStreamLifecycleStep` + `DataStreamTemplateStep`
+- Sets 30-day data stream lifecycle retention
 
 ## Writing data
 
@@ -95,7 +93,8 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(10), ctx);
 For high-throughput scenarios, tune the buffer:
 
 ```csharp
-var options = new IngestChannelOptions<LogEntry>(transport, LoggingContext.LogEntry.Context)
+var strategy = IngestStrategies.DataStream<LogEntry>(LoggingContext.LogEntry.Context, "30d");
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, LoggingContext.LogEntry.Context)
 {
     BufferOptions = new BufferOptions
     {
@@ -124,26 +123,22 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(60), ctx);
 
 ### Data stream lifecycle (recommended)
 
-Set `DataStreamLifecycleRetention` on the channel options. This embeds the retention period in the index template and works on both serverless and self-managed Elasticsearch.
+Use the `IngestStrategies.DataStream` factory with a retention period. This embeds the retention in the index template and works on both serverless and self-managed Elasticsearch.
 
 ```csharp
-options.DataStreamLifecycleRetention = "90d";
+var strategy = IngestStrategies.DataStream<LogEntry>(LoggingContext.LogEntry.Context, "90d");
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, LoggingContext.LogEntry.Context);
 ```
 
 ### ILM (self-managed only)
 
-For multi-phase lifecycle policies (hot/warm/cold/delete), use ILM:
+For multi-phase lifecycle policies (hot/warm/cold/delete), use the `BootstrapStrategies.DataStreamWithIlm` factory:
 
 ```csharp
-var options = new IngestChannelOptions<LogEntry>(transport, LoggingContext.LogEntry.Context)
-{
-    IlmPolicy = "logs-policy",
-    BootstrapStrategy = new DefaultBootstrapStrategy(
-        new IlmPolicyStep("logs-policy", hotMaxAge: "7d", deleteMinAge: "90d"),
-        new ComponentTemplateStep(),
-        new DataStreamTemplateStep()
-    )
-};
+var strategy = IngestStrategies.DataStream<LogEntry>(
+    LoggingContext.LogEntry.Context,
+    BootstrapStrategies.DataStreamWithIlm("logs-policy", hotMaxAge: "7d", deleteMinAge: "90d"));
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, LoggingContext.LogEntry.Context);
 ```
 
 See [ILM and lifecycle](../advanced/ilm-and-lifecycle.md) for details.

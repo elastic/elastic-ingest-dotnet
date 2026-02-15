@@ -59,11 +59,11 @@ The `DataStreamIngestStrategy` is automatically selected for `EntityTarget.DataS
 
 Data streams support two lifecycle approaches:
 
-- **Data stream lifecycle** (recommended): set `DataStreamLifecycleRetention` for automatic retention. See [data stream lifecycle](rollover/data-stream-lifecycle.md).
-- **ILM** (self-managed only): attach an ILM policy for multi-phase lifecycle. See [ILM managed](rollover/ilm-managed.md).
+- **Data stream lifecycle** (recommended): use `IngestStrategies.DataStream(context, "30d")` for automatic retention. See [data stream lifecycle](rollover/data-stream-lifecycle.md).
+- **ILM** (self-managed only): use `BootstrapStrategies.DataStreamWithIlm(...)` for multi-phase lifecycle. See [ILM managed](rollover/ilm-managed.md).
 
 ## Related
 
-- [Time-series](../getting-started/time-series.md): end-to-end guide for time-series data
+- [Time-series](../use-cases/time-series.md): end-to-end guide for time-series data
 - [TSDB](tsdb.md): time-series database mode for metrics
 - [LogsDB](logsdb.md): LogsDB mode for log ingestion

@@ -4,7 +4,23 @@ navigation_title: Custom strategies
 
 # Custom strategies
 
-All strategy interfaces can be implemented to customize channel behavior.
+All strategy interfaces can be implemented to customize channel behavior. Before implementing a custom strategy from scratch, check whether you can achieve your goal by composing existing pieces with the factory methods.
+
+## Composing with factory methods
+
+The `IngestStrategies` and `BootstrapStrategies` factories cover most use cases. You can extend them by passing a custom bootstrap strategy that includes your own steps alongside the built-in ones:
+
+```csharp
+var bootstrap = new DefaultBootstrapStrategy(
+    new CustomPipelineStep(),           // your custom step
+    new ComponentTemplateStep(),        // built-in
+    new DataStreamTemplateStep()        // built-in
+);
+var strategy = IngestStrategies.DataStream<LogEntry>(context, bootstrap);
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, context);
+```
+
+This gives you the standard data stream ingest, provisioning, and alias strategies while inserting your custom bootstrap logic.
 
 ## Implementing IBootstrapStep
 

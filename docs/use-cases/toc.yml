@@ -1,0 +1,10 @@
+toc:
+  - file: index.md
+  - file: wired-streams.md
+  - file: time-series.md
+  - file: data-stream-ilm.md
+  - file: tsdb-metrics.md
+  - file: e-commerce.md
+  - file: manual-rollover.md
+  - file: catalog-data.md
+  - file: semantic-enrichment.md

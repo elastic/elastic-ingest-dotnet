@@ -10,21 +10,31 @@ Elastic.Ingest.Elasticsearch supports two approaches to data retention managemen
 
 ILM is the traditional approach for managing index lifecycle on self-managed and Elastic Cloud clusters. It defines phases (hot, warm, cold, frozen, delete) with actions and conditions.
 
-### Using IlmPolicyStep
+### Using BootstrapStrategies factory
+
+The simplest way to add ILM is through the `BootstrapStrategies.DataStreamWithIlm` factory:
 
 ```csharp
-var strategy = new DefaultBootstrapStrategy(
-    new IlmPolicyStep("my-policy", hotMaxAge: "30d", deleteMinAge: "90d"),
-    new ComponentTemplateStep(),
-    new DataStreamTemplateStep()
-);
+var strategy = IngestStrategies.DataStream<LogEntry>(
+    LoggingContext.LogEntry.Context,
+    BootstrapStrategies.DataStreamWithIlm("my-policy", hotMaxAge: "30d", deleteMinAge: "90d"));
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, LoggingContext.LogEntry.Context);
 ```
 
-The `IlmPolicyStep`:
+For indices, use `BootstrapStrategies.IndexWithIlm`:
+
+```csharp
+var strategy = IngestStrategies.Index<Product>(
+    CatalogContext.Product.Context,
+    BootstrapStrategies.IndexWithIlm("my-policy", hotMaxAge: "30d", deleteMinAge: "90d"));
+var options = new IngestChannelOptions<Product>(transport, strategy, CatalogContext.Product.Context);
+```
+
+The factory creates an `IlmPolicyStep` that:
 - Creates the ILM policy via `PUT _ilm/policy/{name}`
 - Skips on serverless (where ILM is not supported)
 - Checks if the policy already exists before creating (idempotent)
-- Should be ordered **before** `ComponentTemplateStep` since the component template references the policy by name
+- Is ordered **before** `ComponentTemplateStep` since the component template references the policy by name
 
 ### Custom policy JSON
 
@@ -40,7 +50,14 @@ var policyJson = """
     }
 }
 """;
-var step = new IlmPolicyStep("my-policy", policyJson);
+var bootstrap = new DefaultBootstrapStrategy(
+    new IlmPolicyStep("my-policy", policyJson),
+    new ComponentTemplateStep("my-policy"),
+    new DataStreamTemplateStep()
+);
+var strategy = IngestStrategies.DataStream<LogEntry>(
+    LoggingContext.LogEntry.Context, bootstrap);
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, LoggingContext.LogEntry.Context);
 ```
 
 ### ILM policy reference
@@ -51,16 +68,14 @@ The `ComponentTemplateStep` automatically adds `"index.lifecycle.name"` to the s
 
 DSL is the serverless-compatible alternative to ILM. It specifies a data retention period embedded directly in the index template.
 
-### Using DataStreamLifecycleRetention option
+### Using IngestStrategies factory
 
-The simplest approach -- set the option and the channel auto-inserts the step:
+The simplest approach -- pass a retention period to `IngestStrategies.DataStream`:
 
 ```csharp
-var options = new IngestChannelOptions<LogEntry>(transport, MyContext.LogEntry)
-{
-    DataStreamLifecycleRetention = "30d"
-};
-var channel = new IngestChannel<LogEntry>(options);
+var strategy = IngestStrategies.DataStream<LogEntry>(LoggingContext.LogEntry.Context, "30d");
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, LoggingContext.LogEntry.Context);
+using var channel = new IngestChannel<LogEntry>(options);
 ```
 
 This produces a template with:
@@ -71,16 +86,15 @@ This produces a template with:
 }
 ```
 
-### Using DataStreamLifecycleStep explicitly
+### Using BootstrapStrategies.DataStream explicitly
 
-For manual bootstrap strategy composition:
+For explicit bootstrap strategy composition:
 
 ```csharp
-var strategy = new DefaultBootstrapStrategy(
-    new ComponentTemplateStep(),
-    new DataStreamLifecycleStep("30d"),
-    new DataStreamTemplateStep()
-);
+var strategy = IngestStrategies.DataStream<LogEntry>(
+    LoggingContext.LogEntry.Context,
+    BootstrapStrategies.DataStream("30d"));
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, LoggingContext.LogEntry.Context);
 ```
 
 ## Choosing between ILM and DSL
@@ -93,4 +107,4 @@ var strategy = new DefaultBootstrapStrategy(
 | Complexity | Higher | Lower |
 | Recommended for | Self-managed, complex lifecycle | Serverless, simple retention |
 
-**Recommendation**: Use DSL (`DataStreamLifecycleRetention`) for new projects unless you need multi-phase ILM policies. DSL works on both serverless and self-managed clusters.
+**Recommendation**: Use DSL (`IngestStrategies.DataStream` with a retention period) for new projects unless you need multi-phase ILM policies. DSL works on both serverless and self-managed clusters.

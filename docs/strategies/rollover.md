@@ -24,14 +24,20 @@ No-op. Always returns `true` without performing any rollover.
 
 ### ManualRolloverStrategy
 
-Calls `POST {target}/_rollover` with optional conditions:
+Calls `POST {target}/_rollover` with optional conditions. To use it, compose a full `IngestStrategy<T>` that includes the rollover strategy:
 
 ```csharp
-var options = new IngestChannelOptions<LogEntry>(transport, MyContext.LogEntry)
-{
-    RolloverStrategy = new ManualRolloverStrategy()
-};
-var channel = new IngestChannel<LogEntry>(options);
+var strategy = new IngestStrategy<LogEntry>(
+    LoggingContext.LogEntry.Context,
+    BootstrapStrategies.DataStream(),
+    new DataStreamIngestStrategy<LogEntry>("logs-myapp-production", "/_bulk"),
+    new AlwaysCreateProvisioning(),
+    new NoAliasStrategy(),
+    new ManualRolloverStrategy()
+);
+var options = new IngestChannelOptions<LogEntry>(transport, strategy,
+    LoggingContext.LogEntry.Context);
+using var channel = new IngestChannel<LogEntry>(options);
 
 // Rollover with conditions
 await channel.RolloverAsync(maxAge: "7d", maxSize: "50gb");

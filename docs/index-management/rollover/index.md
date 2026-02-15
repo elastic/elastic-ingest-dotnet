@@ -17,7 +17,7 @@ Rollover creates a new index when the current one reaches certain conditions (ag
 
 ## Choosing an approach
 
-- **Manual alias**: best for batch sync patterns where you control when indices rotate (for example, [catalog data](../../getting-started/catalog-data.md))
+- **Manual alias**: best for batch sync patterns where you control when indices rotate (for example, [catalog data](../../use-cases/catalog-data.md))
 - **Rollover API**: best when you want explicit control over rollover timing with conditions
 - **ILM managed**: best for self-managed clusters that need multi-phase lifecycle (hot/warm/cold/delete)
 - **Data stream lifecycle**: best for serverless and new projects that only need retention-based lifecycle

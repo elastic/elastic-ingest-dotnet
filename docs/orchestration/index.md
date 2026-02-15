@@ -4,7 +4,7 @@ navigation_title: Orchestration
 
 # Orchestration
 
-Orchestrators coordinate multiple channels for complex ingestion workflows where you need to manage indices, aliases, and lifecycle across entity types.
+Orchestrators coordinate multiple channels for complex ingestion workflows. When you need to manage multiple indices, handle schema migrations, or synchronize alias swaps across channels, orchestrators handle the coordination so you don't have to write that logic yourself.
 
 ## ChannelOrchestrator
 

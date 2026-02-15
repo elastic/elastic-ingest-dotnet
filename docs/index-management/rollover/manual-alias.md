@@ -58,5 +58,5 @@ Or use `IncrementalSyncOrchestrator`, which calls `CompleteAsync` to handle drai
 ## Related
 
 - [Alias strategy](../../strategies/alias.md): `LatestAndSearchAliasStrategy` implementation details
-- [Catalog data](../../getting-started/catalog-data.md): end-to-end example with alias management
+- [Catalog data](../../use-cases/catalog-data.md): end-to-end example with alias management
 - [Incremental sync](../../orchestration/incremental-sync.md): orchestrated alias swapping

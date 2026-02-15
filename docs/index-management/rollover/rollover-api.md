@@ -8,13 +8,19 @@ The rollover API creates a new index (or data stream backing index) when the cur
 
 ## Configuration
 
-Add a rollover strategy to your channel options:
+To use manual rollover, compose a full `IngestStrategy<T>` that includes `ManualRolloverStrategy`:
 
 ```csharp
-var options = new IngestChannelOptions<LogEntry>(transport, MyContext.LogEntry.Context)
-{
-    RolloverStrategy = new ManualRolloverStrategy()
-};
+var strategy = new IngestStrategy<LogEntry>(
+    LoggingContext.LogEntry.Context,
+    BootstrapStrategies.DataStream(),
+    new DataStreamIngestStrategy<LogEntry>("logs-myapp-production", "/_bulk"),
+    new AlwaysCreateProvisioning(),
+    new NoAliasStrategy(),
+    new ManualRolloverStrategy()
+);
+var options = new IngestChannelOptions<LogEntry>(transport, strategy,
+    LoggingContext.LogEntry.Context);
 using var channel = new IngestChannel<LogEntry>(options);
 ```
 

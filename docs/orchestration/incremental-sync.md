@@ -230,6 +230,6 @@ Console.WriteLine($"Completed: {success}");
 
 ## Related
 
-- [Catalog data](../getting-started/catalog-data.md): use case guide for catalog data with orchestration
+- [Catalog data](../use-cases/catalog-data.md): use case guide for catalog data with orchestration
 - [Provisioning strategies](../strategies/provisioning.md): hash-based index reuse
 - [Alias strategies](../strategies/alias.md): alias swapping behavior

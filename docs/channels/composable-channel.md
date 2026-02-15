@@ -4,7 +4,11 @@ navigation_title: Configuration
 
 # Channel configuration
 
-`IngestChannel<T>` supports two configuration modes: auto-configuration from `ElasticsearchTypeContext`, and manual configuration with explicit strategies.
+`IngestChannel<T>` supports two configuration modes: auto-configuration from `ElasticsearchTypeContext`, and manual configuration with explicit strategies via the `IngestStrategies` and `BootstrapStrategies` factory methods.
+
+## Why
+
+Channel configuration determines how your documents reach Elasticsearch -- which index they target, what templates are created, and how aliases are managed. The composable strategy pattern lets you start with zero-config defaults and override individual behaviors as your needs grow.
 
 ## Auto-configuration
 
@@ -25,52 +29,38 @@ Auto-resolution rules:
 
 ## Manual configuration
 
-Override any strategy for full control:
+Use the `IngestStrategies` and `BootstrapStrategies` factory methods for full control:
 
 ```csharp
-var options = new IngestChannelOptions<MyDoc>(transport)
-{
-    TemplateName = "my-template",
-    TemplateWildcard = "my-template-*",
-    IngestStrategy = new IndexIngestStrategy<MyDoc>("my-index"),
-    BootstrapStrategy = new DefaultBootstrapStrategy(
-        new ComponentTemplateStep(),
-        new IndexTemplateStep()
-    ),
-    ProvisioningStrategy = new AlwaysCreateProvisioning(),
-    AliasStrategy = new NoAliasStrategy()
-};
+// Data stream with 30-day retention
+var strategy = IngestStrategies.DataStream<LogEntry>(
+    LoggingContext.LogEntry.Context, "30d");
+var options = new IngestChannelOptions<LogEntry>(transport, strategy,
+    LoggingContext.LogEntry.Context);
+
+// Data stream with ILM
+var strategy = IngestStrategies.DataStream<LogEntry>(
+    LoggingContext.LogEntry.Context,
+    BootstrapStrategies.DataStreamWithIlm("logs-policy", hotMaxAge: "7d", deleteMinAge: "90d"));
+var options = new IngestChannelOptions<LogEntry>(transport, strategy,
+    LoggingContext.LogEntry.Context);
+
+// Index with ILM
+var strategy = IngestStrategies.Index<Product>(
+    CatalogContext.Product.Context,
+    BootstrapStrategies.IndexWithIlm("my-policy"));
+var options = new IngestChannelOptions<Product>(transport, strategy,
+    CatalogContext.Product.Context);
 ```
 
 ## Options reference
 
-### Strategy options
+### Core options
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `TypeContext` | `ElasticsearchTypeContext?` | Source-generated context for auto-configuration |
-| `IngestStrategy` | `IDocumentIngestStrategy<TEvent>?` | Controls per-document bulk operation headers and URL |
-| `BootstrapStrategy` | `IBootstrapStrategy?` | Controls template and index creation |
-| `ProvisioningStrategy` | `IIndexProvisioningStrategy?` | Controls whether to create or reuse indices |
-| `AliasStrategy` | `IAliasStrategy?` | Controls alias management after indexing |
-| `RolloverStrategy` | `IRolloverStrategy?` | Controls manual index/data stream rollover |
-
-### Template options
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `TemplateName` | `string?` | Index template name |
-| `TemplateWildcard` | `string?` | Wildcard pattern for index template matching |
-| `GetMappingsJson` | `Func<string>?` | Function returning mappings JSON |
-| `GetMappingSettings` | `Func<string>?` | Function returning analysis settings JSON |
-
-### Lifecycle options
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `IlmPolicy` | `string?` | ILM policy name (self-managed only) |
-| `DataStreamLifecycleRetention` | `string?` | Retention period for data stream lifecycle (for example, `"30d"`) |
-| `DataStreamType` | `string?` | Data stream type (for example, `"logs"`, `"metrics"`) |
+| `Strategy` | `IIngestStrategy<TEvent>` | The composed strategy defining all channel behaviors (set via constructor) |
+| `TypeContext` | `ElasticsearchTypeContext?` | Source-generated context for auto-configuration and mappings |
 
 ### Buffer options
 
@@ -92,6 +82,15 @@ var options = new IngestChannelOptions<MyDoc>(transport, MyContext.MyDoc.Context
 
 See [push model](../architecture/push-model.md) for the full buffer options reference.
 
+### Serialization options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `SerializerContext` | `JsonSerializerContext?` | Source-generated serializer context for AOT |
+| `EventWriter` | `IElasticsearchEventWriter<TEvent>?` | Custom per-document serialization |
+
+See [serialization](../advanced/serialization.md) for details.
+
 ## Callbacks
 
 Register callback listeners to observe channel behavior:
@@ -109,23 +108,6 @@ Callback hooks include:
 - **Export**: `ExportItemsAttempt`, `ExportResponse`, `ExportException`
 - **Retry**: `ExportRetryableCount`, `ExportRetry`, `ExportMaxRetries`
 
-## Rollover
-
-When a `RolloverStrategy` is configured, trigger manual rollover:
-
-```csharp
-options.RolloverStrategy = new ManualRolloverStrategy();
-var channel = new IngestChannel<LogEntry>(options);
-
-// Rollover with conditions
-await channel.RolloverAsync(maxAge: "7d", maxSize: "50gb");
-
-// Unconditional rollover
-await channel.RolloverAsync();
-```
-
-See [rollover strategies](../strategies/rollover.md) and [rollover API](../index-management/rollover/rollover-api.md).
-
 ## Bootstrap
 
 ```csharp
@@ -140,3 +122,29 @@ await channel.BootstrapElasticsearchAsync(BootstrapMethod.None);
 ```
 
 Bootstrap is idempotent: if templates exist with the same content hash, the PUT operations are skipped.
+
+## Rollover
+
+To use manual rollover, compose a strategy that includes `ManualRolloverStrategy` and pass it via the `IngestStrategy<T>` constructor:
+
+```csharp
+var strategy = new IngestStrategy<LogEntry>(
+    LoggingContext.LogEntry.Context,
+    BootstrapStrategies.DataStream(),
+    new DataStreamIngestStrategy<LogEntry>("logs-myapp-production", "/_bulk"),
+    new AlwaysCreateProvisioning(),
+    new NoAliasStrategy(),
+    new ManualRolloverStrategy()
+);
+var options = new IngestChannelOptions<LogEntry>(transport, strategy,
+    LoggingContext.LogEntry.Context);
+using var channel = new IngestChannel<LogEntry>(options);
+
+// Rollover with conditions
+await channel.RolloverAsync(maxAge: "7d", maxSize: "50gb");
+
+// Unconditional rollover
+await channel.RolloverAsync();
+```
+
+See [rollover strategies](../strategies/rollover.md) and [rollover API](../index-management/rollover/rollover-api.md).

@@ -6,6 +6,10 @@ navigation_title: E-commerce
 
 This guide covers a common pattern: syncing a product catalog from a source system (database, CMS, PIM) into Elasticsearch for search.
 
+## Why
+
+Products change -- prices update, descriptions are rewritten, items go out of stock. You need a way to push those changes to Elasticsearch as upserts (create if new, update if changed) while keeping your search index consistent and avoiding downtime during reindexes.
+
 ## Scenario
 
 - Products change periodically (prices, descriptions, availability)
@@ -97,33 +101,16 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), ctx);
 await channel.ApplyAliasesAsync(string.Empty, ctx);
 ```
 
-## Full sync with IncrementalSyncOrchestrator
-
-For a complete sync workflow that handles alias swapping and old-index cleanup automatically, use `IncrementalSyncOrchestrator`:
-
-```csharp
-using var orchestrator = new IncrementalSyncOrchestrator<Product>(
-    transport,
-    primary: CatalogContext.Product.Context,
-    secondary: CatalogContext.Product.Context  // same schema for both
-);
-
-var strategy = await orchestrator.StartAsync(BootstrapMethod.Failure);
-
-foreach (var product in await GetProductsFromSource())
-    orchestrator.TryWrite(product);
-
-await orchestrator.CompleteAsync(drainMaxWait: TimeSpan.FromSeconds(30));
-```
-
-`CompleteAsync` handles draining, refreshing, alias swapping, reindexing (if needed), and cleanup in a single call.
-
 ## Production considerations
 
 - Set `BufferOptions.InboundBufferMaxSize` higher for large catalogs (millions of products)
 - Use `WaitToWriteAsync` instead of `TryWrite` if you want backpressure when the buffer is full
 - Schedule syncs during off-peak hours for large full reindexes
 - The `[ContentHash]` attribute enables the provisioning strategy to detect unchanged schemas and reuse the existing index
+
+## Next steps
+
+For a complete sync workflow that handles alias swapping and old-index cleanup automatically, see [IncrementalSyncOrchestrator](../orchestration/incremental-sync.md). It wraps the single-channel pattern shown above with coordinated multi-index management, schema change detection, and automatic cleanup.
 
 ## Related
 

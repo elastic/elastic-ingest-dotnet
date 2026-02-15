@@ -6,6 +6,42 @@ navigation_title: Bootstrap
 
 Bootstrap strategies control how Elasticsearch infrastructure (templates, policies, endpoints) is created before ingestion begins.
 
+## Why
+
+Your channel needs Elasticsearch infrastructure to exist before it can write data: component templates define your mappings and settings, index templates tie them together, and optional ILM policies or lifecycle configurations manage data retention. Bootstrap strategies create all of this automatically so you don't have to manage it manually.
+
+## BootstrapStrategies factory
+
+The easiest way to create bootstrap strategies is through the `BootstrapStrategies` factory:
+
+```csharp
+// Data stream (component + data stream templates)
+BootstrapStrategies.DataStream()
+
+// Data stream with retention
+BootstrapStrategies.DataStream("30d")
+
+// Data stream with ILM
+BootstrapStrategies.DataStreamWithIlm("my-policy", hotMaxAge: "7d", deleteMinAge: "90d")
+
+// Index (component + index templates)
+BootstrapStrategies.Index()
+
+// Index with ILM
+BootstrapStrategies.IndexWithIlm("my-policy", hotMaxAge: "30d", deleteMinAge: "180d")
+
+// No-op (wired streams)
+BootstrapStrategies.None()
+```
+
+Pass the result to an `IngestStrategies` factory method:
+
+```csharp
+var strategy = IngestStrategies.DataStream<LogEntry>(context,
+    BootstrapStrategies.DataStreamWithIlm("logs-policy", hotMaxAge: "7d", deleteMinAge: "90d"));
+var options = new IngestChannelOptions<LogEntry>(transport, strategy, context);
+```
+
 ## IBootstrapStrategy
 
 The `IBootstrapStrategy` interface orchestrates an ordered list of `IBootstrapStep` instances:

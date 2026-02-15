@@ -30,7 +30,7 @@ var transport = new DistributedTransport(
     new TransportConfiguration(new Uri("http://localhost:9200"))
 );
 
-var options = new IngestChannelOptions<MyDoc>(transport, MyContext.MyDoc);
+var options = new IngestChannelOptions<MyDoc>(transport, MyContext.MyDoc.Context);
 ```
 
 Transport configuration (timeouts, authentication, connection pooling) is handled by `Elastic.Transport` -- the channel inherits whatever is configured on the transport instance.
