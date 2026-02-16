@@ -13,7 +13,7 @@ A PIT captures a consistent snapshot of the index at a point in time. Combined w
 ## Basic usage
 
 ```csharp
-using Elastic.Ingest.Elasticsearch.Search;
+using Elastic.Ingest.Elasticsearch.Helpers;
 
 var options = new PointInTimeSearchOptions
 {

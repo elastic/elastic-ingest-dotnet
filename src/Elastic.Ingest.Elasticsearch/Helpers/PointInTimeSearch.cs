@@ -12,7 +12,7 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using Elastic.Transport;
 
-namespace Elastic.Ingest.Elasticsearch.Search;
+namespace Elastic.Ingest.Elasticsearch.Helpers;
 
 /// <summary>
 /// Provides PIT-based search_after iteration over an Elasticsearch index.

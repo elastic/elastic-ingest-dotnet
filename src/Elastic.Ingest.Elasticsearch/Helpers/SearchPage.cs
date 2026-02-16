@@ -3,7 +3,7 @@
 // See the LICENSE file in the project root for more information
 using System.Collections.Generic;
 
-namespace Elastic.Ingest.Elasticsearch.Search;
+namespace Elastic.Ingest.Elasticsearch.Helpers;
 
 /// <summary>
 /// Represents a page of search results from a point-in-time search.

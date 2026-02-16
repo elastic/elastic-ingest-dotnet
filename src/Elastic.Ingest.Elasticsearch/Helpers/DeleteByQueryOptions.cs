@@ -4,7 +4,7 @@
 using System;
 using Elastic.Mapping;
 
-namespace Elastic.Ingest.Elasticsearch.Queries;
+namespace Elastic.Ingest.Elasticsearch.Helpers;
 
 /// <summary>
 /// Configuration for <see cref="DeleteByQuery"/>.

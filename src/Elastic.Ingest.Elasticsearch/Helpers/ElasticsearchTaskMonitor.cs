@@ -8,7 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Transport;
 
-namespace Elastic.Ingest.Elasticsearch.Tasks;
+namespace Elastic.Ingest.Elasticsearch.Helpers;
 
 internal static class ElasticsearchTaskMonitor
 {

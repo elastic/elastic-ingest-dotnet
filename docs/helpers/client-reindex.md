@@ -14,8 +14,7 @@ Use client-side reindex when you need to transform documents between indices usi
 
 ```csharp
 using Elastic.Ingest.Elasticsearch;
-using Elastic.Ingest.Elasticsearch.Reindex;
-using Elastic.Ingest.Elasticsearch.Search;
+using Elastic.Ingest.Elasticsearch.Helpers;
 
 // Create and configure the destination channel (caller owns its lifecycle)
 var channelOpts = new IngestChannelOptions<MyDocument>(transport, myTypeContext);

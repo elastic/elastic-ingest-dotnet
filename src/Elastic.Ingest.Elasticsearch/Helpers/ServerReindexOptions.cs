@@ -4,7 +4,7 @@
 using System;
 using Elastic.Mapping;
 
-namespace Elastic.Ingest.Elasticsearch.Reindex;
+namespace Elastic.Ingest.Elasticsearch.Helpers;
 
 /// <summary>
 /// Configuration for <see cref="ServerReindex"/>.

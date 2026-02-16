@@ -3,7 +3,7 @@
 // See the LICENSE file in the project root for more information
 using System;
 
-namespace Elastic.Ingest.Elasticsearch.Reindex;
+namespace Elastic.Ingest.Elasticsearch.Helpers;
 
 /// <summary>
 /// Progress snapshot for a client-side reindex operation.

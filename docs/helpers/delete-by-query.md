@@ -13,7 +13,7 @@ Use delete-by-query for bulk deletion of documents matching a query -- cleaning 
 ## Basic usage
 
 ```csharp
-using Elastic.Ingest.Elasticsearch.Queries;
+using Elastic.Ingest.Elasticsearch.Helpers;
 
 var dbq = new DeleteByQuery(transport, new DeleteByQueryOptions
 {

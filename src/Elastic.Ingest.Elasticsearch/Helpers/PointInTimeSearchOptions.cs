@@ -4,7 +4,7 @@
 
 using Elastic.Mapping;
 
-namespace Elastic.Ingest.Elasticsearch.Search;
+namespace Elastic.Ingest.Elasticsearch.Helpers;
 
 /// <summary>
 /// Configuration for <see cref="PointInTimeSearch{TDocument}"/>

@@ -15,7 +15,7 @@ The `IncrementalSyncOrchestrator` uses server-side reindex internally for its re
 ## Basic usage
 
 ```csharp
-using Elastic.Ingest.Elasticsearch.Reindex;
+using Elastic.Ingest.Elasticsearch.Helpers;
 
 var reindex = new ServerReindex(transport, new ServerReindexOptions
 {

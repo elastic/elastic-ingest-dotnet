@@ -7,10 +7,9 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Elastic.Ingest.Elasticsearch.Tasks;
 using Elastic.Transport;
 
-namespace Elastic.Ingest.Elasticsearch.Queries;
+namespace Elastic.Ingest.Elasticsearch.Helpers;
 
 /// <summary>
 /// Executes a _delete_by_query operation with wait_for_completion=false and monitors progress.

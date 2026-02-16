@@ -8,9 +8,8 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Elastic.Ingest.Elasticsearch.Search;
 
-namespace Elastic.Ingest.Elasticsearch.Reindex;
+namespace Elastic.Ingest.Elasticsearch.Helpers;
 
 /// <summary>
 /// Orchestrates a client-side reindex: reads from a source index using PIT search
