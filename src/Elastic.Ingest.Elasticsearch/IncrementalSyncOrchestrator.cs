@@ -8,6 +8,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels;
 using Elastic.Channels.Diagnostics;
+using Elastic.Ingest.Elasticsearch.Queries;
+using Elastic.Ingest.Elasticsearch.Reindex;
 using Elastic.Ingest.Elasticsearch.Strategies;
 using Elastic.Mapping;
 using Elastic.Transport;
@@ -254,11 +256,11 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 				secondaryTarget = _secondaryWriteAlias;
 
 			// 3. Reindex updates: last_updated >= batchTimestamp
-			await ReindexAsync(_primaryWriteAlias!, secondaryTarget!, "updates",
+			await ReindexAsync(_primaryWriteAlias!, secondaryTarget!,
 				BuildRangeQuery(LastUpdatedField, "gte"), ctx).ConfigureAwait(false);
 
 			// 4. Reindex deletions: batch_index_date < batchTimestamp → delete script
-			await ReindexWithDeleteScriptAsync(_primaryWriteAlias!, secondaryTarget!, "deletions",
+			await ReindexWithDeleteScriptAsync(_primaryWriteAlias!, secondaryTarget!,
 				BuildRangeQuery(BatchIndexDateField, "lt"), ctx).ConfigureAwait(false);
 
 			// 5. Delete old from primary
@@ -330,27 +332,11 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		return primary && secondary;
 	}
 
-	private string ResolvePrimaryWriteAlias()
-	{
-		var writeTarget = _primaryTypeContext.IndexStrategy?.WriteTarget;
-		if (string.IsNullOrEmpty(writeTarget))
-			throw new InvalidOperationException("Primary TypeContext must have IndexStrategy.WriteTarget");
+	private string ResolvePrimaryWriteAlias() =>
+		TypeContextResolver.ResolveWriteAlias(_primaryTypeContext);
 
-		return _primaryTypeContext.IndexStrategy?.DatePattern != null
-			? $"{writeTarget}-latest"
-			: writeTarget!;
-	}
-
-	private string ResolveSecondaryWriteAlias()
-	{
-		var writeTarget = _secondaryTypeContext.IndexStrategy?.WriteTarget;
-		if (string.IsNullOrEmpty(writeTarget))
-			throw new InvalidOperationException("Secondary TypeContext must have IndexStrategy.WriteTarget");
-
-		return _secondaryTypeContext.IndexStrategy?.DatePattern != null
-			? $"{writeTarget}-latest"
-			: writeTarget!;
-	}
+	private string ResolveSecondaryWriteAlias() =>
+		TypeContextResolver.ResolveWriteAlias(_secondaryTypeContext);
 
 	private async Task<string?> ResolveExistingIndexAsync(string alias, CancellationToken ctx)
 	{
@@ -362,24 +348,18 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		return string.IsNullOrEmpty(index) ? null : index;
 	}
 
-	private async Task ReindexAsync(string source, string dest, string opType, string query, CancellationToken ctx)
+	private async Task ReindexAsync(string source, string dest, string query, CancellationToken ctx)
 	{
-		var body = $$"""
+		var reindex = new ServerReindex(_transport, new ServerReindexOptions
 		{
-			"source": { "index": "{{source}}", "query": {{query}} },
-			"dest": { "index": "{{dest}}" }
-		}
-		""";
-		var response = await _transport.PostAsync<StringResponse>(
-			"_reindex?wait_for_completion=false", PostData.String(body), ctx
-		).ConfigureAwait(false);
-
-		var taskId = ExtractTaskId(response.Body);
-		if (taskId != null)
-			await PollTaskAsync(taskId, $"reindex-{opType}", ctx).ConfigureAwait(false);
+			Source = source,
+			Destination = dest,
+			Query = query,
+		});
+		await reindex.RunAsync(ctx).ConfigureAwait(false);
 	}
 
-	private async Task ReindexWithDeleteScriptAsync(string source, string dest, string opType, string query, CancellationToken ctx)
+	private async Task ReindexWithDeleteScriptAsync(string source, string dest, string query, CancellationToken ctx)
 	{
 		var body = $$"""
 		{
@@ -388,62 +368,28 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			"script": { "source": "ctx.op = 'delete'", "lang": "painless" }
 		}
 		""";
-		var response = await _transport.PostAsync<StringResponse>(
-			"_reindex?wait_for_completion=false", PostData.String(body), ctx
-		).ConfigureAwait(false);
-
-		var taskId = ExtractTaskId(response.Body);
-		if (taskId != null)
-			await PollTaskAsync(taskId, $"reindex-{opType}", ctx).ConfigureAwait(false);
+		var reindex = new ServerReindex(_transport, new ServerReindexOptions
+		{
+			Source = source,
+			Destination = dest,
+			Body = body,
+		});
+		await reindex.RunAsync(ctx).ConfigureAwait(false);
 	}
 
 	private async Task DeleteOldDocumentsAsync(string alias, CancellationToken ctx)
 	{
 		var query = BuildRangeQuery(BatchIndexDateField, "lt");
-		var body = $$"""{ "query": {{query}} }""";
-		var response = await _transport.PostAsync<StringResponse>(
-			$"{alias}/_delete_by_query?wait_for_completion=false", PostData.String(body), ctx
-		).ConfigureAwait(false);
-
-		var taskId = ExtractTaskId(response.Body);
-		if (taskId != null)
-			await PollTaskAsync(taskId, "delete-by-query", ctx).ConfigureAwait(false);
-	}
-
-	private async Task PollTaskAsync(string taskId, string operation, CancellationToken ctx)
-	{
-		while (!ctx.IsCancellationRequested)
+		var dbq = new DeleteByQuery(_transport, new DeleteByQueryOptions
 		{
-			await Task.Delay(TimeSpan.FromSeconds(5), ctx).ConfigureAwait(false);
-
-			var response = await _transport.GetAsync<StringResponse>($"_tasks/{taskId}", ctx).ConfigureAwait(false);
-			if (!response.ApiCallDetails.HasSuccessfulStatusCode)
-				break;
-
-			if (response.Body?.Contains("\"completed\":true") == true
-				|| response.Body?.Contains("\"completed\": true") == true)
-				break;
-		}
+			Index = alias,
+			QueryBody = query,
+		});
+		await dbq.RunAsync(ctx).ConfigureAwait(false);
 	}
 
 	private string BuildRangeQuery(string field, string op) =>
 		$$"""{ "range": { "{{field}}": { "{{op}}": "{{_batchTimestamp:o}}" } } }""";
-
-	private static string? ExtractTaskId(string? body)
-	{
-		if (string.IsNullOrEmpty(body))
-			return null;
-
-		// Parse {"task":"nodeId:taskNumber"} pattern
-		var taskMarker = "\"task\":\"";
-		var start = body!.IndexOf(taskMarker, StringComparison.Ordinal);
-		if (start < 0)
-			return null;
-
-		start += taskMarker.Length;
-		var end = body.IndexOf('"', start);
-		return end > start ? body.Substring(start, end - start) : null;
-	}
 
 	private void EnsureStarted()
 	{

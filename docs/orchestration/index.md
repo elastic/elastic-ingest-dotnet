@@ -21,6 +21,8 @@ Use `ChannelOrchestrator` when you have multiple independent channels that need 
 
 `IncrementalSyncOrchestrator<T>` coordinates a primary and secondary channel for incremental sync workflows. It automatically determines whether to use reindex mode (same schema) or multiplex mode (schema change), and handles drain, refresh, alias swapping, and cleanup in a single `CompleteAsync` call.
 
+Internally, the orchestrator uses [helper APIs](../helpers/index.md) (`ServerReindex`, `DeleteByQuery`) for its reindex and cleanup operations, with proper async task monitoring via `ElasticsearchTaskMonitor`.
+
 ```csharp
 using var orchestrator = new IncrementalSyncOrchestrator<Product>(
     transport,
@@ -35,3 +37,7 @@ await orchestrator.CompleteAsync(drainMaxWait: TimeSpan.FromSeconds(30));
 ```
 
 [Learn more ->](incremental-sync.md)
+
+## Lower-level helpers
+
+Orchestrators use [helper APIs](../helpers/index.md) internally for `_reindex`, `_delete_by_query`, and PIT-based iteration. If you need direct control over a single operation without the full orchestration workflow, use the helpers directly.

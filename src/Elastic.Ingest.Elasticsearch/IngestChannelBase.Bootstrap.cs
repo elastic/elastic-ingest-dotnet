@@ -166,19 +166,15 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 	{
 		if (_isServerless.HasValue)
 			return _isServerless.Value;
-		var rootInfo = Options.Transport.Request<DynamicResponse>(HttpMethod.GET, $"/");
-		var statusCode = rootInfo.ApiCallDetails.HttpStatusCode;
-		if (statusCode is not 200)
-			return bootstrapMethod == BootstrapMethod.Silent
-				? false
-				: throw new Exception(
-					$"Failure to check whether instance is serverless or not {rootInfo}",
-					rootInfo.ApiCallDetails.OriginalException
-				);
-		var flavor = rootInfo.Body.Get<string>("version.build_flavor");
-		_isServerless = statusCode is 200 && flavor == "serverless";
-		return _isServerless.Value;
-
+		try
+		{
+			_isServerless = ElasticsearchServerDetection.IsServerless(Options.Transport);
+			return _isServerless.Value;
+		}
+		catch when (bootstrapMethod == BootstrapMethod.Silent)
+		{
+			return false;
+		}
 	}
 
 	/// The indices and/o datastreams to refresh as part of this implementation

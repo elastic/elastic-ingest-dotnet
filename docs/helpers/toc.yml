@@ -1,0 +1,6 @@
+toc:
+  - file: index.md
+  - file: point-in-time-search.md
+  - file: server-reindex.md
+  - file: delete-by-query.md
+  - file: client-reindex.md
