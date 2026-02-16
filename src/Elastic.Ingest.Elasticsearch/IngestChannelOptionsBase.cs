@@ -15,12 +15,12 @@ using Elastic.Transport.Products.Elasticsearch;
 namespace Elastic.Ingest.Elasticsearch;
 
 /// <summary>
-/// Base options implementation for <see cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/> implementations
+/// Base options implementation for <see cref="IngestChannelBase{TEvent,TChannelOptions}"/> implementations
 /// </summary>
-public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem>
+public abstract class IngestChannelOptionsBase<TEvent> : TransportChannelOptionsBase<TEvent, BulkResponse, BulkResponseItem>
 {
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}"/>
-	protected ElasticsearchChannelOptionsBase(ITransport transport) : base(transport) { }
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}"/>
+	protected IngestChannelOptionsBase(ITransport transport) : base(transport) { }
 
 	/// <summary>
 	/// Export option, Optionally provide a custom write implementation for <typeparamref name="TEvent"/>
@@ -59,8 +59,8 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 			_serializerOptions = new JsonSerializerOptions
 			{
 				TypeInfoResolver = _serializerContext,
-				DefaultIgnoreCondition = ElasticsearchChannelStatics.SerializerOptions.DefaultIgnoreCondition,
-				Encoder = ElasticsearchChannelStatics.SerializerOptions.Encoder
+				DefaultIgnoreCondition = IngestChannelStatics.SerializerOptions.DefaultIgnoreCondition,
+				Encoder = IngestChannelStatics.SerializerOptions.Encoder
 			};
 		}
 	}
@@ -84,16 +84,16 @@ public abstract class ElasticsearchChannelOptionsBase<TEvent> : TransportChannel
 			_serializerOptions = new JsonSerializerOptions
 			{
 				TypeInfoResolver = _serializerContext,
-				DefaultIgnoreCondition = ElasticsearchChannelStatics.SerializerOptions.DefaultIgnoreCondition,
-				Encoder = ElasticsearchChannelStatics.SerializerOptions.Encoder
+				DefaultIgnoreCondition = IngestChannelStatics.SerializerOptions.DefaultIgnoreCondition,
+				Encoder = IngestChannelStatics.SerializerOptions.Encoder
 			};
 		}
 	}
 
 	private JsonSerializerOptions _serializerOptions = new()
 	{
-		DefaultIgnoreCondition = ElasticsearchChannelStatics.SerializerOptions.DefaultIgnoreCondition,
-		Encoder = ElasticsearchChannelStatics.SerializerOptions.Encoder
+		DefaultIgnoreCondition = IngestChannelStatics.SerializerOptions.DefaultIgnoreCondition,
+		Encoder = IngestChannelStatics.SerializerOptions.Encoder
 	};
 
 	internal JsonSerializerOptions SerializerOptions => _serializerOptions;

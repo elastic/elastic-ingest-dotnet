@@ -1,0 +1,4 @@
+toc:
+  - file: index.md
+  - file: composable-channel.md
+  - file: legacy-channels.md

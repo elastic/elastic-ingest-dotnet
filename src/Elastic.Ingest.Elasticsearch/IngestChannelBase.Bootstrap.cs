@@ -13,8 +13,8 @@ using Elastic.Transport;
 
 namespace Elastic.Ingest.Elasticsearch;
 
-public abstract partial class ElasticsearchChannelBase<TDocument, TChannelOptions>
-	where TChannelOptions : ElasticsearchChannelOptionsBase<TDocument>
+public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
+	where TChannelOptions : IngestChannelOptionsBase<TDocument>
 	where TDocument : class
 {
 	/// <summary> The index template name <see cref="BootstrapElasticsearch"/> should register.</summary>
@@ -27,10 +27,10 @@ public abstract partial class ElasticsearchChannelBase<TDocument, TChannelOption
 	protected virtual bool AlwaysBootstrapComponentTemplates => false;
 
 	/// <summary> A unique hash calculated when <see cref="BootstrapElasticsearchAsync"/> is called</summary>
-	public string ChannelHash { get; private set; } = string.Empty;
+	public string ChannelHash { get; protected set; } = string.Empty;
 
 	/// <summary>
-	/// Returns a minimal default index template for an <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> implementation
+	/// Returns a minimal default index template for an <see cref="IngestChannelBase{TEvent, TChannelOptions}"/> implementation
 	/// </summary>
 	/// <returns>A tuple of (name, body) describing the index template</returns>
 	protected abstract (string, string) GetDefaultIndexTemplate(string name, string match, string mappingsName, string settingsName, string hash);
@@ -39,13 +39,12 @@ public abstract partial class ElasticsearchChannelBase<TDocument, TChannelOption
 	/// Bootstrap the target data stream. Will register the appropriate index and component templates
 	/// </summary>
 	/// <param name="bootstrapMethod">Either None (no bootstrapping), Silent (quiet exit), Failure (throw exceptions)</param>
-	/// <param name="ilmPolicy">Registers a component template that ensures the template is managed by this ilm policy</param>
 	/// <param name="ctx"></param>
-	public virtual async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, string? ilmPolicy = null, CancellationToken ctx = default)
+	public virtual async Task<bool> BootstrapElasticsearchAsync(BootstrapMethod bootstrapMethod, CancellationToken ctx = default)
 	{
 		ctx = ctx == CancellationToken.None ? TokenSource.Token : ctx;
 
-		GenerateChannelHash(bootstrapMethod, ilmPolicy, out var settingsName, out var settingsBody, out var mappingsName, out var mappingsBody);
+		GenerateChannelHash(bootstrapMethod, out var settingsName, out var settingsBody, out var mappingsName, out var mappingsBody);
 
 		if (bootstrapMethod == BootstrapMethod.None) return true;
 
@@ -73,14 +72,13 @@ public abstract partial class ElasticsearchChannelBase<TDocument, TChannelOption
 	/// <summary> Generate the channel hash </summary>
 	protected void GenerateChannelHash(
 		BootstrapMethod bootstrapMethod,
-		string? ilmPolicy,
 		out string settingsName,
 		out string settingsBody,
 		out string mappingsName,
 		out string mappingsBody
 	)
 	{
-		(settingsName, settingsBody) = GetDefaultComponentSettings(bootstrapMethod, TemplateName, ilmPolicy);
+		(settingsName, settingsBody) = GetDefaultComponentSettings(bootstrapMethod, TemplateName);
 		(mappingsName, mappingsBody) = GetDefaultComponentMappings(TemplateName);
 
 		var hash = HashedBulkUpdate.CreateHash(settingsName, settingsBody, mappingsName, mappingsBody);
@@ -91,10 +89,9 @@ public abstract partial class ElasticsearchChannelBase<TDocument, TChannelOption
 	/// Bootstrap the target data stream. Will register the appropriate index and component templates
 	/// </summary>
 	/// <param name="bootstrapMethod">Either None (no bootstrapping), Silent (quiet exit), Failure (throw exceptions)</param>
-	/// <param name="ilmPolicy">Registers a component template that ensures the template is managed by this ilm policy</param>
-	public virtual bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod, string? ilmPolicy = null)
+	public virtual bool BootstrapElasticsearch(BootstrapMethod bootstrapMethod)
 	{
-		GenerateChannelHash(bootstrapMethod, ilmPolicy, out var settingsName, out var settingsBody, out var mappingsName, out var mappingsBody);
+		GenerateChannelHash(bootstrapMethod, out var settingsName, out var settingsBody, out var mappingsName, out var mappingsBody);
 
 		if (bootstrapMethod == BootstrapMethod.None) return true;
 
@@ -290,21 +287,15 @@ public abstract partial class ElasticsearchChannelBase<TDocument, TChannelOption
 	}
 
 	/// <summary>
-	/// Returns default component settings template for a <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/>
+	/// Returns default component settings template for a <see cref="IngestChannelBase{TEvent, TChannelOptions}"/>
 	/// </summary>
 	/// <returns>A tuple of (name, body) describing the default component template settings</returns>
-	protected (string, string) GetDefaultComponentSettings(BootstrapMethod bootstrapMethod, string indexTemplateName, string? ilmPolicy = null)
+	protected (string, string) GetDefaultComponentSettings(BootstrapMethod bootstrapMethod, string indexTemplateName)
 	{
-		if (string.IsNullOrWhiteSpace(ilmPolicy))
-			ilmPolicy = "logs";
-
 		var injectedSettings = GetDefaultComponentIndexSettings();
 		var overallSettings = new Dictionary<string, string>();
 		foreach (var kv in injectedSettings)
 			overallSettings[kv.Key] = kv.Value;
-
-		if (!IsServerless(bootstrapMethod) && ilmPolicy is not null)
-			overallSettings["index.lifecycle.name"] = ilmPolicy;
 
 		var settings = new StringBuilder("{");
 		var settingsAsJson = string.Join(",\n", overallSettings.Select(kv => $"  \"{kv.Key}\": \"{kv.Value}\""));
@@ -325,11 +316,11 @@ public abstract partial class ElasticsearchChannelBase<TDocument, TChannelOption
 		return (settingsName, settingsBody);
 	}
 
-	/// Allows implementations of <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> to inject additional component index settings
+	/// Allows implementations of <see cref="IngestChannelBase{TEvent, TChannelOptions}"/> to inject additional component index settings
 	protected virtual IReadOnlyDictionary<string, string> GetDefaultComponentIndexSettings() => new Dictionary<string, string>();
 
 	/// <summary>
-	/// Returns a minimal default mapping component settings template for a <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/>
+	/// Returns a minimal default mapping component settings template for a <see cref="IngestChannelBase{TEvent, TChannelOptions}"/>
 	/// </summary>
 	/// <returns>A tuple of (name, body) describing the default component template mappings</returns>
 	private (string, string) GetDefaultComponentMappings(string indexTemplateName)
@@ -350,10 +341,10 @@ public abstract partial class ElasticsearchChannelBase<TDocument, TChannelOption
 		return (settingsName, settingsBody);
 	}
 
-	/// Allows implementations of <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> to inject mappings for <typeparamref name="TDocument"/>
+	/// Allows implementations of <see cref="IngestChannelBase{TEvent, TChannelOptions}"/> to inject mappings for <typeparamref name="TDocument"/>
 	protected virtual string? GetMappings() => null;
 
-	/// Allows implementations of <see cref="ElasticsearchChannelBase{TEvent, TChannelOptions}"/> to inject settings allong with <see cref="GetMappings"/> for <typeparamref name="TDocument"/>
+	/// Allows implementations of <see cref="IngestChannelBase{TEvent, TChannelOptions}"/> to inject settings allong with <see cref="GetMappings"/> for <typeparamref name="TDocument"/>
 	protected virtual string? GetMappingSettings() => null;
 
 }

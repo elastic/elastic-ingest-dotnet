@@ -6,45 +6,40 @@ using System.Collections.Generic;
 using System.Linq;
 using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.Serialization;
+using Elastic.Ingest.Elasticsearch.Strategies;
 using Elastic.Ingest.Transport;
 using static System.StringComparison;
 
 namespace Elastic.Ingest.Elasticsearch.DataStreams;
 
 /// <summary> A channel to push messages to Elasticsearch data streams </summary>
-public class DataStreamChannel<TEvent> : ElasticsearchChannelBase<TEvent, DataStreamChannelOptions<TEvent>>
+public class DataStreamChannel<TEvent> : IngestChannelBase<TEvent, DataStreamChannelOptions<TEvent>>
 	where TEvent : class
 {
-	private readonly CreateOperation _fixedHeader;
-	private readonly string _url;
+	private readonly DataStreamIngestStrategy<TEvent> _ingestStrategy;
 
 	/// <inheritdoc cref="DataStreamChannel{TEvent}"/>
 	public DataStreamChannel(DataStreamChannelOptions<TEvent> options) : this(options, null) { }
 
 	/// <inheritdoc cref="DataStreamChannel{TEvent}"/>
 	public DataStreamChannel(DataStreamChannelOptions<TEvent> options, ICollection<IChannelCallbacks<TEvent, BulkResponse>>? callbackListeners)
-		: base(options, callbackListeners)
-	{
-		var dataStream = Options.DataStream.ToString();
+		: base(options, callbackListeners) =>
+		_ingestStrategy = new DataStreamIngestStrategy<TEvent>(Options.DataStream.ToString(), base.BulkPathAndQuery);
 
-		_url = $"{dataStream}/{base.BulkPathAndQuery}";
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
+	protected override string RefreshTargets => _ingestStrategy.RefreshTargets;
 
-		_fixedHeader = new CreateOperation();
-	}
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
+	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent document) =>
+		_ingestStrategy.CreateBulkOperationHeader(document, ChannelHash);
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>
-	protected override string RefreshTargets => Options.DataStream.ToString();
-
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
-	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent document) => _fixedHeader;
-
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateName"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.TemplateName"/>
 	protected override string TemplateName => Options.DataStream.GetTemplateName();
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent,TChannelOptions}.TemplateWildcard"/>
+	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.TemplateWildcard"/>
 	protected override string TemplateWildcard => Options.DataStream.GetNamespaceWildcard();
 
-	/// <inheritdoc cref="ElasticsearchChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
-	protected override string BulkPathAndQuery => _url;
+	/// <inheritdoc cref="IngestChannelBase{TEvent, TChannelOptions}.BulkPathAndQuery"/>
+	protected override string BulkPathAndQuery => _ingestStrategy.GetBulkUrl(base.BulkPathAndQuery);
 
 	/// <summary>
 	/// Gets a default index template for the current <see cref="DataStreamChannel{TEvent}"/>

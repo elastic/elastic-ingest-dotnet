@@ -11,7 +11,7 @@ using System.Text.Json.Serialization;
 
 namespace Elastic.Ingest.Elasticsearch;
 
-internal static class ElasticsearchChannelStatics
+internal static class IngestChannelStatics
 {
 	public static readonly byte[] LineFeed = [(byte)'\n'];
 
@@ -35,6 +35,8 @@ internal static class ElasticsearchChannelStatics
 		", \"doc\":"u8.ToArray();
 
 	public static readonly byte[] ScriptedHashUpsertEnd = " } } }"u8.ToArray();
+
+	public const string DefaultBulkPathAndQuery = "_bulk?filter_path=error,items.*.status,items.*.error,items.*.result,items.*._version";
 
 	public static readonly HashSet<int> RetryStatusCodes = [502, 503, 504, 429];
 

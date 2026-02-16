@@ -19,5 +19,5 @@ namespace Elastic.Ingest.Elasticsearch.Serialization;
 internal sealed partial class IngestSerializationContext : JsonSerializerContext
 {
 	static IngestSerializationContext() =>
-		Default = new IngestSerializationContext(ElasticsearchChannelStatics.SerializerOptions);
+		Default = new IngestSerializationContext(IngestChannelStatics.SerializerOptions);
 }

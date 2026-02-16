@@ -6,7 +6,7 @@ using Elastic.Transport;
 namespace Elastic.Ingest.Elasticsearch.DataStreams;
 
 /// <summary>Controls which data stream the channel should write to</summary>
-public class DataStreamChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEvent>
+public class DataStreamChannelOptions<TEvent> : IngestChannelOptionsBase<TEvent>
 {
 	/// <inheritdoc cref="DataStreamChannelOptions{TEvent}"/>
 	public DataStreamChannelOptions(ITransport transport) : base(transport) =>

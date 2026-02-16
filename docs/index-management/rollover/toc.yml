@@ -1,0 +1,6 @@
+toc:
+  - file: index.md
+  - file: manual-alias.md
+  - file: rollover-api.md
+  - file: ilm-managed.md
+  - file: data-stream-lifecycle.md

@@ -25,5 +25,8 @@
     <PackageReference Include="PolySharp" Version="1.15.0" PrivateAssets="all"
                       IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"/>
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Elastic.Mapping" Version="0.2.0" />
+  </ItemGroup>
 
 </Project>

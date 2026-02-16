@@ -73,7 +73,7 @@ public record HashedBulkUpdate
 /// Provides options to <see cref="IndexChannel{TEvent}"/> to control how and where data gets written to Elasticsearch
 /// </summary>
 /// <typeparam name="TEvent"></typeparam>
-public class IndexChannelOptions<TEvent> : ElasticsearchChannelOptionsBase<TEvent>
+public class IndexChannelOptions<TEvent> : IngestChannelOptionsBase<TEvent>
 {
 	/// <inheritdoc cref="IndexChannelOptions{TEvent}"/>
 	public IndexChannelOptions(ITransport transport) : base(transport) { }
