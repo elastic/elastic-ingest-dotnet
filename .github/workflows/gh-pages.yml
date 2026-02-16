@@ -1,0 +1,28 @@
+name: Build the docs
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Publish Github
+        uses: elastic/docs-builder/actions/publish@main
+        id: deployment
+        with:
+          continue-on-error: "true"
