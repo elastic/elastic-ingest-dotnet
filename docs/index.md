@@ -116,5 +116,6 @@ dotnet add package Elastic.Ingest.Elasticsearch
 - [Index management](index-management/index.md): indices, data streams, rollover, and lifecycle
 - [Strategies](strategies/index.md): composable strategy pattern and factory methods
 - [Orchestration](orchestration/index.md): coordinating multiple channels
+- [Helpers](helpers/index.md): PIT search, server-side reindex, delete-by-query, client-side reindex
 - [Use cases](use-cases/index.md): end-to-end guides for every ingestion pattern
 - [Advanced topics](advanced/index.md): ILM, custom strategies, serialization

@@ -213,10 +213,88 @@ However, external inference identifiers can be provided as well.
 ```csharp
 var options = new SemanticIndexChannelOptions<MyDocument>(transport)
 {
-   UsePreexistingInferenceIds = true   
+   UsePreexistingInferenceIds = true
    InferenceId = "my-inference-id",
    SearchInferenceId = "my-search-inference-id"
 };
 ```
 
+## Helper APIs
+
+Beyond channel-based bulk ingest, the library provides helper APIs for common Elasticsearch operations.
+All helpers accept an `ITransport` instance and yield `IAsyncEnumerable` streams for progress monitoring.
+
+### `PointInTimeSearch<TDocument>`
+
+Iterates all documents in an index using a PIT with `search_after` pagination. Supports auto-slicing for parallel reads.
+
+```csharp
+var options = new PointInTimeSearchOptions
+{
+    Index = "my-index",
+    Size = 1000,
+    QueryBody = """{"match_all":{}}""",
+};
+await using var search = new PointInTimeSearch<MyDocument>(transport, options);
+await foreach (var page in search.SearchPagesAsync())
+{
+    // page.Documents, page.TotalDocuments, page.HasMore
+}
+```
+
+### `ServerReindex`
+
+Starts a server-side `_reindex` with `wait_for_completion=false` and polls the task until done.
+
+```csharp
+var reindex = new ServerReindex(transport, new ServerReindexOptions
+{
+    Source = "old-index",
+    Destination = "new-index",
+    Slices = "auto",
+});
+await foreach (var progress in reindex.MonitorAsync())
+{
+    // progress.Created, progress.Updated, progress.FractionComplete
+}
+```
+
+### `DeleteByQuery`
+
+Starts a `_delete_by_query` with `wait_for_completion=false` and polls the task until done.
+
+```csharp
+var dbq = new DeleteByQuery(transport, new DeleteByQueryOptions
+{
+    Index = "my-index",
+    QueryBody = """{"range":{"@timestamp":{"lt":"now-30d"}}}""",
+});
+await foreach (var progress in dbq.MonitorAsync())
+{
+    // progress.Deleted, progress.Total, progress.FractionComplete
+}
+```
+
+### `ClientReindex<TDocument>`
+
+Reads from a source index via `PointInTimeSearch` and writes to a destination `IngestChannel`,
+with an optional per-document transform. The caller owns the channel lifecycle.
+
+```csharp
+var channelOpts = new IngestChannelOptions<MyDocument>(transport, myTypeContext);
+using var channel = new IngestChannel<MyDocument>(channelOpts);
+
+var reindex = new ClientReindex<MyDocument>(new ClientReindexOptions<MyDocument>
+{
+    Source = new PointInTimeSearchOptions { Index = "source-index" },
+    Destination = channel,
+    Transform = doc => { doc.Title = doc.Title.ToUpperInvariant(); return doc; },
+});
+await foreach (var progress in reindex.RunAsync())
+{
+    // progress.DocumentsRead, progress.DocumentsWritten, progress.IsCompleted
+}
+```
+
+See the `docs/helpers/` folder in the repository for full documentation on each helper.
 

@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Mapping;
@@ -63,6 +64,21 @@ public class IncrementalSyncOrchestratorTests
 			.DisablePing()
 			.EnableDebugMode();
 
+		return new DistributedTransport(settings);
+	}
+
+	/// <summary>
+	/// Creates a transport that returns task-compatible JSON for all responses.
+	/// The response body contains both "task" (for starting async ops) and "completed" (for polling).
+	/// </summary>
+	private static DistributedTransport<ITransportConfiguration> CreateTransportWithTaskResponse()
+	{
+		var responseBytes = Encoding.UTF8.GetBytes("""{"task":"n:1","completed":true}""");
+		var connection = VirtualClusterRequestInvoker.Success(responseBytes);
+		var pool = new SingleNodePool(new Uri("http://localhost:9200"));
+		var settings = new TransportConfigurationDescriptor(pool, connection)
+			.DisablePing()
+			.EnableDebugMode();
 		return new DistributedTransport(settings);
 	}
 
@@ -224,7 +240,7 @@ public class IncrementalSyncOrchestratorTests
 	[Fact]
 	public async Task OnPostCompleteIsCalledDuringComplete()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateSimpleOrchestrator(transport);
 
 		OrchestratorContext<TestDocument>? capturedContext = null;
@@ -310,7 +326,7 @@ public class IncrementalSyncOrchestratorTests
 	[Fact]
 	public async Task CompleteAsyncMultiplexDrainsBothChannels()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateSimpleOrchestrator(transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);

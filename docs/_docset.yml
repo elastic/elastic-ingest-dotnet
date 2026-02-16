@@ -9,5 +9,6 @@ toc:
   - toc: index-management
   - toc: strategies
   - toc: orchestration
+  - toc: helpers
   - toc: use-cases
   - toc: advanced

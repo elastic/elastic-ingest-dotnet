@@ -15,7 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Elastic.Channels\Elastic.Channels.csproj" />
-    <PackageReference Include="Elastic.Transport" Version="0.10.1" />
+    <PackageReference Include="Elastic.Transport" Version="0.11.0" />
   </ItemGroup>
 
 </Project>
