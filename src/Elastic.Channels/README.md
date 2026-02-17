@@ -1,80 +1,19 @@
 # Elastic.Channels
 
-Provides an specialized `System.Threading.Channels.ChannelWriter` implementation that makes it easy
-to consume data pushed to that thread in batches.
+A thread-safe, batching `ChannelWriter` for high-throughput data pipelines.
 
-The batches will emit either when a certain maximum is hit or when a batch's lifecycle exceeds a certain age.
+Most users install [`Elastic.Ingest.Elasticsearch`](https://www.nuget.org/packages/Elastic.Ingest.Elasticsearch) which pulls this package in as a transitive dependency.
 
-This allows data of various rates to pushed in the same manner while different implementations to send the batched data to receivers can be implemented. 
+## What it provides
 
-This package serves mainly as a core library with abstract classes 
-and does not ship any useful implementations.
-
-It ships with a `NoopBufferedChannel` implementation that does nothing in its `ExporExport implementation for unit test and benchmark purposes.
-
-
-## BufferedChannelBase<>
-
-An abstract class that requires implementers to implement:
-
-```csharp
-protected abstract Task<TResponse> Export(IReadOnlyCollection<TEvent> buffer, CancellationToken ctx);
-```
-
-Any implementation allows data to pushed to it through:
-
-```csharp
-var e = new TEvent();
-if (await channel.WaitToWriteAsync(e))
-	written++;
-```
-
-## ChannelOptionsBase<>
-
-Implementers of `BufferedChannelBase<>` must also create their own implementation of `ChannelOptionsBase<>`. This to ensure each channel implementation creates an appropriately named options class.
-
-
-## Quick minimal implementation
-
-```chsarp
-
-public class Event { }
-public class Response { }
-
-public class NoopChannelOptions 
-  : ChannelOptionsBase<Event, Response> { }
-
-public class NoopBufferedChannel 
-  : BufferedChannelBase<NoopChannelOptions, Event, Response>
-{
-
-  public NoopBufferedChannel(NoopChannelOptions options) 
-    : base(options) { }
-
-  protected override Task<Response> Export(IReadOnlyCollection<NoopEvent> buffer, CancellationToken ctx)
-  {
-    return Task.FromResult(new Response());
-  }
-}
-```
-
-Now once we instantiate an `NoopBufferedChannel` we can use it push data to it.
-
-```csharp
-var e = new Event();
-if (await noopChannel.WaitToWriteAsync(e))
-	written++;
-```
-
-Both `NoopBufferedChannel` and a more specialized `DiagnosticsBufferedChannel` exist for test or debugging purposes.
-
-`DiagnosticsBufferedChannel.ToString()` uncovers a lot of insights into the state machinery. 
-
+- **Automatic batching** — flushes when the buffer hits a max count _or_ a max age, whichever comes first
+- **Concurrent export** — configurable parallelism for sending batches
+- **Retry with backoff** — configurable retry count and backoff function
+- **Backpressure** — bounded inbound buffer with `BoundedChannelFullMode` control (drop or wait)
 
 ## BufferOptions
 
-Each `ChannelOptionsBase<>` implementation takes and exposes a `BufferOptions` instance. This controls the buffering behavior of `BufferedChannelBase<>`.
-
+Each channel exposes a `BufferOptions` instance that controls buffering behavior:
 
 | Option                      | Description                                                                                                                  |
 |-----------------------------|------------------------------------------------------------------------------------------------------------------------------|
@@ -86,3 +25,10 @@ Each `ChannelOptionsBase<>` implementation takes and exposes a `BufferOptions` i
 | `ExportBackOfPeriod`        | Func that calculates an appropriate backoff time for a retry                                                                 |
 | `ExportBufferCallback`      | Called `once` whenever a buffer is flushed, excluding retries                                                                |
 | `WaitHandle`                | Inject a waithandle that will be signalled after each flush, excluding retries.                                              |
+
+## Documentation
+
+Full documentation: **<https://elastic.github.io/elastic-ingest-dotnet/>**
+
+- [Architecture](https://elastic.github.io/elastic-ingest-dotnet/architecture/) — how the two-stage buffered pipeline works
+- [Channels](https://elastic.github.io/elastic-ingest-dotnet/channels/) — buffer tuning, callbacks, serialization
