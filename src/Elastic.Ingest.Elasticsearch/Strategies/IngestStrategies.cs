@@ -39,8 +39,7 @@ public static class IngestStrategies
 		return new IngestStrategy<TEvent>(tc,
 			bootstrap ?? BootstrapStrategies.DataStream(),
 			new DataStreamIngestStrategy<TEvent>(
-				tc.IndexStrategy?.DataStreamName
-				?? throw new InvalidOperationException("DataStreamName must be set for DataStream targets."),
+				ResolveDataStreamName(tc),
 				DefaultBulkPathAndQuery),
 			new AlwaysCreateProvisioning(),
 			new NoAliasStrategy());
@@ -86,6 +85,27 @@ public static class IngestStrategies
 	}
 
 	/// <summary>
+	/// Resolves the effective data stream name from a <see cref="ElasticsearchTypeContext"/>.
+	/// When <c>DataStreamName</c> is null (namespace omitted on the attribute), falls back to
+	/// <c>{Type}-{Dataset}-{ResolveDefaultNamespace()}</c> using environment variables.
+	/// </summary>
+	internal static string ResolveDataStreamName(ElasticsearchTypeContext tc)
+	{
+		if (tc.IndexStrategy?.DataStreamName != null)
+			return tc.IndexStrategy.DataStreamName;
+
+		if (tc.IndexStrategy?.Type != null && tc.IndexStrategy?.Dataset != null)
+		{
+			var ns = tc.IndexStrategy.Namespace
+				?? ElasticsearchTypeContext.ResolveDefaultNamespace();
+			return $"{tc.IndexStrategy.Type}-{tc.IndexStrategy.Dataset}-{ns}";
+		}
+
+		throw new InvalidOperationException(
+			"DataStream targets require either DataStreamName or Type+Dataset on IndexStrategy.");
+	}
+
+	/// <summary>
 	/// Resolves the template name from a <see cref="ElasticsearchTypeContext"/>.
 	/// </summary>
 	internal static string ResolveTemplateName(ElasticsearchTypeContext? tc)
@@ -96,7 +116,7 @@ public static class IngestStrategies
 
 		return tc.EntityTarget switch
 		{
-			EntityTarget.DataStream when tc.IndexStrategy?.DataStreamName != null =>
+			EntityTarget.DataStream when tc.IndexStrategy?.Type != null && tc.IndexStrategy?.Dataset != null =>
 				$"{tc.IndexStrategy.Type}-{tc.IndexStrategy.Dataset}",
 			EntityTarget.Index when tc.IndexStrategy?.WriteTarget != null =>
 				$"{tc.IndexStrategy.WriteTarget}-template",
@@ -116,7 +136,7 @@ public static class IngestStrategies
 
 		return tc.EntityTarget switch
 		{
-			EntityTarget.DataStream when tc.IndexStrategy?.DataStreamName != null =>
+			EntityTarget.DataStream when tc.IndexStrategy?.Type != null && tc.IndexStrategy?.Dataset != null =>
 				$"{tc.IndexStrategy.Type}-{tc.IndexStrategy.Dataset}-*",
 			EntityTarget.Index when tc.IndexStrategy?.WriteTarget != null =>
 				$"{tc.IndexStrategy.WriteTarget}-*",

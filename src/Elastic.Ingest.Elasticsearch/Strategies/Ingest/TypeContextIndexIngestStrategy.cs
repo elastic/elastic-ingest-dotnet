@@ -67,7 +67,8 @@ public class TypeContextIndexIngestStrategy<TDocument> : IDocumentIngestStrategy
 			var contentHash = _typeContext.GetContentHash(document!);
 			if (contentHash != null)
 			{
-				var hashInfo = new HashedBulkUpdate("content_hash", contentHash);
+				var hashInfo = new HashedBulkUpdate(
+					_typeContext.ContentHashFieldName ?? "content_hash", contentHash);
 				return _skipIndexNameOnOperations
 					? new ScriptedHashUpdateOperation { Id = id, UpdateInformation = hashInfo }
 					: new ScriptedHashUpdateOperation { Id = id, Index = index, UpdateInformation = hashInfo };
