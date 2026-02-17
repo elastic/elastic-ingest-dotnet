@@ -28,6 +28,18 @@ public class OrchestratorContext<TEvent> where TEvent : class
 
 	/// <summary> The batch timestamp used for range queries during completion. </summary>
 	public required DateTimeOffset BatchTimestamp { get; init; }
+
+	/// <summary> The resolved primary write alias (or data stream name). </summary>
+	public required string PrimaryWriteAlias { get; init; }
+
+	/// <summary> The resolved secondary write alias (or data stream name). </summary>
+	public required string? SecondaryWriteAlias { get; init; }
+
+	/// <summary> The resolved primary read target (ReadAlias or fallback to write alias). </summary>
+	public required string PrimaryReadAlias { get; init; }
+
+	/// <summary> The resolved secondary read target (ReadAlias or fallback to write alias). </summary>
+	public required string? SecondaryReadAlias { get; init; }
 }
 
 /// <summary>
@@ -281,7 +293,11 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			{
 				Transport = _transport,
 				Strategy = _strategy,
-				BatchTimestamp = _batchTimestamp
+				BatchTimestamp = _batchTimestamp,
+				PrimaryWriteAlias = _primaryWriteAlias!,
+				SecondaryWriteAlias = _secondaryWriteAlias,
+				PrimaryReadAlias = TypeContextResolver.ResolveReadTarget(_primaryTypeContext),
+				SecondaryReadAlias = TypeContextResolver.ResolveReadTarget(_secondaryTypeContext),
 			};
 			await OnPostComplete(context, ctx).ConfigureAwait(false);
 		}
