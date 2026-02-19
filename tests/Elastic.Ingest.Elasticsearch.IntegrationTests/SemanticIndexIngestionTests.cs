@@ -19,6 +19,12 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 public class SemanticIndexIngestionTests(IngestionCluster cluster)
 	: IntegrationTestBase(cluster)
 {
+	[Before(Test)]
+	public async Task Setup() => await CleanupPrefixAsync("semantic-data");
+
+	[After(Test)]
+	public async Task Teardown() => await CleanupPrefixAsync("semantic-data");
+
 	[Test]
 	public async Task EnsureDocumentsEndUpInSemanticIndex()
 	{
@@ -114,7 +120,9 @@ public class SemanticIndexIngestionTests(IngestionCluster cluster)
 		index = await Client.Indices.GetAsync(new GetIndexRequest(indexName));
 		index.Indices.Should().NotBeNullOrEmpty();
 
-		index.Indices[indexName].Settings?.Index?.Lifecycle?.Name?.Should().NotBeNull().And.Be("7-days-default");
+		var lifecycle = index.Indices[indexName].Settings?.Index?.Lifecycle;
+		if (lifecycle?.Name is not null)
+			lifecycle.Name.Should().Be("7-days-default");
 
 		// Verify the custom analyzer is configured in the index settings
 		var indexSettings = index.Indices[indexName].Settings;

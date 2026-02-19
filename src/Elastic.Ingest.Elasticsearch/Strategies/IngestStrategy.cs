@@ -4,6 +4,7 @@
 
 using System;
 using Elastic.Mapping;
+using Elastic.Mapping.Analysis;
 
 namespace Elastic.Ingest.Elasticsearch.Strategies;
 
@@ -34,7 +35,7 @@ public class IngestStrategy<TEvent> : IIngestStrategy<TEvent>
 		TemplateName = IngestStrategies.ResolveTemplateName(typeContext);
 		TemplateWildcard = IngestStrategies.ResolveTemplateWildcard(typeContext);
 		GetMappingsJson = typeContext.GetMappingsJson;
-		GetMappingSettings = typeContext.GetSettingsJson;
+		GetMappingSettings = BuildMergedSettings(typeContext);
 		DataStreamType = typeContext.IndexStrategy?.Type;
 	}
 
@@ -94,4 +95,48 @@ public class IngestStrategy<TEvent> : IIngestStrategy<TEvent>
 
 	/// <inheritdoc />
 	public string? DataStreamType { get; }
+
+	/// <summary>
+	/// Merges the analysis settings from <see cref="ElasticsearchTypeContext.ConfigureAnalysis"/>
+	/// into the base settings JSON from <see cref="ElasticsearchTypeContext.GetSettingsJson"/>.
+	/// </summary>
+	private static Func<string>? BuildMergedSettings(ElasticsearchTypeContext tc)
+	{
+		if (tc.GetSettingsJson == null && tc.ConfigureAnalysis == null)
+			return null;
+
+		return () =>
+		{
+			var baseJson = tc.GetSettingsJson?.Invoke();
+			string? analysisJson = null;
+
+			if (tc.ConfigureAnalysis != null)
+			{
+				var builder = new AnalysisBuilder();
+				var result = tc.ConfigureAnalysis(builder);
+				if (result.HasConfiguration)
+					analysisJson = result.Build().ToJsonString();
+			}
+
+			if (analysisJson == null)
+				return baseJson ?? "{}";
+
+			if (baseJson == null || IsEmptyJsonObject(baseJson))
+				return $$"""{ "analysis": {{analysisJson}} }""";
+
+			var lastBrace = baseJson.LastIndexOf('}');
+			return baseJson.Substring(0, lastBrace).TrimEnd()
+				+ $$""", "analysis": {{analysisJson}} }""";
+		};
+	}
+
+	private static bool IsEmptyJsonObject(string json)
+	{
+		foreach (var c in json)
+		{
+			if (c != '{' && c != '}' && !char.IsWhiteSpace(c))
+				return false;
+		}
+		return true;
+	}
 }

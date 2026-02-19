@@ -27,6 +27,8 @@ public class IngestionCluster : ElasticsearchCluster<ElasticsearchConfiguration>
 			.ServerCertificateValidationCallback(CertificateValidations.AllowAll)
 			.EnableDebugMode()
 			.IncludeServerStackTraceOnError(false)
+			.EnableTcpStats(false)
+			.EnableThreadPoolStats(false)
 			.OnRequestCompleted(d =>
 			{
 				try { output.WriteLine(d.DebugInformation); }

@@ -36,6 +36,7 @@ public class CustomScriptHashIngestionTests : IntegrationTestBase
 	[Before(Test)]
 	public async Task Setup()
 	{
+		await CleanupPrefixAsync("scripted-data");
 		Channel = CreateChannel(IndexPrefix, Slim);
 		await Channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		IndexName = Channel.IndexName;
@@ -66,7 +67,9 @@ public class CustomScriptHashIngestionTests : IntegrationTestBase
 		// Verify the index exists and has the correct settings
 		index = await Client.Indices.GetAsync(new GetIndexRequest(IndexName));
 		index.Indices.Should().NotBeNullOrEmpty();
-		index.Indices[IndexName].Settings?.Index?.Lifecycle?.Name?.Should().NotBeNull().And.Be("7-days-default");
+		var lifecycle = index.Indices[IndexName].Settings?.Index?.Lifecycle;
+		if (lifecycle?.Name is not null)
+			lifecycle.Name.Should().Be("7-days-default");
 
 		// write the same 100 documents again over the same channel;
 		// since we are using a custom script that doesn't noop all documents should be updated

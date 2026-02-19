@@ -18,6 +18,11 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster)
 	: IntegrationTestBase(cluster)
 {
+	[Before(Test)]
+	public async Task Setup() => await CleanupPrefixAsync("update-data");
+
+	[After(Test)]
+	public async Task Teardown() => await CleanupPrefixAsync("update-data");
 
 	[Test]
 	public async Task EnsureDocumentsEndUpInIndex()
@@ -40,7 +45,9 @@ public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster)
 		// Verify the index exists and has the correct settings
 		index = await Client.Indices.GetAsync(new GetIndexRequest(indexName));
 		index.Indices.Should().NotBeNullOrEmpty();
-		index.Indices[indexName].Settings?.Index?.Lifecycle?.Name?.Should().NotBeNull().And.Be("7-days-default");
+		var lifecycle = index.Indices[indexName].Settings?.Index?.Lifecycle;
+		if (lifecycle?.Name is not null)
+			lifecycle.Name.Should().Be("7-days-default");
 
 		// Write the same 100 documents again over the same channel, all documents should still have version 1.
 		// Since no changes to hash occured all operations should have been a NOOP

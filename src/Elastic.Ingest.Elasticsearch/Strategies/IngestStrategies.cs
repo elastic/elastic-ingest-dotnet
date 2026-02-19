@@ -59,11 +59,16 @@ public static class IngestStrategies
 		ElasticsearchTypeContext tc,
 		IBootstrapStrategy? bootstrap = null) where TEvent : class
 	{
+		var writeTarget = tc.IndexStrategy?.WriteTarget ?? typeof(TEvent).Name.ToLowerInvariant();
+		var indexFormat = tc.IndexStrategy?.DatePattern != null
+			? $"{writeTarget}-{{0:{tc.IndexStrategy.DatePattern}}}"
+			: writeTarget;
+
 		return new IngestStrategy<TEvent>(tc,
 			bootstrap ?? BootstrapStrategies.Index(),
 			new TypeContextIndexIngestStrategy<TEvent>(
 				tc,
-				tc.IndexStrategy?.WriteTarget ?? typeof(TEvent).Name.ToLowerInvariant(),
+				indexFormat,
 				DefaultBulkPathAndQuery),
 			tc.GetContentHash != null
 				? new HashBasedReuseProvisioning()
