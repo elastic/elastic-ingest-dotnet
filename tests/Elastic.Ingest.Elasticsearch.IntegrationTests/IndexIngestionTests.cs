@@ -9,16 +9,16 @@ using Elastic.Channels;
 using Elastic.Clients.Elasticsearch.IndexManagement;
 using Elastic.Ingest.Elasticsearch.Indices;
 using FluentAssertions;
-using Xunit;
-using Xunit.Abstractions;
+using TUnit.Core;
 using static System.Globalization.CultureInfo;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
-public class IndexIngestionTests(IngestionCluster cluster, ITestOutputHelper output)
-	: IntegrationTestBase(cluster, output)
+[ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
+public class IndexIngestionTests(IngestionCluster cluster)
+	: IntegrationTestBase(cluster)
 {
-	[Fact]
+	[Test]
 	public async Task EnsureDocumentsEndUpInIndex()
 	{
 		var indexPrefix = "catalog-data-";

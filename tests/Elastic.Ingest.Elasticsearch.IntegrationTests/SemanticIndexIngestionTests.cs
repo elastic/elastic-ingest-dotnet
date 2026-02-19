@@ -10,16 +10,16 @@ using Elastic.Clients.Elasticsearch.IndexManagement;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Semantic;
 using FluentAssertions;
-using Xunit;
-using Xunit.Abstractions;
+using TUnit.Core;
 using static System.Globalization.CultureInfo;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
-public class SemanticIndexIngestionTests(IngestionCluster cluster, ITestOutputHelper output)
-	: IntegrationTestBase(cluster, output)
+[ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
+public class SemanticIndexIngestionTests(IngestionCluster cluster)
+	: IntegrationTestBase(cluster)
 {
-	[Fact]
+	[Test]
 	public async Task EnsureDocumentsEndUpInSemanticIndex()
 	{
 		var indexPrefix = "semantic-data-";

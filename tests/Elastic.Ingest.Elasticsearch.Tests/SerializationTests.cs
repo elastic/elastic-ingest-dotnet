@@ -5,13 +5,13 @@
 using System.Text.Json;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using FluentAssertions;
-using Xunit;
+using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.Tests;
 
 public class SerializationTests
 {
-	[Fact]
+	[Test]
 	public void CanSerializeBulkResponseItem()
 	{
 		var json = "{\"index\":{\"status\":200}}";

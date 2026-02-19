@@ -10,16 +10,16 @@ using Elastic.Clients.Elasticsearch.IndexManagement;
 using Elastic.Ingest.Elasticsearch.Catalog;
 using Elastic.Ingest.Elasticsearch.Indices;
 using FluentAssertions;
-using Xunit;
-using Xunit.Abstractions;
+using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
-public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster, ITestOutputHelper output)
-	: IntegrationTestBase(cluster, output)
+[ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
+public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster)
+	: IntegrationTestBase(cluster)
 {
 
-	[Fact]
+	[Test]
 	public async Task EnsureDocumentsEndUpInIndex()
 	{
 		var indexPrefix = "update-data-";

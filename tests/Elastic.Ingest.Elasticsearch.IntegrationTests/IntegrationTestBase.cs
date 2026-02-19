@@ -3,18 +3,14 @@
 // See the LICENSE file in the project root for more information
 
 using Elastic.Clients.Elasticsearch;
-using Elastic.Elasticsearch.Xunit.XunitPlumbing;
-using Xunit.Abstractions;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
-public abstract class IntegrationTestBase(IngestionCluster cluster, ITestOutputHelper output, string? hostName = null)
-	: IntegrationTestBase<IngestionCluster>(cluster, output, hostName);
+public abstract class IntegrationTestBase(IngestionCluster cluster) : IntegrationTestBase<IngestionCluster>(cluster);
 
-public abstract class IntegrationTestBase<TCluster>(TCluster cluster, ITestOutputHelper output, string? hostName = null)
-	: IClusterFixture<TCluster>
-	where TCluster : IngestionCluster, new()
+public abstract class IntegrationTestBase<TCluster>(TCluster cluster)
+	where TCluster : IngestionCluster
 {
-	protected IngestionCluster Cluster { get; } = cluster;
-	protected ElasticsearchClient Client { get; } = cluster.CreateClient(output, hostName);
+	protected TCluster Cluster { get; } = cluster;
+	protected ElasticsearchClient Client => Cluster.Client;
 }

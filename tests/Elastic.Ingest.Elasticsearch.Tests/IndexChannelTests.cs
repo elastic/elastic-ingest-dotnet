@@ -8,17 +8,17 @@ using System.Threading;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Transport;
 using FluentAssertions;
-using Xunit;
+using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.Tests;
 
 public class IndexChannelTests : ChannelTestWithSingleDocResponseBase
 {
-	[Fact]
+	[Test]
 	public void IndexChannelWithFixedIndexNameUsesCorrectUrlAndOperationHeader() =>
 		ExecuteAndAssert("/fixed-index/_bulk", "{\"create\":{}}", "fixed-index");
 
-	[Fact]
+	[Test]
 	public void IndexChannelWithDynamicIndexNameUsesCorrectUrlAndOperationHeader() =>
 		ExecuteAndAssert("/_bulk", "{\"create\":{\"_index\":\"testdocument-2023.07.29\"}}");
 

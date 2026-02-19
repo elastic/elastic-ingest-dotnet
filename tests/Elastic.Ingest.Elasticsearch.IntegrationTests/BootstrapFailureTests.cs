@@ -9,15 +9,15 @@ using Elastic.Channels;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Transport;
 using FluentAssertions;
-using Xunit;
-using Xunit.Abstractions;
+using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
-public class BootstrapFailureTests(SecurityCluster cluster, ITestOutputHelper output)
-	: IntegrationTestBase<SecurityCluster>(cluster, output)
+[ClassDataSource<SecurityCluster>(Shared = SharedType.Keyed, Key = nameof(SecurityCluster))]
+public class BootstrapFailureTests(SecurityCluster cluster)
+	: IntegrationTestBase<SecurityCluster>(cluster)
 {
-	[Fact]
+	[Test]
 	public async Task BootstrapSilentShouldReportError()
 	{
 		var targetDataStream = new DataStreamName("logs", "silent-failure");
@@ -33,7 +33,7 @@ public class BootstrapFailureTests(SecurityCluster cluster, ITestOutputHelper ou
 		bootstrapped.Should().BeFalse("Insufficient rights");
 	}
 
-	[Fact]
+	[Test]
 	public async Task BootstrapFailureShouldReportError()
 	{
 		var targetDataStream = new DataStreamName("logs", "exception-failure");

@@ -8,7 +8,7 @@ using System.Threading;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Transport;
 using FluentAssertions;
-using Xunit;
+using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.Tests;
 
@@ -16,11 +16,11 @@ public class SubPathTests : ChannelTestWithSingleDocResponseBase
 {
 	public SubPathTests() : base("https://localhost:9200/subpath") { }
 
-	[Fact]
+	[Test]
 	public void IndexChannelWithFixedIndexNameUsesCorrectUrlAndOperationHeader() =>
 		ExecuteAndAssert("/subpath/fixed-index/_bulk", "{\"create\":{}}", "fixed-index");
 
-	[Fact]
+	[Test]
 	public void IndexChannelWithDynamicIndexNameUsesCorrectUrlAndOperationHeader() =>
 		ExecuteAndAssert("/subpath/_bulk", "{\"create\":{\"_index\":\"testdocument-2023.07.29\"}}");
 

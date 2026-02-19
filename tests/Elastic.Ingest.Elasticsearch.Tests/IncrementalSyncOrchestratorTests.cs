@@ -15,7 +15,7 @@ using Elastic.Transport.VirtualizedCluster;
 using Elastic.Transport.VirtualizedCluster.Components;
 using Elastic.Transport.VirtualizedCluster.Rules;
 using FluentAssertions;
-using Xunit;
+using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.Tests;
 
@@ -112,7 +112,7 @@ public class IncrementalSyncOrchestratorTests
 		return new IncrementalSyncOrchestrator<TestDocument>(transport, primary, secondary);
 	}
 
-	[Fact]
+	[Test]
 	public void ConstructorSetsDefaults()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -124,7 +124,7 @@ public class IncrementalSyncOrchestratorTests
 		orchestrator.BatchTimestamp.Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromSeconds(5));
 	}
 
-	[Fact]
+	[Test]
 	public void TryWriteBeforeStartThrows()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -135,7 +135,7 @@ public class IncrementalSyncOrchestratorTests
 			.WithMessage("*StartAsync*");
 	}
 
-	[Fact]
+	[Test]
 	public async Task StartSelectsMultiplexWhenHashesDiffer()
 	{
 		// Server returns empty hash (no existing template) -> hash mismatch -> Multiplex
@@ -147,7 +147,7 @@ public class IncrementalSyncOrchestratorTests
 		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Multiplex);
 	}
 
-	[Fact]
+	[Test]
 	public async Task StartExecutesPreBootstrapTasks()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -164,7 +164,7 @@ public class IncrementalSyncOrchestratorTests
 		taskExecuted.Should().BeTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task AddPreBootstrapTaskReturnsSelfForChaining()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -178,7 +178,7 @@ public class IncrementalSyncOrchestratorTests
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
 	}
 
-	[Fact]
+	[Test]
 	public async Task MultiplexWritesToBothChannels()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -191,7 +191,7 @@ public class IncrementalSyncOrchestratorTests
 		result.Should().BeTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task TryWriteManyWritesMultipleDocuments()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -208,7 +208,7 @@ public class IncrementalSyncOrchestratorTests
 		result.Should().BeTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task WaitToWriteAsyncWritesDocument()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -220,7 +220,7 @@ public class IncrementalSyncOrchestratorTests
 		result.Should().BeTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task WaitToWriteManyAsyncWritesDocuments()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -237,7 +237,7 @@ public class IncrementalSyncOrchestratorTests
 		result.Should().BeTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task OnPostCompleteIsCalledDuringComplete()
 	{
 		var transport = CreateTransportWithTaskResponse();
@@ -259,7 +259,7 @@ public class IncrementalSyncOrchestratorTests
 		capturedContext.BatchTimestamp.Should().Be(orchestrator.BatchTimestamp);
 	}
 
-	[Fact]
+	[Test]
 	public async Task DisposeDisposesChannels()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -274,7 +274,7 @@ public class IncrementalSyncOrchestratorTests
 		orchestrator.Dispose();
 	}
 
-	[Fact]
+	[Test]
 	public void DisposeBeforeStartDoesNotThrow()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -282,7 +282,7 @@ public class IncrementalSyncOrchestratorTests
 		orchestrator.Dispose();
 	}
 
-	[Fact]
+	[Test]
 	public void DiagnosticsListenerIsNull()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -291,7 +291,7 @@ public class IncrementalSyncOrchestratorTests
 		orchestrator.DiagnosticsListener.Should().BeNull();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ConfigurePrimaryIsInvoked()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -307,7 +307,7 @@ public class IncrementalSyncOrchestratorTests
 		invoked.Should().BeTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ConfigureSecondaryIsInvoked()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -323,7 +323,7 @@ public class IncrementalSyncOrchestratorTests
 		invoked.Should().BeTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task CompleteAsyncMultiplexDrainsBothChannels()
 	{
 		var transport = CreateTransportWithTaskResponse();
@@ -338,7 +338,7 @@ public class IncrementalSyncOrchestratorTests
 		result.Should().BeTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task DrainAllAsyncDoesNotThrow()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -349,7 +349,7 @@ public class IncrementalSyncOrchestratorTests
 		await orchestrator.DrainAllAsync(TimeSpan.FromSeconds(5));
 	}
 
-	[Fact]
+	[Test]
 	public async Task RefreshAllAsyncReturnsResult()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -361,7 +361,7 @@ public class IncrementalSyncOrchestratorTests
 		result.Should().BeTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task ApplyAllAliasesAsyncReturnsResult()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -373,7 +373,7 @@ public class IncrementalSyncOrchestratorTests
 		result.Should().BeTrue();
 	}
 
-	[Fact]
+	[Test]
 	public async Task MultiplePreBootstrapTasksAllExecuteInOrder()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
@@ -401,7 +401,7 @@ public class IncrementalSyncOrchestratorTests
 		executionOrder.Should().Equal(1, 2, 3);
 	}
 
-	[Fact]
+	[Test]
 	public void MissingWriteTargetThrows()
 	{
 		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));

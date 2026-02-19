@@ -5,13 +5,13 @@
 using System;
 using Elastic.Transport.VirtualizedCluster.Rules;
 using FluentAssertions;
-using Xunit;
+using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.Tests;
 
 public class ElasticsearchChannelTests
 {
-	[Fact]
+	[Test]
 	public void RejectionsAreReportedAndNotRetried()
 	{
 		var client = TestSetup.CreateClient(v => v
@@ -34,7 +34,7 @@ public class ElasticsearchChannelTests
 		session.TotalRetries.Should().Be(0);
 	}
 
-	[Fact]
+	[Test]
 	public void BackoffRetries()
 	{
 		var client = TestSetup.CreateClient(v => v
@@ -63,7 +63,7 @@ public class ElasticsearchChannelTests
 		session.Rejections.Should().Be(0);
 	}
 
-	[Fact]
+	[Test]
 	public void BackoffTooMuchEndsUpOnDLQ()
 	{
 		var client = TestSetup.CreateClient(v => v
@@ -92,7 +92,7 @@ public class ElasticsearchChannelTests
 		session.Rejections.Should().Be(0);
 	}
 
-	[Fact]
+	[Test]
 	public void ExceptionDoesNotHaltProcessingAndIsReported()
 	{
 		var client = TestSetup.CreateClient(v => v

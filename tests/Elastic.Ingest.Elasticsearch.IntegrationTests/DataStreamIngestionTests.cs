@@ -11,16 +11,16 @@ using Elastic.Clients.Elasticsearch.IndexManagement;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Transport;
 using FluentAssertions;
-using Xunit;
-using Xunit.Abstractions;
+using TUnit.Core;
 using DataStreamName = Elastic.Ingest.Elasticsearch.DataStreams.DataStreamName;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
-public class DataStreamIngestionTests(IngestionCluster cluster, ITestOutputHelper output)
-	: IntegrationTestBase(cluster, output)
+[ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
+public class DataStreamIngestionTests(IngestionCluster cluster)
+	: IntegrationTestBase(cluster)
 {
-	[Fact]
+	[Test]
 	public async Task EnsureDocumentsEndUpInDataStream()
 	{
 		var targetDataStream = new DataStreamName("timeseriesdocs", "dotnet");
@@ -78,7 +78,7 @@ public class DataStreamIngestionTests(IngestionCluster cluster, ITestOutputHelpe
 
 public class DataStreamIngestionFailureTests()
 {
-	[Fact]
+	[Test]
 	public void EnsureMaxRetriesIsCalled()
 	{
 		var maxRetriesIsCalled = false;

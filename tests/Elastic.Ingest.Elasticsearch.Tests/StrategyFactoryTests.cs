@@ -8,7 +8,7 @@ using Elastic.Ingest.Elasticsearch.Strategies;
 using Elastic.Ingest.Elasticsearch.Strategies.BootstrapSteps;
 using Elastic.Mapping;
 using FluentAssertions;
-using Xunit;
+using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.Tests;
 
@@ -68,7 +68,7 @@ public class StrategyFactoryTests
 
 	// --- IngestStrategies.ForContext ---
 
-	[Fact]
+	[Test]
 	public void ForContextSelectsIndexForIndexTarget()
 	{
 		var tc = CreateIndexContext();
@@ -80,7 +80,7 @@ public class StrategyFactoryTests
 		strategy.AliasStrategy.Should().BeOfType<NoAliasStrategy>();
 	}
 
-	[Fact]
+	[Test]
 	public void ForContextSelectsDataStreamForDataStreamTarget()
 	{
 		var tc = CreateDataStreamContext();
@@ -90,7 +90,7 @@ public class StrategyFactoryTests
 		strategy.AliasStrategy.Should().BeOfType<NoAliasStrategy>();
 	}
 
-	[Fact]
+	[Test]
 	public void ForContextSelectsWiredStreamForWiredStreamTarget()
 	{
 		var tc = CreateWiredStreamContext();
@@ -103,7 +103,7 @@ public class StrategyFactoryTests
 
 	// --- IngestStrategies.Index ---
 
-	[Fact]
+	[Test]
 	public void IndexStrategyResolvesTemplateNameFromWriteTarget()
 	{
 		var tc = CreateIndexContext("products");
@@ -113,7 +113,7 @@ public class StrategyFactoryTests
 		strategy.TemplateWildcard.Should().Be("products-*");
 	}
 
-	[Fact]
+	[Test]
 	public void IndexStrategyResolvesAliasWhenReadAliasIsSet()
 	{
 		var tc = CreateIndexContextWithAlias("catalog", "catalog-search");
@@ -122,7 +122,7 @@ public class StrategyFactoryTests
 		strategy.AliasStrategy.Should().BeOfType<LatestAndSearchAliasStrategy>();
 	}
 
-	[Fact]
+	[Test]
 	public void IndexStrategyUsesNoAliasWhenReadAliasIsNull()
 	{
 		var tc = CreateIndexContext();
@@ -131,7 +131,7 @@ public class StrategyFactoryTests
 		strategy.AliasStrategy.Should().BeOfType<NoAliasStrategy>();
 	}
 
-	[Fact]
+	[Test]
 	public void IndexStrategyUsesHashBasedProvisioningWhenContentHashIsSet()
 	{
 		var tc = CreateIndexContextWithContentHash("catalog");
@@ -140,7 +140,7 @@ public class StrategyFactoryTests
 		strategy.Provisioning.Should().BeOfType<HashBasedReuseProvisioning>();
 	}
 
-	[Fact]
+	[Test]
 	public void IndexStrategyAcceptsCustomBootstrap()
 	{
 		var tc = CreateIndexContext();
@@ -152,7 +152,7 @@ public class StrategyFactoryTests
 
 	// --- IngestStrategies.DataStream ---
 
-	[Fact]
+	[Test]
 	public void DataStreamStrategyResolvesTemplateName()
 	{
 		var tc = CreateDataStreamContext();
@@ -162,7 +162,7 @@ public class StrategyFactoryTests
 		strategy.TemplateWildcard.Should().Be("logs-myapp-*");
 	}
 
-	[Fact]
+	[Test]
 	public void DataStreamStrategyWithRetentionUsesLifecycleStep()
 	{
 		var tc = CreateDataStreamContext();
@@ -172,7 +172,7 @@ public class StrategyFactoryTests
 		bootstrap.Steps.Should().Contain(s => s is DataStreamLifecycleStep);
 	}
 
-	[Fact]
+	[Test]
 	public void DataStreamStrategyThrowsWithoutDataStreamName()
 	{
 		var tc = CreateIndexContext(); // Index context, no DataStreamName
@@ -184,7 +184,7 @@ public class StrategyFactoryTests
 
 	// --- IngestStrategies.WiredStream ---
 
-	[Fact]
+	[Test]
 	public void WiredStreamUsesNoopBootstrap()
 	{
 		var tc = CreateWiredStreamContext();
@@ -196,7 +196,7 @@ public class StrategyFactoryTests
 
 	// --- BootstrapStrategies ---
 
-	[Fact]
+	[Test]
 	public void DataStreamBootstrapHasCorrectSteps()
 	{
 		var bootstrap = BootstrapStrategies.DataStream();
@@ -207,7 +207,7 @@ public class StrategyFactoryTests
 		strategy.Steps[1].Should().BeOfType<DataStreamTemplateStep>();
 	}
 
-	[Fact]
+	[Test]
 	public void DataStreamBootstrapWithRetentionHasLifecycleStep()
 	{
 		var bootstrap = BootstrapStrategies.DataStream("90d");
@@ -219,7 +219,7 @@ public class StrategyFactoryTests
 		strategy.Steps[2].Should().BeOfType<DataStreamTemplateStep>();
 	}
 
-	[Fact]
+	[Test]
 	public void DataStreamWithIlmHasIlmAndComponentAndTemplateSteps()
 	{
 		var bootstrap = BootstrapStrategies.DataStreamWithIlm("my-policy");
@@ -231,7 +231,7 @@ public class StrategyFactoryTests
 		strategy.Steps[2].Should().BeOfType<DataStreamTemplateStep>();
 	}
 
-	[Fact]
+	[Test]
 	public void IndexBootstrapHasCorrectSteps()
 	{
 		var bootstrap = BootstrapStrategies.Index();
@@ -242,7 +242,7 @@ public class StrategyFactoryTests
 		strategy.Steps[1].Should().BeOfType<IndexTemplateStep>();
 	}
 
-	[Fact]
+	[Test]
 	public void IndexWithIlmHasIlmAndComponentAndTemplateSteps()
 	{
 		var bootstrap = BootstrapStrategies.IndexWithIlm("7-days");
@@ -254,7 +254,7 @@ public class StrategyFactoryTests
 		strategy.Steps[2].Should().BeOfType<IndexTemplateStep>();
 	}
 
-	[Fact]
+	[Test]
 	public void NoneBootstrapHasSingleNoopStep()
 	{
 		var bootstrap = BootstrapStrategies.None();
@@ -265,7 +265,7 @@ public class StrategyFactoryTests
 
 	// --- ValidateStepOrdering ---
 
-	[Fact]
+	[Test]
 	public void ValidateStepOrderingThrowsWhenIlmAfterComponent()
 	{
 		var act = () => new DefaultBootstrapStrategy(
@@ -278,7 +278,7 @@ public class StrategyFactoryTests
 			.WithMessage("*IlmPolicyStep*precede*ComponentTemplateStep*");
 	}
 
-	[Fact]
+	[Test]
 	public void ValidateStepOrderingThrowsWhenComponentAfterIndexTemplate()
 	{
 		var act = () => new DefaultBootstrapStrategy(
@@ -290,7 +290,7 @@ public class StrategyFactoryTests
 			.WithMessage("*ComponentTemplateStep*precede*IndexTemplateStep*");
 	}
 
-	[Fact]
+	[Test]
 	public void ValidateStepOrderingThrowsWhenLifecycleAfterDataStreamTemplate()
 	{
 		var act = () => new DefaultBootstrapStrategy(
@@ -303,7 +303,7 @@ public class StrategyFactoryTests
 			.WithMessage("*DataStreamLifecycleStep*precede*DataStreamTemplateStep*");
 	}
 
-	[Fact]
+	[Test]
 	public void ValidateStepOrderingAcceptsCorrectOrdering()
 	{
 		// Should not throw

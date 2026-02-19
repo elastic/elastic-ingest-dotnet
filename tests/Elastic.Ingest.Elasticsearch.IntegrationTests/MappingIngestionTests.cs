@@ -10,8 +10,7 @@ using Elastic.Channels;
 using Elastic.Mapping;
 using Elastic.Transport;
 using FluentAssertions;
-using Xunit;
-using Xunit.Abstractions;
+using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
@@ -49,15 +48,16 @@ public class MappedDoc
 	RefreshInterval = "1s")]
 public static partial class MappingTestContext;
 
-public class MappingIngestionTests(IngestionCluster cluster, ITestOutputHelper output)
-	: IntegrationTestBase(cluster, output)
+[ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
+public class MappingIngestionTests(IngestionCluster cluster)
+	: IntegrationTestBase(cluster)
 {
 	// The template name is derived from entity Name="mapping-test" → "mapping-test-template"
 	// The mappings component template is "{templateName}-mappings"
 	private const string MappingsComponentName = "mapping-test-template-mappings";
 	private const string IndexName = "mapping-test";
 
-	[Fact]
+	[Test]
 	public async Task EnsureMappingsAreAppliedFromElasticMappingContext()
 	{
 		var typeContext = MappingTestContext.MappedDoc.Context;

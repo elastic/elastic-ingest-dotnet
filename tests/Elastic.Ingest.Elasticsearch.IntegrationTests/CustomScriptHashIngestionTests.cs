@@ -11,46 +11,45 @@ using Elastic.Clients.Elasticsearch.IndexManagement;
 using Elastic.Ingest.Elasticsearch.Catalog;
 using Elastic.Ingest.Elasticsearch.Indices;
 using FluentAssertions;
-using Xunit;
-using Xunit.Abstractions;
+using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
-public class CustomScriptHashIngestionTests
-	: IntegrationTestBase, IAsyncLifetime
+[ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
+public class CustomScriptHashIngestionTests : IntegrationTestBase
 {
-	public CustomScriptHashIngestionTests(IngestionCluster cluster, ITestOutputHelper output) : base(cluster, output)
+	public CustomScriptHashIngestionTests(IngestionCluster cluster) : base(cluster)
 	{
 		IndexBatchDate = DateTimeOffset.UtcNow;
 		IndexBatchDateUpdate = IndexBatchDate.AddHours(1);
 		IndexPrefix = "scripted-data-";
 		Slim = new CountdownEvent(1);
-		Channel = CreateChannel(IndexPrefix, Slim);
-		IndexName = Channel.IndexName;
 	}
 
 	public string IndexPrefix { get; }
-	public string IndexName { get; set; }
+	public string IndexName { get; set; } = null!;
 	public CountdownEvent Slim { get; }
-	public CatalogIndexChannel<HashDocument> Channel { get; set; }
+	public CatalogIndexChannel<HashDocument> Channel { get; set; } = null!;
 	public DateTimeOffset IndexBatchDate { get; }
 	public DateTimeOffset IndexBatchDateUpdate { get; }
 
-	/// <inheritdoc />
-	public async Task InitializeAsync()
+	[Before(Test)]
+	public async Task Setup()
 	{
+		Channel = CreateChannel(IndexPrefix, Slim);
 		await Channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		IndexName = Channel.IndexName;
 	}
 
-	/// <inheritdoc />
-	public Task DisposeAsync()
+	[After(Test)]
+	public Task Cleanup()
 	{
-		Channel.Dispose();
+		Channel?.Dispose();
+		Slim?.Dispose();
 		return Task.CompletedTask;
 	}
 
-	[Fact]
+	[Test]
 	public async Task EnsureDocumentsEndUpInIndex()
 	{
 		var bootstrapped = await Channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
