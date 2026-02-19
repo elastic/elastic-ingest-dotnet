@@ -12,6 +12,23 @@ using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Ingestion;
 
+/*
+ * Tests: End-to-end document ingestion into a fixed-name index
+ *
+ * Document: ProductCatalog (Elastic.Mapping)
+ *   Entity: Index  Name="idx-products"  RefreshInterval="1s"
+ *
+ *   ┌────────────────────────────────────────────────────┐
+ *   │  IngestChannel<ProductCatalog>                     │
+ *   │  ├── Bootstrap templates                           │
+ *   │  ├── TryWrite(product) ─→ _bulk to idx-products   │
+ *   │  └── Verify via _search on idx-products            │
+ *   └────────────────────────────────────────────────────┘
+ *
+ * Writes to:     idx-products  (fixed index name, no date pattern)
+ * No aliases:    NoAliasStrategy (no WriteAlias/ReadAlias configured)
+ * Provisioning:  HashBasedReuseProvisioning (ProductCatalog has [ContentHash])
+ */
 [NotInParallel("idx-products")]
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
 public class IndexIngestionTests(IngestionCluster cluster) : IntegrationTestBase(cluster)

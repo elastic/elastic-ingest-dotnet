@@ -9,12 +9,49 @@ using Elastic.Channels;
 using Elastic.Clients.Elasticsearch.IndexManagement;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Semantic;
+using Elastic.Ingest.Elasticsearch.Strategies;
 using FluentAssertions;
 using TUnit.Core;
 using static System.Globalization.CultureInfo;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
+/*
+ * Tests: Semantic search ingestion via SemanticIndexChannel<SemanticArticle>
+ *
+ * Document type: SemanticArticle (Elastic.Mapping)
+ *   [Id][Keyword]                     id              — bulk operation routing
+ *   [Text]                            title           — analyzer: "semantic_content" (standard + lowercase + asciifolding)
+ *   [SemanticText(InferenceId=...)]   semantic_text   — ELSER inference via semantic_text field type
+ *   [Date]                            created         — document timestamp
+ *
+ * Mappings & analysis:
+ *   TestMappingContext.SemanticArticle.Context
+ *     ├── GetMappingsJson()      → field types + analyzer refs + semantic_text with inference_id
+ *     └── ConfigureAnalysis      → semantic_content analyzer (standard + lowercase + asciifolding)
+ *   IngestStrategies.Index<>()
+ *     └── GetMappingSettings     → merged entity settings + analysis JSON
+ *
+ * Bootstrap (SemanticIndexChannel):
+ *   BootstrapElasticsearchAsync(Failure)
+ *   ├── InferenceEndpointStep  "test-elser-inference"          (index inference, 1 thread)
+ *   ├── InferenceEndpointStep  "test-search-elser-inference"   (search inference, 2 threads)
+ *   ├── ComponentTemplate      semantic-data-template          (settings + analysis)
+ *   ├── ComponentTemplate      semantic-data-template          (mappings + semantic_text)
+ *   └── IndexTemplate          semantic-data-template          (pattern: semantic-data-*)
+ *
+ * Index naming:
+ *   Format:  semantic-data-{yyyy.MM.dd}
+ *
+ * Ingestion flow:
+ *   ┌─────────────────────────────────────────────────────────────┐
+ *   │ 1. Bootstrap creates inference endpoints (ELSER)            │
+ *   │ 2. Bootstrap creates component + index templates            │
+ *   │ 3. Write 2 docs via channel                                 │
+ *   │ 4. Refresh & search → verify both docs landed               │
+ *   │ 5. Verify semantic_content analyzer in index settings       │
+ *   └─────────────────────────────────────────────────────────────┘
+ */
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
 public class SemanticIndexIngestionTests(IngestionCluster cluster)
 	: IntegrationTestBase(cluster)
@@ -28,10 +65,13 @@ public class SemanticIndexIngestionTests(IngestionCluster cluster)
 	[Test]
 	public async Task EnsureDocumentsEndUpInSemanticIndex()
 	{
+		var ctx = TestMappingContext.SemanticArticle.Context;
+		var strategy = IngestStrategies.Index<SemanticArticle>(ctx);
+
 		var indexPrefix = "semantic-data-";
 		var slim = new CountdownEvent(1);
 
-		var options = new SemanticIndexChannelOptions<CatalogDocument>(Client.Transport)
+		var options = new SemanticIndexChannelOptions<SemanticArticle>(Client.Transport)
 		{
 			IndexFormat = indexPrefix + "{0:yyyy.MM.dd}",
 			BulkOperationIdLookup = c => c.Id,
@@ -46,51 +86,14 @@ public class SemanticIndexIngestionTests(IngestionCluster cluster)
 			{
 				WaitHandle = slim, OutboundBufferMaxSize = 2,
 			},
-
-			// Semantic mapping for ELSER sparse vector embeddings
-			GetMapping = (inferenceId, searchInferenceId) =>
-				$$"""
-				{
-				  "properties": {
-				    "title": {
-				      "type": "text",
-				      "analyzer": "semantic_analyzer",
-				      "fields": {
-				        "keyword": { "type": "keyword" }
-				      }
-				    },
-				    "title_embedding": {
-				      "type": "sparse_vector"
-				    },
-				    "semantic_text": {
-				      "type": "semantic_text",
-				      "inference_id": "{{inferenceId}}"
-				    }
-				  }
-				}
-				""",
-
-			GetMappingSettings = (inferenceId, searchInferenceId) =>
-				"""
-				{
-				  "analysis": {
-				    "analyzer": {
-				      "semantic_analyzer": {
-				        "type": "custom",
-				        "tokenizer": "standard",
-				        "filter": [ "lowercase", "asciifolding" ]
-				      }
-				    }
-				  }
-				}
-				"""
+			GetMapping = (_, _) => ctx.GetMappingsJson!(),
+			GetMappingSettings = (_, _) => strategy.GetMappingSettings!()
 		};
 
-		var channel = new SemanticIndexChannel<CatalogDocument>(options);
+		var channel = new SemanticIndexChannel<SemanticArticle>(options);
 		var bootstrapped = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		bootstrapped.Should().BeTrue("Expected to be able to bootstrap semantic index channel");
 
-		// Verify inference endpoints were created
 		channel.InferenceId.Should().Be("test-elser-inference");
 		channel.SearchInferenceId.Should().Be("test-search-elser-inference");
 
@@ -100,14 +103,14 @@ public class SemanticIndexIngestionTests(IngestionCluster cluster)
 		var index = await Client.Indices.GetAsync(new GetIndexRequest(indexName));
 		index.Indices.Should().BeNullOrEmpty();
 
-		channel.TryWrite(new CatalogDocument { Created = date, Title = "Hello World!", Id = "hello-world" });
-		channel.TryWrite(new CatalogDocument { Created = date, Title = "Semantic search is powerful", Id = "hello-world-2" });
+		channel.TryWrite(new SemanticArticle { Created = date, Title = "Hello World!", Id = "hello-world" });
+		channel.TryWrite(new SemanticArticle { Created = date, Title = "Semantic search is powerful", Id = "hello-world-2" });
 		if (!slim.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
 			throw new Exception($"semantic documents were not persisted within 10 seconds: {channel}");
 
 		var refreshResult = await Client.Indices.RefreshAsync(indexName);
 		refreshResult.IsValidResponse.Should().BeTrue("{0}", refreshResult.DebugInformation);
-		var searchResult = await Client.SearchAsync<CatalogDocument>(s => s.Indices(indexName));
+		var searchResult = await Client.SearchAsync<SemanticArticle>(s => s.Indices(indexName));
 		searchResult.Total.Should().Be(2);
 
 		var storedDocument = searchResult.Documents.First();
@@ -124,9 +127,8 @@ public class SemanticIndexIngestionTests(IngestionCluster cluster)
 		if (lifecycle?.Name is not null)
 			lifecycle.Name.Should().Be("7-days-default");
 
-		// Verify the custom analyzer is configured in the index settings
 		var indexSettings = index.Indices[indexName].Settings;
 		indexSettings.Should().NotBeNull();
-		indexSettings?.Analysis?.Analyzers.Should().ContainKey("semantic_analyzer");
+		indexSettings.Analysis?.Analyzers.Should().ContainKey("semantic_content");
 	}
 }

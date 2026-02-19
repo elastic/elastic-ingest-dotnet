@@ -12,6 +12,22 @@ using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Rollover;
 
+/*
+ * Tests: Hash-based template reuse across multiple IngestChannel instances
+ *
+ * Document: ProductCatalog (Elastic.Mapping)
+ *   Entity: Index  Name="idx-products"  [ContentHash] on content_hash field
+ *
+ *   ┌──────────────────────────────────────────────────────────────────┐
+ *   │  Channel 1: bootstrap + write "HR-001" → hash₁                  │
+ *   │  Channel 2: bootstrap (same context)   → hash₂ == hash₁         │
+ *   │             write "HR-002" to SAME idx-products index            │
+ *   │  _search idx-products → contains both HR-001 and HR-002          │
+ *   └──────────────────────────────────────────────────────────────────┘
+ *
+ * Provisioning: HashBasedReuseProvisioning
+ *   Identical mappings + settings → same ChannelHash → same template reused
+ */
 [NotInParallel("idx-products")]
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
 public class HashReuseTests(IngestionCluster cluster) : IntegrationTestBase(cluster)

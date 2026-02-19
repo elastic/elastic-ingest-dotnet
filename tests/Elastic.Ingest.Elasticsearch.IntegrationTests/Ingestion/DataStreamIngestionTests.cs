@@ -8,10 +8,25 @@ using System.Threading.Tasks;
 using Elastic.Channels;
 using Elastic.Transport;
 using FluentAssertions;
-using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Ingestion;
 
+/*
+ * Tests: End-to-end document ingestion into a data stream
+ *
+ * Document: ServerMetricsEvent (Elastic.Mapping)
+ *   Entity: DataStream  "logs-srvmetrics-default"
+ *
+ *   ┌────────────────────────────────────────────────────────┐
+ *   │  IngestChannel<ServerMetricsEvent>                     │
+ *   │  ├── Bootstrap templates                               │
+ *   │  ├── TryWrite(event) ─→ _bulk to data stream          │
+ *   │  └── Verify via _search on logs-srvmetrics-default     │
+ *   └────────────────────────────────────────────────────────┘
+ *
+ * Writes to:     logs-srvmetrics-default  (auto-created data stream)
+ * Verifies:      document content via _search, data stream existence via GET _data_stream
+ */
 [NotInParallel("logs-srvmetrics")]
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
 public class DataStreamIngestionTests(IngestionCluster cluster) : IntegrationTestBase(cluster)

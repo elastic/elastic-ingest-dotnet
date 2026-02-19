@@ -11,6 +11,25 @@ using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Bootstrap;
 
+/*
+ * Tests: Data stream template bootstrap via IngestChannel<ServerMetricsEvent>
+ *
+ * Document: ServerMetricsEvent (Elastic.Mapping)
+ *   Entity: DataStream  Type="logs"  Dataset="srvmetrics"  Namespace="default"
+ *
+ *   BootstrapElasticsearchAsync(Failure)
+ *   ├── PUT /_component_template/logs-srvmetrics-settings   (analysis: log_message)
+ *   ├── PUT /_component_template/logs-srvmetrics-mappings   (@timestamp, message, ...)
+ *   └── PUT /_index_template/logs-srvmetrics                (data_stream: {})
+ *
+ * Tests:
+ *   1. BootstrapCreatesComponentAndDataStreamTemplates
+ *      → verifies all three templates exist, mappings contain expected fields
+ *   2. RebootstrapWithSameHashIsIdempotent
+ *      → two channels with identical config produce the same ChannelHash
+ *   3. WithRetentionBootstrapsLifecycle
+ *      → IngestStrategies.DataStream(ctx, "30d") adds DataStreamLifecycleStep
+ */
 [NotInParallel("logs-srvmetrics")]
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
 public class DataStreamBootstrapTests(IngestionCluster cluster) : IntegrationTestBase(cluster)

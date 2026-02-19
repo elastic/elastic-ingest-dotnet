@@ -12,6 +12,19 @@ using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Bootstrap;
 
+/*
+ * Tests: Bootstrap error handling with insufficient privileges
+ *
+ * Uses SecurityCluster (trial security enabled) but connects with an
+ * UNAUTHENTICATED transport — no API key, no basic auth.
+ *
+ *   IngestChannel<ServerMetricsEvent>
+ *   └── BootstrapElasticsearchAsync
+ *       ├── Silent  → returns false (no exception)
+ *       └── Failure → throws with "Failure to create component template"
+ *
+ * No indices, templates, or data streams are actually created.
+ */
 [ClassDataSource<SecurityCluster>(Shared = SharedType.Keyed, Key = nameof(SecurityCluster))]
 public class BootstrapFailureTests(SecurityCluster cluster) : IntegrationTestBase<SecurityCluster>(cluster)
 {
@@ -52,6 +65,6 @@ public class BootstrapFailureTests(SecurityCluster cluster) : IntegrationTestBas
 		}
 
 		caught.Should().NotBeNull();
-		caught!.Message.Should().Contain("Failure to create component template");
+		caught.Message.Should().Contain("Failure to create component template");
 	}
 }

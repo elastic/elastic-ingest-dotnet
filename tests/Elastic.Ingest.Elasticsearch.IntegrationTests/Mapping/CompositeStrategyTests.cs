@@ -10,11 +10,26 @@ using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Mapping;
 
-/// <summary>
-/// Verifies that the IngestStrategies factory correctly composes strategies
-/// from realistic source-generated <see cref="ElasticsearchTypeContext"/> instances.
-/// These tests do not require a running Elasticsearch cluster.
-/// </summary>
+/*
+ * Tests: IngestStrategies factory composition from ElasticsearchTypeContext
+ *
+ * No Elasticsearch cluster required — verifies that IngestStrategies.ForContext<>(),
+ * IngestStrategies.DataStream<>(), and IngestStrategies.Index<>() correctly compose:
+ *
+ *   IIngestStrategy<TEvent>
+ *   ├── IDocumentIngestStrategy     (DataStreamIngestStrategy / TypeContextIndexIngestStrategy)
+ *   ├── IBootstrapStrategy          (DefaultBootstrapStrategy with step pipeline)
+ *   │   ├── ComponentTemplateStep
+ *   │   ├── DataStreamTemplateStep | IndexTemplateStep
+ *   │   ├── DataStreamLifecycleStep (optional, when retention specified)
+ *   │   └── IlmPolicyStep           (optional, when ILM policy specified)
+ *   ├── IIndexProvisioningStrategy  (AlwaysCreateProvisioning / HashBasedReuseProvisioning)
+ *   ├── IAliasStrategy              (NoAliasStrategy / LatestAndSearchAliasStrategy)
+ *   └── Delegates
+ *       ├── GetMappingsJson         → from ElasticsearchTypeContext
+ *       ├── GetMappingSettings      → merged entity settings + ConfigureAnalysis output
+ *       └── DataStreamType          → from IndexStrategy.Type
+ */
 public class CompositeStrategyTests
 {
 	// --- ForContext auto-detection ---
@@ -54,6 +69,30 @@ public class CompositeStrategyTests
 		strategy.AliasStrategy.Should().BeOfType<LatestAndSearchAliasStrategy>(
 			"catalog variant has ReadAlias configured");
 		strategy.Provisioning.Should().BeOfType<HashBasedReuseProvisioning>();
+	}
+
+	[Test]
+	public void ForContextHashableArticleSelectsIndexWithHashReuse()
+	{
+		var ctx = TestMappingContext.HashableArticle.Context;
+		var strategy = IngestStrategies.ForContext<HashableArticle>(ctx);
+
+		strategy.DocumentIngest.Should().BeOfType<TypeContextIndexIngestStrategy<HashableArticle>>();
+		strategy.Provisioning.Should().BeOfType<HashBasedReuseProvisioning>(
+			"HashableArticle has [ContentHash] which triggers hash-based reuse");
+		strategy.AliasStrategy.Should().BeOfType<NoAliasStrategy>();
+	}
+
+	[Test]
+	public void ForContextSemanticArticleSelectsIndexStrategy()
+	{
+		var ctx = TestMappingContext.SemanticArticle.Context;
+		var strategy = IngestStrategies.ForContext<SemanticArticle>(ctx);
+
+		strategy.DocumentIngest.Should().BeOfType<TypeContextIndexIngestStrategy<SemanticArticle>>();
+		strategy.AliasStrategy.Should().BeOfType<NoAliasStrategy>();
+		strategy.Provisioning.Should().BeOfType<AlwaysCreateProvisioning>(
+			"SemanticArticle has no [ContentHash]");
 	}
 
 	// --- Explicit strategy factories ---
@@ -161,14 +200,48 @@ public class CompositeStrategyTests
 	}
 
 	[Test]
-	public void StrategyPropagatesGetMappingSettingsFromContext()
+	public void StrategyPropagatesGetMappingSettingsWithAnalysisAndNormalizer()
 	{
 		var ctx = TestMappingContext.ProductCatalog.Context;
 		var strategy = IngestStrategies.Index<ProductCatalog>(ctx);
 
 		strategy.GetMappingSettings.Should().NotBeNull();
-		strategy.GetMappingSettings!().Should().Contain("\"analysis\"",
+		var settings = strategy.GetMappingSettings!();
+		settings.Should().Contain("\"analysis\"",
 			"merged settings should include analysis from ConfigureAnalysis");
+		settings.Should().Contain("\"normalizer\"",
+			"merged settings should include normalizer from ConfigureAnalysis");
+		settings.Should().Contain("\"lowercase_ascii\"");
+	}
+
+	[Test]
+	public void HashableArticleStrategyPropagatesHtmlContentAnalysis()
+	{
+		var ctx = TestMappingContext.HashableArticle.Context;
+		var strategy = IngestStrategies.Index<HashableArticle>(ctx);
+
+		strategy.GetMappingsJson.Should().NotBeNull();
+		strategy.GetMappingsJson!().Should().Contain("\"html_content\"");
+
+		strategy.GetMappingSettings.Should().NotBeNull();
+		var settings = strategy.GetMappingSettings!();
+		settings.Should().Contain("\"html_content\"");
+		settings.Should().Contain("\"html_stripper\"");
+	}
+
+	[Test]
+	public void SemanticArticleStrategyPropagatesSemanticContentAnalysis()
+	{
+		var ctx = TestMappingContext.SemanticArticle.Context;
+		var strategy = IngestStrategies.Index<SemanticArticle>(ctx);
+
+		strategy.GetMappingsJson.Should().NotBeNull();
+		strategy.GetMappingsJson!().Should().Contain("\"semantic_content\"");
+		strategy.GetMappingsJson!().Should().Contain("\"semantic_text\"");
+		strategy.GetMappingsJson!().Should().Contain("\"test-elser-inference\"");
+
+		strategy.GetMappingSettings.Should().NotBeNull();
+		strategy.GetMappingSettings!().Should().Contain("\"semantic_content\"");
 	}
 
 	[Test]

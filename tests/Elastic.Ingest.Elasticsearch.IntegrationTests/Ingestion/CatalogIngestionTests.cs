@@ -14,6 +14,28 @@ using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Ingestion;
 
+/*
+ * Tests: End-to-end document ingestion into an aliased catalog index
+ *
+ * Document: ProductCatalog (Elastic.Mapping)
+ *   Entity: Index  Name="cat-products"  Variant="Catalog"
+ *           WriteAlias="cat-products"  ReadAlias="cat-products-search"
+ *           SearchPattern="cat-products-*"  DatePattern="yyyy.MM.dd.HHmmss"
+ *
+ *   ┌───────────────────────────────────────────────────────────────────┐
+ *   │  IngestChannel<ProductCatalog>                                    │
+ *   │  ├── Bootstrap templates (cat-products-template)                  │
+ *   │  ├── TryWrite(product) ─→ _bulk to cat-products-YYYY.MM.DD.HH.. │
+ *   │  ├── _resolve/index/cat-products-* → concrete index name          │
+ *   │  ├── ApplyAliasesAsync(concreteIndex)                             │
+ *   │  │   ├── cat-products-latest  ──→  concrete index                 │
+ *   │  │   └── cat-products-search  ──→  concrete index                 │
+ *   │  └── Verify via _search on cat-products-search                    │
+ *   └───────────────────────────────────────────────────────────────────┘
+ *
+ * Provisioning: HashBasedReuseProvisioning (ProductCatalog has [ContentHash])
+ * Alias:        LatestAndSearchAliasStrategy (ReadAlias configured)
+ */
 [NotInParallel("cat-products")]
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
 public class CatalogIngestionTests(IngestionCluster cluster) : IntegrationTestBase(cluster)

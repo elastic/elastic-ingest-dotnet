@@ -15,6 +15,8 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 ///   <item><c>TestMappingContext.ServerMetricsEvent.Context</c> — data stream</item>
 ///   <item><c>TestMappingContext.ProductCatalog.Context</c> — plain index</item>
 ///   <item><c>TestMappingContext.ProductCatalogCatalog.Context</c> — aliased index with hash reuse</item>
+///   <item><c>TestMappingContext.HashableArticle.Context</c> — catalog index with hash upserts</item>
+///   <item><c>TestMappingContext.SemanticArticle.Context</c> — semantic index with inference</item>
 /// </list>
 /// </para>
 /// </summary>
@@ -24,10 +26,7 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 	Type = "logs",
 	Dataset = "srvmetrics",
 	Namespace = "default")]
-[Entity<ProductCatalog>(
-	Target = EntityTarget.Index,
-	Name = "idx-products",
-	RefreshInterval = "1s")]
+[Entity<ProductCatalog>(Target = EntityTarget.Index, Name = "idx-products", RefreshInterval = "1s")]
 [Entity<ProductCatalog>(
 	Target = EntityTarget.Index,
 	Name = "cat-products",
@@ -36,4 +35,6 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 	ReadAlias = "cat-products-search",
 	SearchPattern = "cat-products-*",
 	DatePattern = "yyyy.MM.dd.HHmmss")]
+[Entity<HashableArticle>(Target = EntityTarget.Index, Name = "hashable-articles")]
+[Entity<SemanticArticle>(Target = EntityTarget.Index, Name = "semantic-articles")]
 public static partial class TestMappingContext;

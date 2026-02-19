@@ -8,15 +8,41 @@ using System.Text.Json;
 using Elastic.Mapping;
 using Elastic.Mapping.Analysis;
 using FluentAssertions;
-using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Mapping;
 
-/// <summary>
-/// Verifies that the Elastic.Mapping source generator produces correct JSON output
-/// for field mappings, index settings, ConfigureAnalysis, and ConfigureMappings.
-/// These tests do not require a running Elasticsearch cluster.
-/// </summary>
+/*
+ * Tests: Source-generator output verification for Elastic.Mapping
+ *
+ * No Elasticsearch cluster required — these are pure unit tests that validate
+ * the compile-time artefacts produced by the Elastic.Mapping source generator:
+ *
+ *   TestMappingContext
+ *   ├── ServerMetricsEvent   (DataStream: logs-srvmetrics-default)
+ *   │   ├── GetMappingsJson  → @timestamp, message (analyzer: log_message), log_level, ...
+ *   │   ├── GetSettingsJson  → {} (no entity-level settings)
+ *   │   ├── ConfigureAnalysis→ log_message analyzer (standard + lowercase + asciifolding)
+ *   │   └── ConfigureMappings→ is_slow runtime field
+ *   │
+ *   ├── ProductCatalog       (Index: idx-products)
+ *   │   ├── GetMappingsJson  → sku, name (analyzer: product_autocomplete), category (normalizer: lowercase_ascii), ...
+ *   │   ├── GetSettingsJson  → { refresh_interval: "1s" }
+ *   │   ├── ConfigureAnalysis→ product_autocomplete analyzer + edge_ngram_filter + lowercase_ascii normalizer
+ *   │   └── ConfigureMappings→ price_tier runtime field
+ *   │
+ *   ├── ProductCatalogCatalog (Index: cat-products, aliased + date-rolling)
+ *   │   └── Same mappings as ProductCatalog, different entity settings → different hash
+ *   │
+ *   ├── HashableArticle      (Index: hashable-articles)
+ *   │   ├── GetMappingsJson  → id, title (analyzer: html_content), hash ([ContentHash]), ...
+ *   │   ├── ConfigureAnalysis→ html_content analyzer (standard + html_stripper + lowercase + asciifolding)
+ *   │   └── ConfigureMappings→ title.keyword multi-field
+ *   │
+ *   └── SemanticArticle      (Index: semantic-articles)
+ *       ├── GetMappingsJson  → id, title (analyzer: semantic_content), semantic_text (inference), ...
+ *       ├── ConfigureAnalysis→ semantic_content analyzer (standard + lowercase + asciifolding)
+ *       └── ConfigureMappings→ title.keyword multi-field
+ */
 public class ElasticMappingTests
 {
 	// --- ServerMetricsEvent (DataStream) ---
@@ -157,6 +183,7 @@ public class ElasticMappingTests
 		props.GetProperty("name").GetProperty("search_analyzer").GetString().Should().Be("standard");
 		props.GetProperty("description").GetProperty("type").GetString().Should().Be("text");
 		props.GetProperty("category").GetProperty("type").GetString().Should().Be("keyword");
+		props.GetProperty("category").GetProperty("normalizer").GetString().Should().Be("lowercase_ascii");
 		props.GetProperty("price").GetProperty("type").GetString().Should().Be("double");
 		props.GetProperty("tags").GetProperty("type").GetString().Should().Be("keyword");
 		props.GetProperty("content_hash").GetProperty("type").GetString().Should().Be("keyword");
@@ -180,7 +207,7 @@ public class ElasticMappingTests
 	}
 
 	[Test]
-	public void ProductCatalogConfigureAnalysisProducesAutocompleteAnalyzer()
+	public void ProductCatalogConfigureAnalysisProducesAutocompleteAnalyzerAndNormalizer()
 	{
 		var ctx = TestMappingContext.ProductCatalog.Context;
 		var builder = new AnalysisBuilder();
@@ -199,6 +226,11 @@ public class ElasticMappingTests
 		analyzer.GetProperty("tokenizer").GetString().Should().Be("standard");
 		analyzer.GetProperty("filter").EnumerateArray().Select(e => e.GetString())
 			.Should().ContainInOrder("lowercase", "edge_ngram_filter");
+
+		var normalizer = doc.RootElement.GetProperty("normalizer").GetProperty("lowercase_ascii");
+		normalizer.GetProperty("type").GetString().Should().Be("custom");
+		normalizer.GetProperty("filter").EnumerateArray().Select(e => e.GetString())
+			.Should().ContainInOrder("lowercase", "asciifolding");
 	}
 
 	[Test]
@@ -241,6 +273,116 @@ public class ElasticMappingTests
 			"different entity-level settings produce different hashes");
 	}
 
+	// --- HashableArticle (Index) ---
+
+	[Test]
+	public void HashableArticleContextHasCorrectEntityTarget()
+	{
+		var ctx = TestMappingContext.HashableArticle.Context;
+		ctx.EntityTarget.Should().Be(EntityTarget.Index);
+		ctx.IndexStrategy!.WriteTarget.Should().Be("hashable-articles");
+	}
+
+	[Test]
+	public void HashableArticleContextHasIdAndContentHashDelegates()
+	{
+		var ctx = TestMappingContext.HashableArticle.Context;
+		ctx.GetId.Should().NotBeNull("HashableArticle has [Id] on its Id property");
+		ctx.GetContentHash.Should().NotBeNull("HashableArticle has [ContentHash] on its Hash property");
+		ctx.ContentHashFieldName.Should().Be("hash");
+
+		var article = new HashableArticle { Id = "art-1", Hash = "abc123" };
+		ctx.GetId!(article).Should().Be("art-1");
+		ctx.GetContentHash!(article).Should().Be("abc123");
+	}
+
+	[Test]
+	public void HashableArticleMappingsJsonContainsAllFields()
+	{
+		var json = TestMappingContext.HashableArticle.Context.GetMappingsJson!();
+		using var doc = JsonDocument.Parse(json);
+		var props = doc.RootElement.GetProperty("properties");
+
+		props.GetProperty("id").GetProperty("type").GetString().Should().Be("keyword");
+		props.GetProperty("title").GetProperty("type").GetString().Should().Be("text");
+		props.GetProperty("title").GetProperty("analyzer").GetString().Should().Be("html_content");
+		props.GetProperty("hash").GetProperty("type").GetString().Should().Be("keyword");
+		props.GetProperty("index_batch_date").GetProperty("type").GetString().Should().Be("date");
+		props.GetProperty("last_updated").GetProperty("type").GetString().Should().Be("date");
+	}
+
+	[Test]
+	public void HashableArticleConfigureAnalysisProducesHtmlContentAnalyzer()
+	{
+		var ctx = TestMappingContext.HashableArticle.Context;
+		ctx.ConfigureAnalysis.Should().NotBeNull();
+
+		var builder = new AnalysisBuilder();
+		var result = ctx.ConfigureAnalysis!(builder);
+		result.HasConfiguration.Should().BeTrue();
+
+		var settings = result.Build();
+		var analysisJson = settings.ToJsonString();
+		using var doc = JsonDocument.Parse(analysisJson);
+
+		doc.RootElement.GetProperty("char_filter").GetProperty("html_stripper")
+			.GetProperty("type").GetString().Should().Be("html_strip");
+
+		var analyzer = doc.RootElement.GetProperty("analyzer").GetProperty("html_content");
+		analyzer.GetProperty("type").GetString().Should().Be("custom");
+		analyzer.GetProperty("tokenizer").GetString().Should().Be("standard");
+		analyzer.GetProperty("char_filter").EnumerateArray().Select(e => e.GetString())
+			.Should().Contain("html_stripper");
+		analyzer.GetProperty("filter").EnumerateArray().Select(e => e.GetString())
+			.Should().ContainInOrder("lowercase", "asciifolding");
+	}
+
+	// --- SemanticArticle (Index) ---
+
+	[Test]
+	public void SemanticArticleContextHasCorrectEntityTarget()
+	{
+		var ctx = TestMappingContext.SemanticArticle.Context;
+		ctx.EntityTarget.Should().Be(EntityTarget.Index);
+		ctx.IndexStrategy!.WriteTarget.Should().Be("semantic-articles");
+	}
+
+	[Test]
+	public void SemanticArticleMappingsJsonContainsSemanticTextField()
+	{
+		var json = TestMappingContext.SemanticArticle.Context.GetMappingsJson!();
+		using var doc = JsonDocument.Parse(json);
+		var props = doc.RootElement.GetProperty("properties");
+
+		props.GetProperty("id").GetProperty("type").GetString().Should().Be("keyword");
+		props.GetProperty("title").GetProperty("type").GetString().Should().Be("text");
+		props.GetProperty("title").GetProperty("analyzer").GetString().Should().Be("semantic_content");
+		props.GetProperty("semantic_text").GetProperty("type").GetString().Should().Be("semantic_text");
+		props.GetProperty("semantic_text").GetProperty("inference_id").GetString().Should().Be("test-elser-inference");
+		props.GetProperty("created").GetProperty("type").GetString().Should().Be("date");
+	}
+
+	[Test]
+	public void SemanticArticleConfigureAnalysisProducesSemanticContentAnalyzer()
+	{
+		var ctx = TestMappingContext.SemanticArticle.Context;
+		ctx.ConfigureAnalysis.Should().NotBeNull();
+
+		var builder = new AnalysisBuilder();
+		var result = ctx.ConfigureAnalysis!(builder);
+		result.HasConfiguration.Should().BeTrue();
+
+		var settings = result.Build();
+		var analysisJson = settings.ToJsonString();
+		using var doc = JsonDocument.Parse(analysisJson);
+
+		var analyzer = doc.RootElement.GetProperty("analyzer").GetProperty("semantic_content");
+		analyzer.GetProperty("type").GetString().Should().Be("custom");
+		analyzer.GetProperty("tokenizer").GetString().Should().Be("standard");
+		analyzer.GetProperty("filter").EnumerateArray().Select(e => e.GetString())
+			.Should().ContainInOrder("lowercase", "asciifolding");
+	}
+
 	// --- Hash stability ---
 
 	[Test]
@@ -258,9 +400,11 @@ public class ElasticMappingTests
 	[Test]
 	public void AllContextsAreRegistered()
 	{
-		TestMappingContext.All.Should().HaveCount(3);
+		TestMappingContext.All.Should().HaveCount(5);
 		TestMappingContext.All.Should().Contain(TestMappingContext.ServerMetricsEvent.Context);
 		TestMappingContext.All.Should().Contain(TestMappingContext.ProductCatalog.Context);
 		TestMappingContext.All.Should().Contain(TestMappingContext.ProductCatalogCatalog.Context);
+		TestMappingContext.All.Should().Contain(TestMappingContext.HashableArticle.Context);
+		TestMappingContext.All.Should().Contain(TestMappingContext.SemanticArticle.Context);
 	}
 }

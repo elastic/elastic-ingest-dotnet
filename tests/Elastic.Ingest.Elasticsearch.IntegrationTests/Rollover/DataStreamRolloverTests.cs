@@ -13,6 +13,24 @@ using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Rollover;
 
+/*
+ * Tests: Manual rollover of a data stream backing index
+ *
+ * Document: ServerMetricsEvent (Elastic.Mapping)
+ *   Entity: DataStream  "logs-srvmetrics-default"
+ *
+ *   ┌──────────────────────────────────────────────────────────────┐
+ *   │  1. Bootstrap + write 1 doc → backing index 000001           │
+ *   │  2. ManualRolloverStrategy.RolloverAsync(target)             │
+ *   │     └── POST /logs-srvmetrics-default/_rollover              │
+ *   │  3. GET /_data_stream/logs-srvmetrics-default                │
+ *   │     └── verify backing index 000002 exists                   │
+ *   └──────────────────────────────────────────────────────────────┘
+ *
+ * Writes to:    logs-srvmetrics-default
+ * After rollover: .ds-logs-srvmetrics-default-000001 (old)
+ *                 .ds-logs-srvmetrics-default-000002 (new write target)
+ */
 [NotInParallel("logs-srvmetrics")]
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
 public class DataStreamRolloverTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
