@@ -45,8 +45,12 @@ let private pristineCheck (arguments:ParseResults<Arguments>) =
     | _ -> failwithf "The checkout folder has pending changes, aborting"
 
 let private test (arguments:ParseResults<Arguments>) =
-    let loggerArg = "--logger:GithubActions" 
-    exec "dotnet" ["test"; "-c"; "Release"; "--filter"; "FullyQualifiedName!~Elastic.Ingest.Elasticsearch.IntegrationTests"; loggerArg] |> ignore
+    let testProjects = [
+        "tests/Elastic.Channels.Tests"
+        "tests/Elastic.Ingest.Elasticsearch.Tests"
+    ]
+    for project in testProjects do
+        exec "dotnet" ["test"; "--project"; project; "-c"; "Release"; "--report-github"] |> ignore
 
 let private generatePackages (arguments:ParseResults<Arguments>) =
     let output = Paths.RootRelative Paths.Output.FullName
