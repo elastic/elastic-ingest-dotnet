@@ -3,22 +3,17 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels.Diagnostics;
 using FluentAssertions;
-using Xunit;
-using Xunit.Abstractions;
+using TUnit.Core;
 
 namespace Elastic.Channels.Tests;
 
-public class TroubleshootTests : IDisposable
+public class TroubleshootTests
 {
-	public TroubleshootTests(ITestOutputHelper testOutput) => XunitContext.Register(testOutput);
-	void IDisposable.Dispose() => XunitContext.Flush();
-
-	[Fact] public async Task CanDisableDiagnostics()
+	[Test] public async Task CanDisableDiagnostics()
 	{
 		var (totalEvents, expectedSentBuffers, bufferOptions) = Setup();
 		var channel = new NoopBufferedChannel(new NoopBufferedChannel.NoopChannelOptions()
@@ -34,7 +29,7 @@ public class TroubleshootTests : IDisposable
 		channel.ToString().Should().NotContain($"Exported Buffers: {expectedSentBuffers:N0}");
 	}
 
-	[Fact] public async Task DefaultIncludesDiagnostics()
+	[Test] public async Task DefaultIncludesDiagnostics()
 	{
 		var (totalEvents, expectedSentBuffers, bufferOptions) = Setup();
 		var channel = new NoopBufferedChannel(new NoopBufferedChannel.NoopChannelOptions()
@@ -49,7 +44,7 @@ public class TroubleshootTests : IDisposable
 		channel.ToString().Should().Contain($"Exported Buffers:");
 	}
 
-	[Fact] public async Task DiagnosticsChannelAlwaysIncludesDiagnosticsInToString()
+	[Test] public async Task DiagnosticsChannelAlwaysIncludesDiagnosticsInToString()
 	{
 		var (totalEvents, expectedSentBuffers, bufferOptions) = Setup();
 		var channel = new DiagnosticsBufferedChannel(bufferOptions);

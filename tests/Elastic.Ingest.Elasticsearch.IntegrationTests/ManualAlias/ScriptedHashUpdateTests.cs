@@ -9,17 +9,59 @@ using Elastic.Channels;
 using Elastic.Clients.Elasticsearch.IndexManagement;
 using Elastic.Ingest.Elasticsearch.Catalog;
 using Elastic.Ingest.Elasticsearch.Indices;
+using Elastic.Ingest.Elasticsearch.Strategies;
 using FluentAssertions;
-using Xunit;
-using Xunit.Abstractions;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.ManualAlias;
 
-public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster, ITestOutputHelper output)
-	: IntegrationTestBase(cluster, output)
+/*
+ * Tests: Built-in content-hash scripted upserts via CatalogIndexChannel<HashableArticle>
+ *
+ * Document type: HashableArticle (Elastic.Mapping)
+ *   [Id][Keyword]       id              — bulk operation routing
+ *   [Text]              title           — analyzer: "html_content" (standard + html_strip + lowercase + asciifolding)
+ *   [ContentHash]       hash            — drives NOOP detection in scripted upserts
+ *   [Date]              index_batch_date, last_updated
+ *
+ * Mappings & analysis flow:
+ *   TestMappingContext.HashableArticle.Context
+ *     ├── GetMappingsJson()      → field types + analyzer refs
+ *     └── ConfigureAnalysis      → html_content analyzer, html_stripper char filter
+ *   IngestStrategies.Index<>()
+ *     └── GetMappingSettings     → merged entity settings + analysis JSON
+ *
+ * Bootstrap (CatalogIndexChannel):
+ *   BootstrapElasticsearchAsync(Failure)
+ *   ├── ComponentTemplate  update-data-template  (settings + analysis)
+ *   ├── ComponentTemplate  update-data-template  (mappings)
+ *   └── IndexTemplate      update-data-template  (pattern: update-data-*)
+ *
+ * Index naming:
+ *   Format:  update-data-{yyyy.MM.dd.HH-mm-ss-fffffff}
+ *   Alias:   update-data-search  →  latest concrete index
+ *            update-data-latest  →  latest concrete index
+ *
+ * Scripted upsert sequence:
+ *   ┌──────────────────────────────────────────────────────────────┐
+ *   │ 1. Write 100 docs            → all created    (version = 1) │
+ *   │ 2. Write 100 identical docs  → hash matches   (version = 1) │
+ *   │ 3. Modify 50 docs' titles    → hash differs   (version = 2) │
+ *   │ 4. New channel, same prefix  → reuses index via hash match  │
+ *   │ 5. Modify same 50 again      → hash differs   (version = 3) │
+ *   │ 6. Channel w/o scripted hash → forces new index (version=1) │
+ *   └──────────────────────────────────────────────────────────────┘
+ */
+[ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
+public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster)
+	: IntegrationTestBase(cluster)
 {
+	[Before(Test)]
+	public async Task Setup() => await CleanupPrefixAsync("update-data");
 
-	[Fact]
+	[After(Test)]
+	public async Task Teardown() => await CleanupPrefixAsync("update-data");
+
+	[Test]
 	public async Task EnsureDocumentsEndUpInIndex()
 	{
 		var indexPrefix = "update-data-";
@@ -31,56 +73,48 @@ public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster, ITestOut
 		var indexName = channel.IndexName;
 		var searchIndex = channel.Options.ActiveSearchAlias;
 
-		// Verify the index does not exist yet
 		var index = await Client.Indices.GetAsync(new GetIndexRequest(indexName));
 		index.Indices.Should().BeNullOrEmpty();
 
 		await WriteInitialDocuments(channel, slim, searchIndex, indexName, expectedVersion: 1);
 
-		// Verify the index exists and has the correct settings
 		index = await Client.Indices.GetAsync(new GetIndexRequest(indexName));
 		index.Indices.Should().NotBeNullOrEmpty();
-		index.Indices[indexName].Settings?.Index?.Lifecycle?.Name?.Should().NotBeNull().And.Be("7-days-default");
+		var lifecycle = index.Indices[indexName].Settings?.Index?.Lifecycle;
+		if (lifecycle?.Name is not null)
+			lifecycle.Name.Should().Be("7-days-default");
 
-		// Write the same 100 documents again over the same channel, all documents should still have version 1.
-		// Since no changes to hash occured all operations should have been a NOOP
 		await WriteInitialDocuments(channel, slim, searchIndex, indexName, expectedVersion: 1);
 
 		var refreshResult = await Client.Indices.RefreshAsync(indexName);
 		refreshResult.IsValidResponse.Should().BeTrue("{0}", refreshResult.DebugInformation);
 
-		// Now only update half the documents, assert the version is 2 for half of the documents
 		await UpdateHalfOfDocuments(channel, slim, searchIndex, indexName, expectedVersion: 2);
 
-		// when using a new Channel, it should pick up the existing index because we are using scripted upserts
 		channel = CreateChannel(indexPrefix, slim);
 		await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		channel.IndexName.Should().Be(indexName);
-		// Now only update the same half the documents, assert the version is 3 for half of the documents and 1 for the untouched documents
 		await UpdateHalfOfDocuments(channel, slim, searchIndex, indexName, expectedVersion: 3);
 
-		// We can force a fresh new index to be created by disabling scripted hash updates
 		channel = CreateChannel(indexPrefix, slim, useScriptedHashBulkUpsert: false);
 		await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		channel.IndexName.Should().NotBe(indexName);
 		indexName = channel.IndexName;
-		// Now only update the same half the documents, assert the version is 3 for half of the documents and 1 for the untouched documents
 		await UpdateHalfOfDocuments(channel, slim, searchIndex, indexName, expectedVersion: 1);
 
 	}
 
-	private async Task WriteInitialDocuments(CatalogIndexChannel<HashDocument> channel, CountdownEvent slim, string searchIndex, string indexName, int expectedVersion)
+	private async Task WriteInitialDocuments(CatalogIndexChannel<HashableArticle> channel, CountdownEvent slim, string searchIndex, string indexName, int expectedVersion)
 	{
-		// Write 100 documents
 		for (var i = 0; i < 100; i++)
-			channel.TryWrite(new HashDocument { Title = "Hello World!", Id = $"hello-world-{i}" });
+			channel.TryWrite(new HashableArticle { Title = "Hello World!", Id = $"hello-world-{i}" });
 		if (!slim.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
 			throw new Exception($"ecs document was not persisted within 10 seconds: {channel}");
 		slim.Reset();
 		await channel.RefreshAsync();
 		await channel.ApplyAliasesAsync();
 
-		var searchResult = await Client.SearchAsync<HashDocument>(s => s
+		var searchResult = await Client.SearchAsync<HashableArticle>(s => s
 			.Indices(searchIndex)
 			.Aggregations(a => a.Add("max", a1 => a1.Max(m => m.Field("_version"))))
 		);
@@ -97,14 +131,14 @@ public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster, ITestOut
 
 	}
 
-	private async Task UpdateHalfOfDocuments(CatalogIndexChannel<HashDocument> channel, CountdownEvent slim, string searchIndex, string indexName, int expectedVersion)
+	private async Task UpdateHalfOfDocuments(CatalogIndexChannel<HashableArticle> channel, CountdownEvent slim, string searchIndex, string indexName, int expectedVersion)
 	{
 		for (var i = 0; i < 100; i++)
 		{
 			var title = "Hello World!";
 			if (i % 2 == 0)
 				title += $"{i:N0}-{expectedVersion:N0}";
-			channel.TryWrite(new HashDocument { Title = title , Id = $"hello-world-{i}" });
+			channel.TryWrite(new HashableArticle { Title = title , Id = $"hello-world-{i}" });
 		}
 		if (!slim.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
 			throw new Exception($"Updates did not go through within 10s: {channel}");
@@ -112,7 +146,7 @@ public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster, ITestOut
 		slim.Reset();
 		await channel.RefreshAsync();
 		await channel.ApplyAliasesAsync();
-		var searchResult = await Client.SearchAsync<HashDocument>(s => s
+		var searchResult = await Client.SearchAsync<HashableArticle>(s => s
 			.Indices(searchIndex)
 			.Aggregations(a => a
 				.Add("max", a1 => a1.Max(m => m.Field("_version")))
@@ -126,7 +160,6 @@ public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster, ITestOut
 		var hit = searchResult.Hits.First();
 		hit.Index.Should().Be(indexName);
 
-		// validate only half were updated
 		var terms = searchResult.Aggregations?.GetLongTerms("terms")?.Buckets;
 		if (expectedVersion > 1)
 		{
@@ -141,9 +174,12 @@ public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster, ITestOut
 		}
 	}
 
-	private CatalogIndexChannel<HashDocument> CreateChannel(string indexPrefix, CountdownEvent slim, bool useScriptedHashBulkUpsert = true)
+	private CatalogIndexChannel<HashableArticle> CreateChannel(string indexPrefix, CountdownEvent slim, bool useScriptedHashBulkUpsert = true)
 	{
-		var options = new CatalogIndexChannelOptions<HashDocument>(Client.Transport)
+		var ctx = TestMappingContext.HashableArticle.Context;
+		var strategy = IngestStrategies.Index<HashableArticle>(ctx);
+
+		var options = new CatalogIndexChannelOptions<HashableArticle>(Transport)
 		{
 			IndexFormat = indexPrefix + "{0:yyyy.MM.dd.HH-mm-ss-fffffff}",
 			ActiveSearchAlias = indexPrefix + "search",
@@ -158,41 +194,9 @@ public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster, ITestOut
 			{
 				WaitHandle = slim, OutboundBufferMaxSize = 100,
 			},
-
-			// language=json
-			GetMappingSettings = () =>
-				"""
-				{
-				  "analysis": {
-				    "analyzer": {
-				      "my_analyzer": {
-				        "type": "custom",
-				        "tokenizer": "standard",
-				        "char_filter": [ "html_strip" ],
-				        "filter": [ "lowercase", "asciifolding" ]
-				      }
-				    }
-				  }
-				}
-				""",
-			// language=json
-			GetMapping = () =>
-				"""
-				{
-				  "properties": {
-					"hash": { "type": "keyword" },
-				    "title": {
-				      "type": "text",
-				      "search_analyzer": "my_analyzer",
-				      "fields": {
-				        "keyword": { "type": "keyword" }
-				      }
-				    }
-				  }
-				}
-				"""
+			GetMapping = ctx.GetMappingsJson,
+			GetMappingSettings = strategy.GetMappingSettings
 		};
-		var channel = new CatalogIndexChannel<HashDocument>(options);
-		return channel;
+		return new CatalogIndexChannel<HashableArticle>(options);
 	}
 }

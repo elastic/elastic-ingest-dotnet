@@ -8,24 +8,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels.Diagnostics;
 using FluentAssertions;
-using Xunit;
-using Xunit.Abstractions;
+using TUnit.Core;
 
 namespace Elastic.Channels.Tests;
 
-public class BehaviorTests : IDisposable
+public class BehaviorTests
 {
-	private readonly ITestOutputHelper _testOutput;
-
-	public BehaviorTests(ITestOutputHelper testOutput)
-	{
-		_testOutput = testOutput;
-		XunitContext.Register(testOutput);
-	}
-
-	void IDisposable.Dispose() => XunitContext.Flush();
-
-	[Fact] public async Task RespectsPagination()
+	[Test] public async Task RespectsPagination()
 	{
 		int totalEvents = 500_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
 		var expectedSentBuffers = totalEvents / bufferSize;
@@ -53,7 +42,7 @@ public class BehaviorTests : IDisposable
 	/// we don't want this data equally distributed over multiple calls to export the data.
 	/// Instead we want the smaller buffer to go out over a single export to the external system
 	/// </summary>
-	[Fact(Skip ="Temporary skip this on CI")]
+	[Test, Skip("Temporary skip this on CI")]
 	public async Task MessagesAreSequentiallyDistributedOverWorkers()
 	{
 		int totalEvents = 500_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
@@ -79,7 +68,7 @@ public class BehaviorTests : IDisposable
 		signalled.Should().BeTrue("The channel was not drained in the expected time");
 	}
 
-	[Fact] public async Task ConcurrencyIsApplied()
+	[Test] public async Task ConcurrencyIsApplied()
 	{
 		int totalEvents = 50_000, maxInFlight = 50_000, bufferSize = 5000;
 		var expectedPages = totalEvents / bufferSize;
@@ -94,7 +83,7 @@ public class BehaviorTests : IDisposable
 		var channel = new NoopBufferedChannel(bufferOptions, observeConcurrency: true);
 		channel.MaxConcurrency.Should().BeGreaterThan(1);
 
-		_testOutput.WriteLine($"{channel.MaxConcurrency}");
+		TestContext.Current?.OutputWriter.WriteLine($"{channel.MaxConcurrency}");
 		var written = 0;
 		for (var i = 0; i < totalEvents; i++)
 		{
@@ -109,7 +98,7 @@ public class BehaviorTests : IDisposable
 		channel.ObservedConcurrency.Should().BeGreaterThan(1);
 	}
 
-	[Fact] public async Task ManyChannelsContinueToDoWork()
+	[Test] public async Task ManyChannelsContinueToDoWork()
 	{
 		int totalEvents = 50_000_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
 		int closedThread = 0, maxFor = Environment.ProcessorCount * 2;
@@ -151,7 +140,7 @@ public class BehaviorTests : IDisposable
 		closedThread.Should().BeGreaterThan(0).And.Be(maxFor);
 	}
 
-	[Fact] public async Task SlowlyPushEvents()
+	[Test] public async Task SlowlyPushEvents()
 	{
 		int totalEvents = 50_000_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
 		var expectedSentBuffers = totalEvents / 10_000;

@@ -3,34 +3,20 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Elastic.Channels.Diagnostics;
 using FluentAssertions;
-using Xunit;
-using Xunit.Abstractions;
+using TUnit.Core;
 
 namespace Elastic.Channels.Tests;
 
-public class CalculatedPropertyTests : IDisposable
+public class CalculatedPropertyTests
 {
-	private readonly ITestOutputHelper _testOutput;
-
-	public CalculatedPropertyTests(ITestOutputHelper testOutput)
-	{
-		_testOutput = testOutput;
-		XunitContext.Register(testOutput);
-	}
-
-	void IDisposable.Dispose() => XunitContext.Flush();
-
-	[Theory]
-	[InlineData(500_000, 50_000, 100_000)]
-	[InlineData(10_00_000, 50_000, 100_000)]
-	[InlineData(50_000, 50_000, 25_000)]
-	[InlineData(10_000, 50_000, 20_000)]
-	[InlineData(10_00_000, 1_000, 2_000)]
+	[Test]
+	[Arguments(500_000, 50_000, 100_000)]
+	[Arguments(10_00_000, 50_000, 100_000)]
+	[Arguments(50_000, 50_000, 25_000)]
+	[Arguments(10_000, 50_000, 20_000)]
+	[Arguments(10_00_000, 1_000, 2_000)]
 	public void BatchExportSizeAndDrainSizeConstraints(int maxInFlight, int bufferSize, int drainSize)
 	{
 		var bufferOptions = new BufferOptions

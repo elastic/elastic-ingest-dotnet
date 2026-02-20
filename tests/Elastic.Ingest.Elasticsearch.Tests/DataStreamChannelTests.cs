@@ -7,13 +7,13 @@ using System.Threading;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Transport;
 using FluentAssertions;
-using Xunit;
+using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.Tests;
 
 public class DataStreamChannelTests : ChannelTestWithSingleDocResponseBase
 {
-	[Fact]
+	[Test]
 	public void DataStreamChannelUsesCorrectUrlAndOperationHeader()
 	{
 		ApiCallDetails callDetails = null;

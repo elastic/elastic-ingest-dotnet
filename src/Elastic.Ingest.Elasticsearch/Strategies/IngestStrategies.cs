@@ -59,11 +59,16 @@ public static class IngestStrategies
 		ElasticsearchTypeContext tc,
 		IBootstrapStrategy? bootstrap = null) where TEvent : class
 	{
+		var writeTarget = tc.IndexStrategy?.WriteTarget ?? typeof(TEvent).Name.ToLowerInvariant();
+		var indexFormat = tc.IndexStrategy?.DatePattern != null
+			? $"{writeTarget}-{{0:{tc.IndexStrategy.DatePattern}}}"
+			: writeTarget;
+
 		return new IngestStrategy<TEvent>(tc,
 			bootstrap ?? BootstrapStrategies.Index(),
 			new TypeContextIndexIngestStrategy<TEvent>(
 				tc,
-				tc.IndexStrategy?.WriteTarget ?? typeof(TEvent).Name.ToLowerInvariant(),
+				indexFormat,
 				DefaultBulkPathAndQuery),
 			tc.GetContentHash != null
 				? new HashBasedReuseProvisioning()
@@ -138,8 +143,13 @@ public static class IngestStrategies
 		{
 			EntityTarget.DataStream when tc.IndexStrategy?.Type != null && tc.IndexStrategy?.Dataset != null =>
 				$"{tc.IndexStrategy.Type}-{tc.IndexStrategy.Dataset}-*",
+			// Date-rolling indices produce names like "prefix-2024.01.01" → wildcard matches all
+			EntityTarget.Index when tc.IndexStrategy is { WriteTarget: { } wt, DatePattern: not null } =>
+				$"{wt}-*",
+			// Fixed-name index: use trailing wildcard so the pattern matches the exact index name
+			// (idx-products*  matches  idx-products) while remaining a valid wildcard expression
 			EntityTarget.Index when tc.IndexStrategy?.WriteTarget != null =>
-				$"{tc.IndexStrategy.WriteTarget}-*",
+				$"{tc.IndexStrategy.WriteTarget}*",
 			_ => tc.MappedType?.Name.ToLowerInvariant() + "-*"
 				?? throw new InvalidOperationException("Cannot resolve template wildcard from TypeContext.")
 		};
