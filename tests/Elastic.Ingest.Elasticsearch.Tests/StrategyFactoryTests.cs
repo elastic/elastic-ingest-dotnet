@@ -110,7 +110,8 @@ public class StrategyFactoryTests
 		var strategy = IngestStrategies.Index<TestDocument>(tc);
 
 		strategy.TemplateName.Should().Be("products-template");
-		strategy.TemplateWildcard.Should().Be("products-*");
+		strategy.TemplateWildcard.Should().Be("products*",
+			"fixed-name index (no DatePattern) uses trailing wildcard that matches the exact name");
 	}
 
 	[Test]

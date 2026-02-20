@@ -12,10 +12,11 @@ using Elastic.Transport;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Catalog;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.ManualAlias;
 
 /*
- * Tests: End-to-end document ingestion into an aliased catalog index
+ * Use case: Manual alias management  (https://elastic.github.io/elastic-ingest-dotnet/index-management/rollover/manual-alias)
+ * Tests:    End-to-end document ingestion into date-rolling aliased indices
  *
  * Document: ProductCatalog (Elastic.Mapping)
  *   Entity: Index  Name="cat-products"  Variant="Catalog"
@@ -33,12 +34,16 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Catalog;
  *   │  └── Verify via _search on cat-products-search                    │
  *   └───────────────────────────────────────────────────────────────────┘
  *
+ * Mapping update mechanism:
+ *   New date-stamped indices automatically pick up updated templates.
+ *   See MappingEvolutionTests for this scenario.
+ *
  * Provisioning: HashBasedReuseProvisioning (ProductCatalog has [ContentHash])
  * Alias:        LatestAndSearchAliasStrategy (ReadAlias configured)
  */
-[NotInParallel("cat-products")]
+[NotInParallel("manual-alias")]
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
-public class CatalogIngestionTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
+public class AliasIngestionTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
 {
 	private const string Prefix = "cat-products";
 	private const string LatestAlias = "cat-products-latest";

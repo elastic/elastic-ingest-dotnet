@@ -11,7 +11,7 @@ using Elastic.Transport;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.DataStreams;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Legacy;
 
 /*
  * Tests: Legacy DataStreamChannel<T> API (pre-IngestStrategy)

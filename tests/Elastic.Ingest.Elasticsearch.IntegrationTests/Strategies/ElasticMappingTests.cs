@@ -5,6 +5,7 @@
 using System;
 using System.Linq;
 using System.Text.Json;
+using Elastic.Ingest.Elasticsearch.Strategies;
 using Elastic.Mapping;
 using Elastic.Mapping.Analysis;
 using FluentAssertions;
@@ -26,7 +27,7 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Strategies;
  *   │
  *   ├── ProductCatalog       (Index: idx-products)
  *   │   ├── GetMappingsJson  → sku, name (analyzer: product_autocomplete), category (normalizer: lowercase_ascii), ...
- *   │   ├── GetSettingsJson  → { refresh_interval: "1s" }
+ *   │   ├── GetSettingsJson  → { refresh_interval: "5s" }
  *   │   ├── ConfigureAnalysis→ product_autocomplete analyzer + edge_ngram_filter + lowercase_ascii normalizer
  *   │   └── ConfigureMappings→ price_tier runtime field
  *   │
@@ -195,7 +196,7 @@ public class ElasticMappingTests
 	{
 		var json = TestMappingContext.ProductCatalog.Context.GetSettingsJson!();
 		using var doc = JsonDocument.Parse(json);
-		doc.RootElement.GetProperty("refresh_interval").GetString().Should().Be("1s");
+		doc.RootElement.GetProperty("refresh_interval").GetString().Should().Be("5s");
 	}
 
 	[Test]
@@ -400,11 +401,135 @@ public class ElasticMappingTests
 	[Test]
 	public void AllContextsAreRegistered()
 	{
-		TestMappingContext.All.Should().HaveCount(5);
+		TestMappingContext.All.Should().HaveCount(8);
 		TestMappingContext.All.Should().Contain(TestMappingContext.ServerMetricsEvent.Context);
+		TestMappingContext.All.Should().Contain(TestMappingContext.ServerMetricsEventV2.Context);
 		TestMappingContext.All.Should().Contain(TestMappingContext.ProductCatalog.Context);
+		TestMappingContext.All.Should().Contain(TestMappingContext.ProductCatalogV2.Context);
 		TestMappingContext.All.Should().Contain(TestMappingContext.ProductCatalogCatalog.Context);
+		TestMappingContext.All.Should().Contain(TestMappingContext.ProductCatalogV2Catalog.Context);
 		TestMappingContext.All.Should().Contain(TestMappingContext.HashableArticle.Context);
 		TestMappingContext.All.Should().Contain(TestMappingContext.SemanticArticle.Context);
+	}
+
+	// --- V2 variants (mapping evolution) ---
+
+	[Test]
+	public void V2ServerMetricsEventMappingContextHashDiffersFromV1()
+	{
+		var v1Hash = TestMappingContext.ServerMetricsEvent.Hash;
+		var v2Hash = TestMappingContext.ServerMetricsEventV2.Hash;
+		v2Hash.Should().NotBe(v1Hash,
+			"V2 subclass adds error_code field → different mapping-context hash");
+	}
+
+	[Test]
+	public void V2ProductCatalogMappingContextHashDiffersFromV1()
+	{
+		var v1Hash = TestMappingContext.ProductCatalog.Hash;
+		var v2Hash = TestMappingContext.ProductCatalogV2.Hash;
+		v2Hash.Should().NotBe(v1Hash,
+			"V2 subclass adds is_featured field → different mapping-context hash");
+	}
+
+	[Test]
+	public void V2ServerMetricsEventSettingsJsonDiffersFromV1()
+	{
+		var v1Settings = IngestStrategies.DataStream<ServerMetricsEvent>(
+			TestMappingContext.ServerMetricsEvent.Context).GetMappingSettings!();
+		var v2Settings = IngestStrategies.DataStream<ServerMetricsEventV2>(
+			TestMappingContext.ServerMetricsEventV2.Context).GetMappingSettings!();
+
+		v2Settings.Should().NotBe(v1Settings,
+			"V2 adds stop filter to log_message analyzer → different merged settings JSON");
+		v2Settings.Should().Contain("\"stop\"");
+	}
+
+	[Test]
+	public void V2ProductCatalogSettingsJsonDiffersFromV1()
+	{
+		var v1Settings = IngestStrategies.Index<ProductCatalog>(
+			TestMappingContext.ProductCatalog.Context).GetMappingSettings!();
+		var v2Settings = IngestStrategies.Index<ProductCatalogV2>(
+			TestMappingContext.ProductCatalogV2.Context).GetMappingSettings!();
+
+		v2Settings.Should().NotBe(v1Settings,
+			"V2 has different edge_ngram params + stop filter → different merged settings JSON");
+		v2Settings.Should().Contain("\"stop\"");
+	}
+
+	[Test]
+	public void V2CatalogSettingsJsonDiffersFromV1Catalog()
+	{
+		var v1Settings = IngestStrategies.Index<ProductCatalog>(
+			TestMappingContext.ProductCatalogCatalog.Context).GetMappingSettings!();
+		var v2Settings = IngestStrategies.Index<ProductCatalogV2>(
+			TestMappingContext.ProductCatalogV2Catalog.Context).GetMappingSettings!();
+
+		v2Settings.Should().NotBe(v1Settings,
+			"V2 catalog variant has different analysis → different merged settings JSON");
+	}
+
+	[Test]
+	public void V2VariantsShareSameEntityTarget()
+	{
+		TestMappingContext.ServerMetricsEventV2.Context.EntityTarget
+			.Should().Be(TestMappingContext.ServerMetricsEvent.Context.EntityTarget);
+		TestMappingContext.ProductCatalogV2.Context.EntityTarget
+			.Should().Be(TestMappingContext.ProductCatalog.Context.EntityTarget);
+		TestMappingContext.ProductCatalogV2Catalog.Context.EntityTarget
+			.Should().Be(TestMappingContext.ProductCatalogCatalog.Context.EntityTarget);
+	}
+
+	[Test]
+	public void V2VariantsShareSameWriteTarget()
+	{
+		TestMappingContext.ProductCatalogV2.Context.IndexStrategy!.WriteTarget
+			.Should().Be(TestMappingContext.ProductCatalog.Context.IndexStrategy!.WriteTarget,
+				"V2 and V1 map to the same Elasticsearch index name");
+
+		TestMappingContext.ProductCatalogV2Catalog.Context.IndexStrategy!.WriteTarget
+			.Should().Be(TestMappingContext.ProductCatalogCatalog.Context.IndexStrategy!.WriteTarget,
+				"V2 and V1 catalog map to the same Elasticsearch prefix");
+	}
+
+	[Test]
+	public void V2ServerMetricsEventSharesSameDataStreamName()
+	{
+		TestMappingContext.ServerMetricsEventV2.Context.IndexStrategy!.DataStreamName
+			.Should().Be(TestMappingContext.ServerMetricsEvent.Context.IndexStrategy!.DataStreamName,
+				"V2 and V1 map to the same data stream");
+	}
+
+	[Test]
+	public void V2ServerMetricsEventConfigureAnalysisProducesStopFilter()
+	{
+		var ctx = TestMappingContext.ServerMetricsEventV2.Context;
+		var builder = new AnalysisBuilder();
+		var result = ctx.ConfigureAnalysis!(builder);
+		result.HasConfiguration.Should().BeTrue();
+
+		var settings = result.Build();
+		var analysisJson = settings.ToJsonString();
+		using var doc = JsonDocument.Parse(analysisJson);
+		var analyzer = doc.RootElement.GetProperty("analyzer").GetProperty("log_message");
+		analyzer.GetProperty("filter").EnumerateArray().Select(e => e.GetString())
+			.Should().Contain("stop", "V2 log_message analyzer adds a stop filter");
+	}
+
+	[Test]
+	public void V2ProductCatalogConfigureAnalysisHasWidenedEdgeNgram()
+	{
+		var ctx = TestMappingContext.ProductCatalogV2.Context;
+		var builder = new AnalysisBuilder();
+		var result = ctx.ConfigureAnalysis!(builder);
+		result.HasConfiguration.Should().BeTrue();
+
+		var settings = result.Build();
+		var analysisJson = settings.ToJsonString();
+		using var doc = JsonDocument.Parse(analysisJson);
+		var filter = doc.RootElement.GetProperty("filter").GetProperty("edge_ngram_filter");
+		filter.GetProperty("min_gram").GetInt32().Should().Be(3, "V2 widens min_gram to 3");
+		filter.GetProperty("max_gram").GetInt32().Should().Be(20, "V2 widens max_gram to 20");
 	}
 }

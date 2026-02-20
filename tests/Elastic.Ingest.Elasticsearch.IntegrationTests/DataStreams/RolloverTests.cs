@@ -14,7 +14,8 @@ using TUnit.Core;
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.DataStreams;
 
 /*
- * Tests: Manual rollover of a data stream backing index
+ * Use case: Rollover API  (https://elastic.github.io/elastic-ingest-dotnet/index-management/rollover/rollover-api)
+ * Tests:    Manual rollover of a data stream backing index
  *
  * Document: ServerMetricsEvent (Elastic.Mapping)
  *   Entity: DataStream  "logs-srvmetrics-default"
@@ -31,9 +32,9 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests.DataStreams;
  * After rollover: .ds-logs-srvmetrics-default-000001 (old)
  *                 .ds-logs-srvmetrics-default-000002 (new write target)
  */
-[NotInParallel("logs-srvmetrics")]
+[NotInParallel("data-streams")]
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
-public class DataStreamRolloverTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
+public class RolloverTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
 {
 	private const string Prefix = "logs-srvmetrics";
 	private const string DsName = "logs-srvmetrics-default";

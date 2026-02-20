@@ -10,10 +10,11 @@ using Elastic.Transport;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Indices;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.SingleIndex;
 
 /*
- * Tests: Hash-based template reuse across multiple IngestChannel instances
+ * Use case: Single index  (https://elastic.github.io/elastic-ingest-dotnet/index-management/single-index)
+ * Tests:    Hash-based template reuse across multiple IngestChannel instances
  *
  * Document: ProductCatalog (Elastic.Mapping)
  *   Entity: Index  Name="idx-products"  [ContentHash] on content_hash field
@@ -27,8 +28,9 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Indices;
  *
  * Provisioning: HashBasedReuseProvisioning
  *   Identical mappings + settings → same ChannelHash → same template reused
+ *   See MappingEvolutionTests for the hash-CHANGE scenario.
  */
-[NotInParallel("idx-products")]
+[NotInParallel("single-index")]
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
 public class HashReuseTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
 {

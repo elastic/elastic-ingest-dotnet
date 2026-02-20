@@ -146,7 +146,8 @@ public class CompositeStrategyTests
 		var strategy = IngestStrategies.Index<ProductCatalog>(ctx);
 
 		strategy.TemplateName.Should().Be("idx-products-template");
-		strategy.TemplateWildcard.Should().Be("idx-products-*");
+		strategy.TemplateWildcard.Should().Be("idx-products*",
+			"fixed-name index (no DatePattern) uses trailing wildcard that matches the exact name");
 	}
 
 	[Test]
@@ -251,5 +252,54 @@ public class CompositeStrategyTests
 		var strategy = IngestStrategies.DataStream<ServerMetricsEvent>(ctx);
 
 		strategy.DataStreamType.Should().Be("logs");
+	}
+
+	// --- V2 variants resolve to same template names/wildcards ---
+
+	[Test]
+	public void V2IndexResolvesToSameTemplateNameAsV1()
+	{
+		var v1 = IngestStrategies.Index<ProductCatalog>(TestMappingContext.ProductCatalog.Context);
+		var v2 = IngestStrategies.Index<ProductCatalogV2>(TestMappingContext.ProductCatalogV2.Context);
+
+		v2.TemplateName.Should().Be(v1.TemplateName,
+			"V2 targets the same index so template name must match");
+		v2.TemplateWildcard.Should().Be(v1.TemplateWildcard);
+	}
+
+	[Test]
+	public void V2DataStreamResolvesToSameTemplateNameAsV1()
+	{
+		var v1 = IngestStrategies.DataStream<ServerMetricsEvent>(TestMappingContext.ServerMetricsEvent.Context);
+		var v2 = IngestStrategies.DataStream<ServerMetricsEventV2>(TestMappingContext.ServerMetricsEventV2.Context);
+
+		v2.TemplateName.Should().Be(v1.TemplateName,
+			"V2 targets the same data stream so template name must match");
+		v2.TemplateWildcard.Should().Be(v1.TemplateWildcard);
+	}
+
+	[Test]
+	public void V2CatalogResolvesToSameTemplateNameAsV1Catalog()
+	{
+		var v1 = IngestStrategies.Index<ProductCatalog>(TestMappingContext.ProductCatalogCatalog.Context);
+		var v2 = IngestStrategies.Index<ProductCatalogV2>(TestMappingContext.ProductCatalogV2Catalog.Context);
+
+		v2.TemplateName.Should().Be(v1.TemplateName);
+		v2.TemplateWildcard.Should().Be(v1.TemplateWildcard);
+	}
+
+	[Test]
+	public void V2SettingsJsonDiffersFromV1()
+	{
+		var v1Settings = IngestStrategies.Index<ProductCatalog>(TestMappingContext.ProductCatalog.Context)
+			.GetMappingSettings!();
+		var v2Settings = IngestStrategies.Index<ProductCatalogV2>(TestMappingContext.ProductCatalogV2.Context)
+			.GetMappingSettings!();
+
+		v1Settings.Should().NotBe(v2Settings,
+			"V2 analysis has different edge_ngram params and stop filter");
+
+		v2Settings.Should().Contain("\"stop\"",
+			"V2 adds stop filter to product_autocomplete analyzer");
 	}
 }

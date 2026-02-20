@@ -10,13 +10,14 @@ using Elastic.Transport;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Indices;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.SingleIndex;
 
 /*
- * Tests: End-to-end document ingestion into a fixed-name index
+ * Use case: Single index  (https://elastic.github.io/elastic-ingest-dotnet/index-management/single-index)
+ * Tests:    End-to-end document ingestion into a fixed-name index
  *
  * Document: ProductCatalog (Elastic.Mapping)
- *   Entity: Index  Name="idx-products"  RefreshInterval="1s"
+ *   Entity: Index  Name="idx-products"  RefreshInterval="5s"
  *
  *   ┌────────────────────────────────────────────────────┐
  *   │  IngestChannel<ProductCatalog>                     │
@@ -29,9 +30,9 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Indices;
  * No aliases:    NoAliasStrategy (no WriteAlias/ReadAlias configured)
  * Provisioning:  HashBasedReuseProvisioning (ProductCatalog has [ContentHash])
  */
-[NotInParallel("idx-products")]
+[NotInParallel("single-index")]
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
-public class IndexIngestionTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
+public class IngestionTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
 {
 	private const string Prefix = "idx-products";
 	private const string IndexName = "idx-products";

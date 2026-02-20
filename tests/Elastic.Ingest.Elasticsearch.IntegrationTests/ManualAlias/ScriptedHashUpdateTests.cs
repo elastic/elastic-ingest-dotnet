@@ -12,7 +12,7 @@ using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Strategies;
 using FluentAssertions;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Catalog;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.ManualAlias;
 
 /*
  * Tests: Built-in content-hash scripted upserts via CatalogIndexChannel<HashableArticle>

@@ -9,30 +9,29 @@ using Elastic.Transport;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Indices;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.SingleIndex;
 
 /*
- * Tests: Index template bootstrap via IngestChannel<ProductCatalog>
+ * Use case: Single index  (https://elastic.github.io/elastic-ingest-dotnet/index-management/single-index)
+ * Tests:    Template bootstrap — component templates, index template, ILM policy
  *
  * Document: ProductCatalog (Elastic.Mapping)
- *   Entity: Index  Name="idx-products"  RefreshInterval="1s"
+ *   Entity: Index  Name="idx-products"  RefreshInterval="5s"
  *   Analysis: product_autocomplete analyzer + edge_ngram_filter + lowercase_ascii normalizer
  *
  *   BootstrapElasticsearchAsync(Failure)
  *   ├── PUT /_component_template/idx-products-template-settings   (analysis + refresh_interval)
  *   ├── PUT /_component_template/idx-products-template-mappings   (sku, name, category, ...)
- *   └── PUT /_index_template/idx-products-template                (pattern: idx-products-*)
+ *   └── PUT /_index_template/idx-products-template                (pattern: idx-products*)
  *
- * Tests:
- *   1. BootstrapCreatesComponentAndIndexTemplates
- *      → mappings template contains sku, keyword type, product_autocomplete analyzer
- *   2. WithIlmBootstrapCreatesIlmPolicy
- *      → BootstrapStrategies.IndexWithIlm("idx-products-policy") adds IlmPolicyStep
- *      → skipped on serverless (ILM not available)
+ * Mapping update mechanism:
+ *   Template updates do NOT retroactively change existing indices.
+ *   A new index must be created to pick up the updated template.
+ *   See MappingEvolutionTests for this scenario.
  */
-[NotInParallel("idx-products")]
+[NotInParallel("single-index")]
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
-public class IndexBootstrapTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
+public class BootstrapTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
 {
 	private const string Prefix = "idx-products";
 

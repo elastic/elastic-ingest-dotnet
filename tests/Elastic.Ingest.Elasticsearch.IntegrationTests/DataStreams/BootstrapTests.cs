@@ -12,7 +12,8 @@ using TUnit.Core;
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.DataStreams;
 
 /*
- * Tests: Data stream template bootstrap via IngestChannel<ServerMetricsEvent>
+ * Use case: Data streams  (https://elastic.github.io/elastic-ingest-dotnet/index-management/data-streams)
+ * Tests:    Template bootstrap — component templates, data stream template, hash idempotency
  *
  * Document: ServerMetricsEvent (Elastic.Mapping)
  *   Entity: DataStream  Type="logs"  Dataset="srvmetrics"  Namespace="default"
@@ -22,17 +23,14 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests.DataStreams;
  *   ├── PUT /_component_template/logs-srvmetrics-mappings   (@timestamp, message, ...)
  *   └── PUT /_index_template/logs-srvmetrics                (data_stream: {})
  *
- * Tests:
- *   1. BootstrapCreatesComponentAndDataStreamTemplates
- *      → verifies all three templates exist, mappings contain expected fields
- *   2. RebootstrapWithSameHashIsIdempotent
- *      → two channels with identical config produce the same ChannelHash
- *   3. WithRetentionBootstrapsLifecycle
- *      → IngestStrategies.DataStream(ctx, "30d") adds DataStreamLifecycleStep
+ * Mapping update mechanism:
+ *   Template updates only affect new backing indices.
+ *   A rollover (manual or automatic) is needed to pick up updated templates.
+ *   See MappingEvolutionTests for this scenario.
  */
-[NotInParallel("logs-srvmetrics")]
+[NotInParallel("data-streams")]
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
-public class DataStreamBootstrapTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
+public class BootstrapTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
 {
 	private const string Prefix = "logs-srvmetrics";
 

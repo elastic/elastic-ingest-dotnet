@@ -12,7 +12,8 @@ using FluentAssertions;
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.DataStreams;
 
 /*
- * Tests: End-to-end document ingestion into a data stream
+ * Use case: Data streams  (https://elastic.github.io/elastic-ingest-dotnet/index-management/data-streams)
+ * Tests:    End-to-end document ingestion into a data stream
  *
  * Document: ServerMetricsEvent (Elastic.Mapping)
  *   Entity: DataStream  "logs-srvmetrics-default"
@@ -27,9 +28,9 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests.DataStreams;
  * Writes to:     logs-srvmetrics-default  (auto-created data stream)
  * Verifies:      document content via _search, data stream existence via GET _data_stream
  */
-[NotInParallel("logs-srvmetrics")]
+[NotInParallel("data-streams")]
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
-public class DataStreamIngestionTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
+public class IngestionTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
 {
 	private const string Prefix = "logs-srvmetrics";
 	private const string DsName = "logs-srvmetrics-default";

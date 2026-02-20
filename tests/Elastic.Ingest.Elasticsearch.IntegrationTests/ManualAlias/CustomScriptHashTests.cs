@@ -14,7 +14,7 @@ using Elastic.Ingest.Elasticsearch.Strategies;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Catalog;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.ManualAlias;
 
 /*
  * Tests: Custom Painless script in scripted hash upserts via CatalogIndexChannel<HashableArticle>

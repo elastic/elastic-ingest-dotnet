@@ -53,7 +53,7 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Semantic;
  *   └─────────────────────────────────────────────────────────────┘
  */
 [ClassDataSource<IngestionCluster>(Shared = SharedType.Keyed, Key = nameof(IngestionCluster))]
-public class SemanticIndexIngestionTests(IngestionCluster cluster)
+public class SemanticIngestionTests(IngestionCluster cluster)
 	: IntegrationTestBase(cluster)
 {
 	[Before(Test)]

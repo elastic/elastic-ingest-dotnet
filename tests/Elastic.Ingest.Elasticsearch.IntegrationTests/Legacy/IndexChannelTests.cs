@@ -11,7 +11,7 @@ using Elastic.Transport;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Indices;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Legacy;
 
 /*
  * Tests: Legacy IndexChannel<T> API (pre-IngestStrategy)

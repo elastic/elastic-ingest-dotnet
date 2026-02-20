@@ -65,6 +65,34 @@ public static class ServerMetricsEventConfig
 }
 
 /// <summary>
+/// V2 of ServerMetricsEvent — adds an error_code field, producing a different
+/// mapping hash from V1 so the channel detects template changes.
+/// </summary>
+public partial class ServerMetricsEventV2 : ServerMetricsEvent
+{
+	[Keyword]
+	[JsonPropertyName("error_code")]
+	public string? ErrorCode { get; set; }
+}
+
+/// <summary>
+/// V2 configuration — adds a stop-words filter to the log_message analyzer
+/// and replaces is_slow with is_error runtime field.
+/// </summary>
+public static class ServerMetricsEventV2Config
+{
+	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+		analysis
+			.Analyzer("log_message", a => a.Custom()
+				.Tokenizer(Tokenizers.Standard)
+				.Filters(TokenFilters.Lowercase, TokenFilters.AsciiFolding, TokenFilters.Stop));
+
+	public static ServerMetricsEventV2MappingsBuilder ConfigureMappings(ServerMetricsEventV2MappingsBuilder mappings) =>
+		mappings
+			.AddRuntimeField("is_error", f => f.Boolean().Script("emit(doc['log_level.keyword'].size() > 0 && doc['log_level.keyword'].value == 'error')"));
+}
+
+/// <summary>
 /// Simulates a product catalog entry indexed into a regular index.
 /// </summary>
 public partial class ProductCatalog
@@ -121,6 +149,40 @@ public static class ProductCatalogConfig
 		mappings
 			.AddRuntimeField("price_tier", f => f.Keyword()
 				.Script("if (doc['price'].value < 10) emit('budget'); else if (doc['price'].value < 100) emit('mid'); else emit('premium')"));
+}
+
+/// <summary>
+/// V2 of ProductCatalog — adds an is_featured field, producing a different
+/// mapping hash from V1 so the channel detects template changes.
+/// </summary>
+public partial class ProductCatalogV2 : ProductCatalog
+{
+	[Boolean]
+	[JsonPropertyName("is_featured")]
+	public bool IsFeatured { get; set; }
+}
+
+/// <summary>
+/// V2 configuration — widens the edge_ngram window (3..20), adds a stop-words filter,
+/// and replaces price_tier with discount_eligible runtime field.
+/// </summary>
+public static class ProductCatalogV2Config
+{
+	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+		analysis
+			.Normalizer("lowercase_ascii", n => n.Custom()
+				.Filters(TokenFilters.Lowercase, TokenFilters.AsciiFolding))
+			.TokenFilter("edge_ngram_filter", t => t.EdgeNGram()
+				.MinGram(3)
+				.MaxGram(20))
+			.Analyzer("product_autocomplete", a => a.Custom()
+				.Tokenizer(Tokenizers.Standard)
+				.Filters(TokenFilters.Lowercase, TokenFilters.Stop, "edge_ngram_filter"));
+
+	public static ProductCatalogV2MappingsBuilder ConfigureMappings(ProductCatalogV2MappingsBuilder mappings) =>
+		mappings
+			.AddRuntimeField("discount_eligible", f => f.Boolean()
+				.Script("emit(doc['price'].value < 25)"));
 }
 
 /// <summary>
