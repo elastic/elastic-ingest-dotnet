@@ -11,7 +11,7 @@ using Elastic.Transport;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Rollover;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.DataStreams;
 
 /*
  * Tests: Manual rollover of a data stream backing index
@@ -49,7 +49,7 @@ public class DataStreamRolloverTests(IngestionCluster cluster) : IntegrationTest
 	{
 		var ctx = TestMappingContext.ServerMetricsEvent.Context;
 		var slim = new CountdownEvent(1);
-		var options = new IngestChannelOptions<ServerMetricsEvent>(Client.Transport, ctx)
+		var options = new IngestChannelOptions<ServerMetricsEvent>(Transport, ctx)
 		{
 			BufferOptions = new BufferOptions { WaitHandle = slim, OutboundBufferMaxSize = 1 }
 		};
@@ -73,13 +73,13 @@ public class DataStreamRolloverTests(IngestionCluster cluster) : IntegrationTest
 		var rollover = new ManualRolloverStrategy();
 		var rolloverCtx = new RolloverContext
 		{
-			Transport = Client.Transport,
+			Transport = Transport,
 			Target = DsName
 		};
 		var rolled = await rollover.RolloverAsync(rolloverCtx);
 		rolled.Should().BeTrue();
 
-		var dsResponse = await Client.Transport.RequestAsync<StringResponse>(
+		var dsResponse = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/_data_stream/{DsName}");
 		dsResponse.ApiCallDetails.HttpStatusCode.Should().Be(200);
 		dsResponse.Body.Should().Contain("000002",

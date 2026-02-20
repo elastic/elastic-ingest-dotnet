@@ -9,24 +9,20 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 /// <summary>
 /// Central mapping context for all integration test scenarios.
 /// Each entity gets a unique prefix to isolate Elasticsearch resources per test group.
-/// <para>
-/// Access type contexts via generated properties:
-/// <list type="bullet">
-///   <item><c>TestMappingContext.ServerMetricsEvent.Context</c> — data stream</item>
-///   <item><c>TestMappingContext.ProductCatalog.Context</c> — plain index</item>
-///   <item><c>TestMappingContext.ProductCatalogCatalog.Context</c> — aliased index with hash reuse</item>
-///   <item><c>TestMappingContext.HashableArticle.Context</c> — catalog index with hash upserts</item>
-///   <item><c>TestMappingContext.SemanticArticle.Context</c> — semantic index with inference</item>
-/// </list>
-/// </para>
+/// Analysis and mapping customization is externalized via <c>Configuration = typeof(...)</c>.
 /// </summary>
 [ElasticsearchMappingContext]
 [Entity<ServerMetricsEvent>(
 	Target = EntityTarget.DataStream,
 	Type = "logs",
 	Dataset = "srvmetrics",
-	Namespace = "default")]
-[Entity<ProductCatalog>(Target = EntityTarget.Index, Name = "idx-products", RefreshInterval = "1s")]
+	Namespace = "default",
+	Configuration = typeof(ServerMetricsEventConfig))]
+[Entity<ProductCatalog>(
+	Target = EntityTarget.Index,
+	Name = "idx-products",
+	RefreshInterval = "1s",
+	Configuration = typeof(ProductCatalogConfig))]
 [Entity<ProductCatalog>(
 	Target = EntityTarget.Index,
 	Name = "cat-products",
@@ -34,7 +30,14 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 	WriteAlias = "cat-products",
 	ReadAlias = "cat-products-search",
 	SearchPattern = "cat-products-*",
-	DatePattern = "yyyy.MM.dd.HHmmss")]
-[Entity<HashableArticle>(Target = EntityTarget.Index, Name = "hashable-articles")]
-[Entity<SemanticArticle>(Target = EntityTarget.Index, Name = "semantic-articles")]
+	DatePattern = "yyyy.MM.dd.HHmmss",
+	Configuration = typeof(ProductCatalogConfig))]
+[Entity<HashableArticle>(
+	Target = EntityTarget.Index,
+	Name = "hashable-articles",
+	Configuration = typeof(HashableArticleConfig))]
+[Entity<SemanticArticle>(
+	Target = EntityTarget.Index,
+	Name = "semantic-articles",
+	Configuration = typeof(SemanticArticleConfig))]
 public static partial class TestMappingContext;

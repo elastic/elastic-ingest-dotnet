@@ -9,7 +9,7 @@ using Elastic.Transport;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Bootstrap;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.DataStreams;
 
 /*
  * Tests: Data stream template bootstrap via IngestChannel<ServerMetricsEvent>
@@ -46,7 +46,7 @@ public class DataStreamBootstrapTests(IngestionCluster cluster) : IntegrationTes
 	public async Task BootstrapCreatesComponentAndDataStreamTemplates()
 	{
 		var ctx = TestMappingContext.ServerMetricsEvent.Context;
-		var options = new IngestChannelOptions<ServerMetricsEvent>(Client.Transport, ctx)
+		var options = new IngestChannelOptions<ServerMetricsEvent>(Transport, ctx)
 		{
 			BufferOptions = new BufferOptions { OutboundBufferMaxSize = 1 }
 		};
@@ -55,18 +55,18 @@ public class DataStreamBootstrapTests(IngestionCluster cluster) : IntegrationTes
 		var result = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		result.Should().BeTrue();
 
-		var settingsTemplate = await Client.Transport.RequestAsync<StringResponse>(
+		var settingsTemplate = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/_component_template/{Prefix}-settings");
 		settingsTemplate.ApiCallDetails.HttpStatusCode.Should().Be(200);
 
-		var mappingsTemplate = await Client.Transport.RequestAsync<StringResponse>(
+		var mappingsTemplate = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/_component_template/{Prefix}-mappings");
 		mappingsTemplate.ApiCallDetails.HttpStatusCode.Should().Be(200);
 		mappingsTemplate.Body.Should().Contain("\"@timestamp\"");
 		mappingsTemplate.Body.Should().Contain("\"message\"");
 		mappingsTemplate.Body.Should().Contain("\"duration_ms\"");
 
-		var indexTemplate = await Client.Transport.RequestAsync<StringResponse>(
+		var indexTemplate = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/_index_template/{Prefix}");
 		indexTemplate.ApiCallDetails.HttpStatusCode.Should().Be(200);
 	}
@@ -75,7 +75,7 @@ public class DataStreamBootstrapTests(IngestionCluster cluster) : IntegrationTes
 	public async Task RebootstrapWithSameHashIsIdempotent()
 	{
 		var ctx = TestMappingContext.ServerMetricsEvent.Context;
-		var options = new IngestChannelOptions<ServerMetricsEvent>(Client.Transport, ctx)
+		var options = new IngestChannelOptions<ServerMetricsEvent>(Transport, ctx)
 		{
 			BufferOptions = new BufferOptions { OutboundBufferMaxSize = 1 }
 		};
@@ -96,7 +96,7 @@ public class DataStreamBootstrapTests(IngestionCluster cluster) : IntegrationTes
 	{
 		var ctx = TestMappingContext.ServerMetricsEvent.Context;
 		var strategy = IngestStrategies.DataStream<ServerMetricsEvent>(ctx, "30d");
-		var options = new IngestChannelOptions<ServerMetricsEvent>(Client.Transport, strategy, ctx)
+		var options = new IngestChannelOptions<ServerMetricsEvent>(Transport, strategy, ctx)
 		{
 			BufferOptions = new BufferOptions { OutboundBufferMaxSize = 1 }
 		};
@@ -105,7 +105,7 @@ public class DataStreamBootstrapTests(IngestionCluster cluster) : IntegrationTes
 		var result = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		result.Should().BeTrue("bootstrap with lifecycle retention should succeed");
 
-		var indexTemplate = await Client.Transport.RequestAsync<StringResponse>(
+		var indexTemplate = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/_index_template/{Prefix}");
 		indexTemplate.ApiCallDetails.HttpStatusCode.Should().Be(200);
 	}

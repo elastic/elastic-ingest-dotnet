@@ -10,7 +10,7 @@ using Elastic.Transport;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Bootstrap;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Strategies;
 
 /*
  * Tests: Bootstrap error handling with insufficient privileges

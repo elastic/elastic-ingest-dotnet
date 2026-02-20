@@ -10,7 +10,7 @@ using Elastic.Transport;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Ingestion;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Indices;
 
 /*
  * Tests: End-to-end document ingestion into a fixed-name index
@@ -47,7 +47,7 @@ public class IndexIngestionTests(IngestionCluster cluster) : IntegrationTestBase
 	{
 		var ctx = TestMappingContext.ProductCatalog.Context;
 		var slim = new CountdownEvent(1);
-		var options = new IngestChannelOptions<ProductCatalog>(Client.Transport, ctx)
+		var options = new IngestChannelOptions<ProductCatalog>(Transport, ctx)
 		{
 			BufferOptions = new BufferOptions { WaitHandle = slim, OutboundBufferMaxSize = 1 }
 		};
@@ -69,11 +69,11 @@ public class IndexIngestionTests(IngestionCluster cluster) : IntegrationTestBase
 		if (!slim.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
 			throw new Exception($"Document was not persisted within 10 seconds: {channel}");
 
-		var refresh = await Client.Transport.RequestAsync<StringResponse>(
+		var refresh = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.POST, $"/{IndexName}/_refresh");
 		refresh.ApiCallDetails.HttpStatusCode.Should().Be(200);
 
-		var search = await Client.Transport.RequestAsync<StringResponse>(
+		var search = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/{IndexName}/_search");
 		search.ApiCallDetails.HttpStatusCode.Should().Be(200);
 		search.Body.Should().Contain("\"WDG-001\"");

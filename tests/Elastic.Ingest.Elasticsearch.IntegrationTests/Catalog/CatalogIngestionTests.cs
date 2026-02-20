@@ -12,7 +12,7 @@ using Elastic.Transport;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Ingestion;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Catalog;
 
 /*
  * Tests: End-to-end document ingestion into an aliased catalog index
@@ -55,7 +55,7 @@ public class CatalogIngestionTests(IngestionCluster cluster) : IntegrationTestBa
 	{
 		var ctx = TestMappingContext.ProductCatalogCatalog.Context;
 		var slim = new CountdownEvent(1);
-		var options = new IngestChannelOptions<ProductCatalog>(Client.Transport, ctx)
+		var options = new IngestChannelOptions<ProductCatalog>(Transport, ctx)
 		{
 			BufferOptions = new BufferOptions { WaitHandle = slim, OutboundBufferMaxSize = 1 }
 		};
@@ -78,7 +78,7 @@ public class CatalogIngestionTests(IngestionCluster cluster) : IntegrationTestBa
 			throw new Exception($"Document was not persisted within 10 seconds: {channel}");
 
 		// Resolve the concrete index name
-		var resolveResponse = await Client.Transport.RequestAsync<StringResponse>(
+		var resolveResponse = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/_resolve/index/{Prefix}-*");
 		resolveResponse.ApiCallDetails.HttpStatusCode.Should().Be(200);
 
@@ -91,12 +91,12 @@ public class CatalogIngestionTests(IngestionCluster cluster) : IntegrationTestBa
 		concreteIndex.Should().NotBeNull("a concrete cat-products index should have been created");
 
 		// Refresh the concrete index
-		var refresh = await Client.Transport.RequestAsync<StringResponse>(
+		var refresh = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.POST, $"/{concreteIndex}/_refresh");
 		refresh.ApiCallDetails.HasSuccessfulStatusCode.Should().BeTrue();
 
 		// Search to verify the document landed
-		var searchViaPattern = await Client.Transport.RequestAsync<StringResponse>(
+		var searchViaPattern = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/{concreteIndex}/_search");
 		searchViaPattern.ApiCallDetails.HttpStatusCode.Should().Be(200);
 		searchViaPattern.Body.Should().Contain("\"CAT-001\"");
@@ -104,12 +104,12 @@ public class CatalogIngestionTests(IngestionCluster cluster) : IntegrationTestBa
 		// Apply aliases via the channel using the concrete index name
 		await channel.ApplyAliasesAsync(concreteIndex!);
 
-		var latestAliasResponse = await Client.Transport.RequestAsync<StringResponse>(
+		var latestAliasResponse = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/_alias/{LatestAlias}");
 		latestAliasResponse.ApiCallDetails.HttpStatusCode.Should().Be(200,
 			"latest alias should be created after applying aliases");
 
-		var searchViaReadAlias = await Client.Transport.RequestAsync<StringResponse>(
+		var searchViaReadAlias = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/{ReadAlias}/_search");
 		searchViaReadAlias.ApiCallDetails.HttpStatusCode.Should().Be(200,
 			"documents should be searchable via the read alias");

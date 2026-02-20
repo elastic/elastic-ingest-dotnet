@@ -14,7 +14,7 @@ using FluentAssertions;
 using TUnit.Core;
 using static System.Globalization.CultureInfo;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Semantic;
 
 /*
  * Tests: Semantic search ingestion via SemanticIndexChannel<SemanticArticle>
@@ -71,7 +71,7 @@ public class SemanticIndexIngestionTests(IngestionCluster cluster)
 		var indexPrefix = "semantic-data-";
 		var slim = new CountdownEvent(1);
 
-		var options = new SemanticIndexChannelOptions<SemanticArticle>(Client.Transport)
+		var options = new SemanticIndexChannelOptions<SemanticArticle>(Transport)
 		{
 			IndexFormat = indexPrefix + "{0:yyyy.MM.dd}",
 			BulkOperationIdLookup = c => c.Id,

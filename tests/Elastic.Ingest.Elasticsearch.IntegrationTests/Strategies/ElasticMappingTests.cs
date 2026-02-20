@@ -9,7 +9,7 @@ using Elastic.Mapping;
 using Elastic.Mapping.Analysis;
 using FluentAssertions;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Mapping;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Strategies;
 
 /*
  * Tests: Source-generator output verification for Elastic.Mapping
@@ -131,7 +131,7 @@ public class ElasticMappingTests
 	public void ServerMetricsEventConfigureMappingsProducesRuntimeField()
 	{
 		var builder = new ServerMetricsEventMappingsBuilder();
-		var result = ServerMetricsEvent.ConfigureMappings(builder);
+		var result = ServerMetricsEventConfig.ConfigureMappings(builder);
 		result.HasConfiguration.Should().BeTrue(
 			"ConfigureMappings adds an is_slow runtime field");
 	}
@@ -237,7 +237,7 @@ public class ElasticMappingTests
 	public void ProductCatalogConfigureMappingsProducesRuntimeField()
 	{
 		var builder = new ProductCatalogMappingsBuilder();
-		var result = ProductCatalog.ConfigureMappings(builder);
+		var result = ProductCatalogConfig.ConfigureMappings(builder);
 		result.HasConfiguration.Should().BeTrue(
 			"ConfigureMappings adds a price_tier runtime field");
 	}

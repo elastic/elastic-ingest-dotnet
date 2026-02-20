@@ -9,7 +9,7 @@ using Elastic.Channels;
 using Elastic.Transport;
 using FluentAssertions;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Ingestion;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.DataStreams;
 
 /*
  * Tests: End-to-end document ingestion into a data stream
@@ -45,7 +45,7 @@ public class DataStreamIngestionTests(IngestionCluster cluster) : IntegrationTes
 	{
 		var ctx = TestMappingContext.ServerMetricsEvent.Context;
 		var slim = new CountdownEvent(1);
-		var options = new IngestChannelOptions<ServerMetricsEvent>(Client.Transport, ctx)
+		var options = new IngestChannelOptions<ServerMetricsEvent>(Transport, ctx)
 		{
 			BufferOptions = new BufferOptions { WaitHandle = slim, OutboundBufferMaxSize = 1 }
 		};
@@ -68,17 +68,17 @@ public class DataStreamIngestionTests(IngestionCluster cluster) : IntegrationTes
 		if (!slim.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
 			throw new Exception($"Document was not persisted within 10 seconds: {channel}");
 
-		var refresh = await Client.Transport.RequestAsync<StringResponse>(
+		var refresh = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.POST, $"/{DsName}/_refresh");
 		refresh.ApiCallDetails.HttpStatusCode.Should().Be(200);
 
-		var search = await Client.Transport.RequestAsync<StringResponse>(
+		var search = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/{DsName}/_search");
 		search.ApiCallDetails.HttpStatusCode.Should().Be(200);
 		search.Body.Should().Contain("\"product-api\"");
 		search.Body.Should().Contain("GET /api/products 200 OK");
 
-		var getDs = await Client.Transport.RequestAsync<StringResponse>(
+		var getDs = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/_data_stream/{DsName}");
 		getDs.ApiCallDetails.HttpStatusCode.Should().Be(200);
 		getDs.Body.Should().Contain(Prefix);

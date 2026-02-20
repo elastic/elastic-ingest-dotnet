@@ -9,7 +9,7 @@ using Elastic.Transport;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Bootstrap;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Indices;
 
 /*
  * Tests: Index template bootstrap via IngestChannel<ProductCatalog>
@@ -46,7 +46,7 @@ public class IndexBootstrapTests(IngestionCluster cluster) : IntegrationTestBase
 	public async Task BootstrapCreatesComponentAndIndexTemplates()
 	{
 		var ctx = TestMappingContext.ProductCatalog.Context;
-		var options = new IngestChannelOptions<ProductCatalog>(Client.Transport, ctx)
+		var options = new IngestChannelOptions<ProductCatalog>(Transport, ctx)
 		{
 			BufferOptions = new BufferOptions { OutboundBufferMaxSize = 1 }
 		};
@@ -55,14 +55,14 @@ public class IndexBootstrapTests(IngestionCluster cluster) : IntegrationTestBase
 		var result = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		result.Should().BeTrue();
 
-		var mappingsTemplate = await Client.Transport.RequestAsync<StringResponse>(
+		var mappingsTemplate = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/_component_template/{Prefix}-template-mappings");
 		mappingsTemplate.ApiCallDetails.HttpStatusCode.Should().Be(200);
 		mappingsTemplate.Body.Should().Contain("\"sku\"");
 		mappingsTemplate.Body.Should().Contain("\"keyword\"");
 		mappingsTemplate.Body.Should().Contain("\"product_autocomplete\"");
 
-		var indexTemplate = await Client.Transport.RequestAsync<StringResponse>(
+		var indexTemplate = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/_index_template/{Prefix}-template");
 		indexTemplate.ApiCallDetails.HttpStatusCode.Should().Be(200);
 	}
@@ -70,7 +70,7 @@ public class IndexBootstrapTests(IngestionCluster cluster) : IntegrationTestBase
 	[Test]
 	public async Task WithIlmBootstrapCreatesIlmPolicy()
 	{
-		var ilmCheck = await Client.Transport.RequestAsync<StringResponse>(
+		var ilmCheck = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, "/_ilm/status");
 		if (ilmCheck.ApiCallDetails.HttpStatusCode != 200)
 			return; // ILM not available on this cluster (e.g. serverless)
@@ -78,7 +78,7 @@ public class IndexBootstrapTests(IngestionCluster cluster) : IntegrationTestBase
 		var ctx = TestMappingContext.ProductCatalog.Context;
 		var strategy = IngestStrategies.Index<ProductCatalog>(ctx,
 			BootstrapStrategies.IndexWithIlm("idx-products-policy"));
-		var options = new IngestChannelOptions<ProductCatalog>(Client.Transport, strategy, ctx)
+		var options = new IngestChannelOptions<ProductCatalog>(Transport, strategy, ctx)
 		{
 			BufferOptions = new BufferOptions { OutboundBufferMaxSize = 1 }
 		};
@@ -87,7 +87,7 @@ public class IndexBootstrapTests(IngestionCluster cluster) : IntegrationTestBase
 		var result = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 		result.Should().BeTrue();
 
-		var ilmResponse = await Client.Transport.RequestAsync<StringResponse>(
+		var ilmResponse = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, "/_ilm/policy/idx-products-policy");
 		ilmResponse.ApiCallDetails.HttpStatusCode.Should().Be(200);
 		ilmResponse.Body.Should().Contain("idx-products-policy");

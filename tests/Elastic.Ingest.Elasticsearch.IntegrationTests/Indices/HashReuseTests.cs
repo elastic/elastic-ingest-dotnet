@@ -10,7 +10,7 @@ using Elastic.Transport;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Rollover;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Indices;
 
 /*
  * Tests: Hash-based template reuse across multiple IngestChannel instances
@@ -47,7 +47,7 @@ public class HashReuseTests(IngestionCluster cluster) : IntegrationTestBase(clus
 		var ctx = TestMappingContext.ProductCatalog.Context;
 
 		var slim1 = new CountdownEvent(1);
-		var options1 = new IngestChannelOptions<ProductCatalog>(Client.Transport, ctx)
+		var options1 = new IngestChannelOptions<ProductCatalog>(Transport, ctx)
 		{
 			BufferOptions = new BufferOptions { WaitHandle = slim1, OutboundBufferMaxSize = 1 }
 		};
@@ -65,7 +65,7 @@ public class HashReuseTests(IngestionCluster cluster) : IntegrationTestBase(clus
 			throw new Exception("First write timed out");
 
 		var slim2 = new CountdownEvent(1);
-		var options2 = new IngestChannelOptions<ProductCatalog>(Client.Transport, ctx)
+		var options2 = new IngestChannelOptions<ProductCatalog>(Transport, ctx)
 		{
 			BufferOptions = new BufferOptions { WaitHandle = slim2, OutboundBufferMaxSize = 1 }
 		};
@@ -84,10 +84,10 @@ public class HashReuseTests(IngestionCluster cluster) : IntegrationTestBase(clus
 		if (!slim2.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
 			throw new Exception("Second write timed out");
 
-		await Client.Transport.RequestAsync<StringResponse>(
+		await Transport.RequestAsync<StringResponse>(
 			HttpMethod.POST, $"/{IndexName}/_refresh");
 
-		var search = await Client.Transport.RequestAsync<StringResponse>(
+		var search = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/{IndexName}/_search");
 		search.ApiCallDetails.HttpStatusCode.Should().Be(200);
 		search.Body.Should().Contain("\"HR-001\"");

@@ -7,14 +7,20 @@ using System.Text.Json.Serialization;
 using Elastic.Mapping;
 using Elastic.Mapping.Analysis;
 using Elastic.Mapping.Mappings;
+using static Elastic.Mapping.Analysis.BuiltInAnalysis;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
+// ---------------------------------------------------------------------------
+// Domain POCOs — clean types with field-level Elastic.Mapping attributes only.
+// Analysis and mapping customization live in separate static Configuration
+// classes referenced via Configuration = typeof(...) on the entity attribute.
+// ---------------------------------------------------------------------------
+
 /// <summary>
 /// Simulates an application observability event ingested into data streams.
-/// Realistic fields: timestamp, severity, service identity, request tracing, and log text.
 /// </summary>
-public partial class ServerMetricsEvent : IConfigureElasticsearch<ServerMetricsEventMappingsBuilder>
+public partial class ServerMetricsEvent
 {
 	[Timestamp]
 	[JsonPropertyName("@timestamp")]
@@ -43,12 +49,15 @@ public partial class ServerMetricsEvent : IConfigureElasticsearch<ServerMetricsE
 	[Long]
 	[JsonPropertyName("duration_ms")]
 	public long DurationMs { get; set; }
+}
 
+public static class ServerMetricsEventConfig
+{
 	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
 		analysis
 			.Analyzer("log_message", a => a.Custom()
-				.Tokenizer(BuiltInAnalysis.Tokenizers.Standard)
-				.Filters(BuiltInAnalysis.TokenFilters.Lowercase, BuiltInAnalysis.TokenFilters.AsciiFolding));
+				.Tokenizer(Tokenizers.Standard)
+				.Filters(TokenFilters.Lowercase, TokenFilters.AsciiFolding));
 
 	public static ServerMetricsEventMappingsBuilder ConfigureMappings(ServerMetricsEventMappingsBuilder mappings) =>
 		mappings
@@ -57,9 +66,8 @@ public partial class ServerMetricsEvent : IConfigureElasticsearch<ServerMetricsE
 
 /// <summary>
 /// Simulates a product catalog entry indexed into a regular index.
-/// Realistic fields: product identity, searchable text, pricing, categorization, change tracking.
 /// </summary>
-public partial class ProductCatalog : IConfigureElasticsearch<ProductCatalogMappingsBuilder>
+public partial class ProductCatalog
 {
 	[Id]
 	[Keyword]
@@ -94,17 +102,20 @@ public partial class ProductCatalog : IConfigureElasticsearch<ProductCatalogMapp
 	[Date]
 	[JsonPropertyName("updated_at")]
 	public DateTimeOffset UpdatedAt { get; set; }
+}
 
+public static class ProductCatalogConfig
+{
 	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
 		analysis
 			.Normalizer("lowercase_ascii", n => n.Custom()
-				.Filters(BuiltInAnalysis.TokenFilters.Lowercase, BuiltInAnalysis.TokenFilters.AsciiFolding))
+				.Filters(TokenFilters.Lowercase, TokenFilters.AsciiFolding))
 			.TokenFilter("edge_ngram_filter", t => t.EdgeNGram()
 				.MinGram(2)
 				.MaxGram(15))
 			.Analyzer("product_autocomplete", a => a.Custom()
-				.Tokenizer(BuiltInAnalysis.Tokenizers.Standard)
-				.Filters(BuiltInAnalysis.TokenFilters.Lowercase, "edge_ngram_filter"));
+				.Tokenizer(Tokenizers.Standard)
+				.Filters(TokenFilters.Lowercase, "edge_ngram_filter"));
 
 	public static ProductCatalogMappingsBuilder ConfigureMappings(ProductCatalogMappingsBuilder mappings) =>
 		mappings
@@ -114,10 +125,8 @@ public partial class ProductCatalog : IConfigureElasticsearch<ProductCatalogMapp
 
 /// <summary>
 /// Simulates a document with content-hash tracking for scripted bulk upserts.
-/// Used in CatalogIndexChannel tests that verify hash-based NOOP detection
-/// and custom Painless script execution during bulk operations.
 /// </summary>
-public partial class HashableArticle : IConfigureElasticsearch<HashableArticleMappingsBuilder>
+public partial class HashableArticle
 {
 	[Id]
 	[Keyword]
@@ -140,26 +149,26 @@ public partial class HashableArticle : IConfigureElasticsearch<HashableArticleMa
 	[Date]
 	[JsonPropertyName("last_updated")]
 	public DateTimeOffset LastUpdated { get; set; }
+}
 
+public static class HashableArticleConfig
+{
 	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
 		analysis
 			.CharFilter("html_stripper", c => c.HtmlStrip())
 			.Analyzer("html_content", a => a.Custom()
-				.Tokenizer(BuiltInAnalysis.Tokenizers.Standard)
+				.Tokenizer(Tokenizers.Standard)
 				.CharFilters("html_stripper")
-				.Filters(BuiltInAnalysis.TokenFilters.Lowercase, BuiltInAnalysis.TokenFilters.AsciiFolding));
+				.Filters(TokenFilters.Lowercase, TokenFilters.AsciiFolding));
 
 	public static HashableArticleMappingsBuilder ConfigureMappings(HashableArticleMappingsBuilder mappings) =>
-		mappings
-			.Title(f => f.MultiField("keyword", mf => mf.Keyword().IgnoreAbove(256)));
+		mappings.Title(f => f.MultiField("keyword", mf => mf.Keyword().IgnoreAbove(256)));
 }
 
 /// <summary>
 /// Simulates a document for semantic search with inference endpoints.
-/// Used in SemanticIndexChannel tests that verify ELSER inference endpoint creation,
-/// semantic_text field mappings, and document ingestion with semantic enrichment.
 /// </summary>
-public partial class SemanticArticle : IConfigureElasticsearch<SemanticArticleMappingsBuilder>
+public partial class SemanticArticle
 {
 	[Id]
 	[Keyword]
@@ -177,14 +186,16 @@ public partial class SemanticArticle : IConfigureElasticsearch<SemanticArticleMa
 	[Date]
 	[JsonPropertyName("created")]
 	public DateTimeOffset Created { get; set; }
+}
 
+public static class SemanticArticleConfig
+{
 	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
 		analysis
 			.Analyzer("semantic_content", a => a.Custom()
-				.Tokenizer(BuiltInAnalysis.Tokenizers.Standard)
-				.Filters(BuiltInAnalysis.TokenFilters.Lowercase, BuiltInAnalysis.TokenFilters.AsciiFolding));
+				.Tokenizer(Tokenizers.Standard)
+				.Filters(TokenFilters.Lowercase, TokenFilters.AsciiFolding));
 
 	public static SemanticArticleMappingsBuilder ConfigureMappings(SemanticArticleMappingsBuilder mappings) =>
-		mappings
-			.Title(f => f.MultiField("keyword", mf => mf.Keyword().IgnoreAbove(256)));
+		mappings.Title(f => f.MultiField("keyword", mf => mf.Keyword().IgnoreAbove(256)));
 }

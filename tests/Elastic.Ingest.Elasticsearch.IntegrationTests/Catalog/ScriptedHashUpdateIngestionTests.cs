@@ -12,7 +12,7 @@ using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Strategies;
 using FluentAssertions;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Catalog;
 
 /*
  * Tests: Built-in content-hash scripted upserts via CatalogIndexChannel<HashableArticle>
@@ -179,7 +179,7 @@ public class ScriptedHashUpdateIngestionTests(IngestionCluster cluster)
 		var ctx = TestMappingContext.HashableArticle.Context;
 		var strategy = IngestStrategies.Index<HashableArticle>(ctx);
 
-		var options = new CatalogIndexChannelOptions<HashableArticle>(Client.Transport)
+		var options = new CatalogIndexChannelOptions<HashableArticle>(Transport)
 		{
 			IndexFormat = indexPrefix + "{0:yyyy.MM.dd.HH-mm-ss-fffffff}",
 			ActiveSearchAlias = indexPrefix + "search",

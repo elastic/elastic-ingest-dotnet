@@ -8,7 +8,7 @@ using Elastic.Mapping;
 using FluentAssertions;
 using TUnit.Core;
 
-namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Mapping;
+namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Strategies;
 
 /*
  * Tests: IngestStrategies factory composition from ElasticsearchTypeContext
