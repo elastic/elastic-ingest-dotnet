@@ -73,8 +73,8 @@ public class ComponentTemplateStep : IBootstrapStep
 		if (!context.IsServerless && _ilmPolicy is not null)
 			overallSettings["index.lifecycle.name"] = _ilmPolicy;
 
-		if (context.AdditionalSettings != null)
-			foreach (var kv in context.AdditionalSettings)
+		if (context.IndexSettings != null)
+			foreach (var kv in context.IndexSettings)
 				overallSettings[kv.Key] = kv.Value;
 
 		var settings = new StringBuilder("{");

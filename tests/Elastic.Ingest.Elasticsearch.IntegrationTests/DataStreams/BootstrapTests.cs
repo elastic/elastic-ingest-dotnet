@@ -70,6 +70,26 @@ public class BootstrapTests(IngestionCluster cluster) : IntegrationTestBase(clus
 	}
 
 	[Test]
+	public async Task BootstrapIncludesIndexSettingsFromConfiguration()
+	{
+		var ctx = TestMappingContext.ServerMetricsEvent.Context;
+		var options = new IngestChannelOptions<ServerMetricsEvent>(Transport, ctx)
+		{
+			BufferOptions = new BufferOptions { OutboundBufferMaxSize = 1 }
+		};
+		var channel = new IngestChannel<ServerMetricsEvent>(options);
+
+		var result = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
+		result.Should().BeTrue();
+
+		var settingsTemplate = await Transport.RequestAsync<StringResponse>(
+			HttpMethod.GET, $"/_component_template/{Prefix}-settings");
+		settingsTemplate.ApiCallDetails.HttpStatusCode.Should().Be(200);
+		settingsTemplate.Body.Should().Contain("\"index.default_pipeline\"");
+		settingsTemplate.Body.Should().Contain("\"logs-default-pipeline\"");
+	}
+
+	[Test]
 	public async Task RebootstrapWithSameHashIsIdempotent()
 	{
 		var ctx = TestMappingContext.ServerMetricsEvent.Context;

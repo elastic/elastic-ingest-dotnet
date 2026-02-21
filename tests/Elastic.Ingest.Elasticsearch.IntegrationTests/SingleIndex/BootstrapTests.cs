@@ -2,7 +2,6 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using Elastic.Channels;
 using Elastic.Ingest.Elasticsearch.Strategies;
@@ -68,16 +67,10 @@ public class BootstrapTests(IngestionCluster cluster) : IntegrationTestBase(clus
 	}
 
 	[Test]
-	public async Task BootstrapIncludesAdditionalSettingsInComponentTemplate()
+	public async Task BootstrapIncludesIndexSettingsFromConfiguration()
 	{
 		var ctx = TestMappingContext.ProductCatalog.Context;
-		var additionalSettings = new Dictionary<string, string>
-		{
-			["index.default_pipeline"] = "my-test-pipeline"
-		};
-		var strategy = IngestStrategies.Index<ProductCatalog>(ctx,
-			additionalSettings: additionalSettings);
-		var options = new IngestChannelOptions<ProductCatalog>(Transport, strategy, ctx)
+		var options = new IngestChannelOptions<ProductCatalog>(Transport, ctx)
 		{
 			BufferOptions = new BufferOptions { OutboundBufferMaxSize = 1 }
 		};
@@ -90,7 +83,7 @@ public class BootstrapTests(IngestionCluster cluster) : IntegrationTestBase(clus
 			HttpMethod.GET, $"/_component_template/{Prefix}-template-settings");
 		settingsTemplate.ApiCallDetails.HttpStatusCode.Should().Be(200);
 		settingsTemplate.Body.Should().Contain("\"index.default_pipeline\"");
-		settingsTemplate.Body.Should().Contain("\"my-test-pipeline\"");
+		settingsTemplate.Body.Should().Contain("\"products-default-pipeline\"");
 	}
 
 	[Test]

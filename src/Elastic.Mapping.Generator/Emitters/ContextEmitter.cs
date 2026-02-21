@@ -136,7 +136,13 @@ internal static class ContextEmitter
 			sb.AppendLine($"{indent}\t\tConfigureAnalysis: null,");
 
 		// MappedType
-		sb.AppendLine($"{indent}\t\tMappedType: typeof(global::{typeFqn})");
+		sb.AppendLine($"{indent}\t\tMappedType: typeof(global::{typeFqn}),");
+
+		// IndexSettings
+		if (reg.IndexSettingsReference != null)
+			sb.AppendLine($"{indent}\t\tIndexSettings: {reg.IndexSettingsReference}");
+		else
+			sb.AppendLine($"{indent}\t\tIndexSettings: null");
 
 		sb.AppendLine($"{indent}\t);");
 		sb.AppendLine();

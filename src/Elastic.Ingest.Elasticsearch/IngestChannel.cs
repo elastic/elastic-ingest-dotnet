@@ -179,6 +179,6 @@ public class IngestChannel<TEvent> : IngestChannelBase<TEvent, IngestChannelOpti
 			GetMappingsJson = _strategy.GetMappingsJson,
 			GetMappingSettings = _strategy.GetMappingSettings,
 			DataStreamType = _strategy.DataStreamType,
-			AdditionalSettings = _strategy.AdditionalSettings
+			IndexSettings = Options.TypeContext?.IndexSettings
 		};
 }

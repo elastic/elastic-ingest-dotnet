@@ -3,7 +3,6 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Collections.Generic;
 using Elastic.Mapping;
 using Elastic.Mapping.Analysis;
 
@@ -25,15 +24,13 @@ public class IngestStrategy<TEvent> : IIngestStrategy<TEvent>
 		IDocumentIngestStrategy<TEvent> documentIngest,
 		IIndexProvisioningStrategy provisioning,
 		IAliasStrategy alias,
-		IRolloverStrategy? rollover = null,
-		IReadOnlyDictionary<string, string>? additionalSettings = null)
+		IRolloverStrategy? rollover = null)
 	{
 		Bootstrap = bootstrap ?? throw new ArgumentNullException(nameof(bootstrap));
 		DocumentIngest = documentIngest ?? throw new ArgumentNullException(nameof(documentIngest));
 		Provisioning = provisioning ?? throw new ArgumentNullException(nameof(provisioning));
 		AliasStrategy = alias ?? throw new ArgumentNullException(nameof(alias));
 		Rollover = rollover;
-		AdditionalSettings = additionalSettings;
 
 		TemplateName = IngestStrategies.ResolveTemplateName(typeContext);
 		TemplateWildcard = IngestStrategies.ResolveTemplateWildcard(typeContext);
@@ -55,8 +52,7 @@ public class IngestStrategy<TEvent> : IIngestStrategy<TEvent>
 		Func<string>? getMappingsJson = null,
 		Func<string>? getMappingSettings = null,
 		string? dataStreamType = null,
-		IRolloverStrategy? rollover = null,
-		IReadOnlyDictionary<string, string>? additionalSettings = null)
+		IRolloverStrategy? rollover = null)
 	{
 		TemplateName = templateName ?? throw new ArgumentNullException(nameof(templateName));
 		TemplateWildcard = templateWildcard ?? throw new ArgumentNullException(nameof(templateWildcard));
@@ -68,7 +64,6 @@ public class IngestStrategy<TEvent> : IIngestStrategy<TEvent>
 		GetMappingSettings = getMappingSettings;
 		DataStreamType = dataStreamType;
 		Rollover = rollover;
-		AdditionalSettings = additionalSettings;
 	}
 
 	/// <inheritdoc />
@@ -100,9 +95,6 @@ public class IngestStrategy<TEvent> : IIngestStrategy<TEvent>
 
 	/// <inheritdoc />
 	public string? DataStreamType { get; }
-
-	/// <inheritdoc />
-	public IReadOnlyDictionary<string, string>? AdditionalSettings { get; }
 
 	/// <summary>
 	/// Merges the analysis settings from <see cref="ElasticsearchTypeContext.ConfigureAnalysis"/>

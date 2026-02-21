@@ -49,7 +49,7 @@ public class BootstrapContext
 	/// Additional index settings to include in the settings component template
 	/// (e.g. <c>index.default_pipeline</c>).
 	/// </summary>
-	public IReadOnlyDictionary<string, string>? AdditionalSettings { get; init; }
+	public IReadOnlyDictionary<string, string>? IndexSettings { get; init; }
 
 	/// <summary>
 	/// Data stream type (e.g. "logs", "metrics") for inferring built-in component templates.

@@ -3,7 +3,6 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Collections.Generic;
 
 namespace Elastic.Ingest.Elasticsearch.Strategies;
 
@@ -43,10 +42,4 @@ public interface IIngestStrategy<TEvent> where TEvent : class
 
 	/// <summary> Data stream type (e.g. "logs", "metrics") for inferring built-in component templates. </summary>
 	string? DataStreamType { get; }
-
-	/// <summary>
-	/// Additional index settings to include in the settings component template
-	/// (e.g. <c>index.default_pipeline</c>).
-	/// </summary>
-	IReadOnlyDictionary<string, string>? AdditionalSettings { get; }
 }
