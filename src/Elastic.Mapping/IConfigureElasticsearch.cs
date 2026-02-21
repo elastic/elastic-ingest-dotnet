@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 #if NET8_0_OR_GREATER
+using System.Collections.Generic;
 using Elastic.Mapping.Analysis;
 using Elastic.Mapping.Mappings;
 
@@ -22,5 +23,11 @@ public interface IConfigureElasticsearch<TBuilder>
 
 	/// <summary>Configures custom field mappings, runtime fields, and dynamic templates.</summary>
 	static virtual TBuilder ConfigureMappings(TBuilder mappings) => mappings;
+
+	/// <summary>
+	/// Additional index settings to include in the settings component template
+	/// (e.g. <c>index.default_pipeline</c>).
+	/// </summary>
+	static virtual IReadOnlyDictionary<string, string>? IndexSettings => null;
 }
 #endif

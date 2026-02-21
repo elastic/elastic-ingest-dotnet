@@ -3,7 +3,6 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Collections.Generic;
 using Elastic.Ingest.Elasticsearch.Strategies.BootstrapSteps;
 using Elastic.Mapping;
 using static Elastic.Ingest.Elasticsearch.IngestChannelStatics;

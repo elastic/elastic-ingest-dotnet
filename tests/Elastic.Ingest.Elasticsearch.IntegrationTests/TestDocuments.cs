@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Elastic.Mapping;
 using Elastic.Mapping.Analysis;
@@ -53,6 +54,11 @@ public partial class ServerMetricsEvent
 
 public static class ServerMetricsEventConfig
 {
+	public static IReadOnlyDictionary<string, string> IndexSettings => new Dictionary<string, string>
+	{
+		["index.default_pipeline"] = "logs-default-pipeline"
+	};
+
 	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
 		analysis
 			.Analyzer("log_message", a => a.Custom()
@@ -134,6 +140,11 @@ public partial class ProductCatalog
 
 public static class ProductCatalogConfig
 {
+	public static IReadOnlyDictionary<string, string> IndexSettings => new Dictionary<string, string>
+	{
+		["index.default_pipeline"] = "products-default-pipeline"
+	};
+
 	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
 		analysis
 			.Normalizer("lowercase_ascii", n => n.Custom()

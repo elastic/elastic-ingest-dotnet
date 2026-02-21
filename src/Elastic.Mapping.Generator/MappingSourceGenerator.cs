@@ -350,6 +350,45 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			|| configClassMappings != null
 			|| hasConfigureMappingsOnType;
 
+		// Detect IndexSettings property
+		// Priority: context > configuration class > type
+		string? indexSettingsRef = null;
+
+		var contextIndexSettings = contextSymbol
+			.GetMembers($"{resolverName}IndexSettings")
+			.OfType<IPropertySymbol>()
+			.FirstOrDefault(p => p.IsStatic);
+
+		if (contextIndexSettings == null && !string.IsNullOrEmpty(variant))
+		{
+			contextIndexSettings = contextSymbol
+				.GetMembers($"{targetType.Name}IndexSettings")
+				.OfType<IPropertySymbol>()
+				.FirstOrDefault(p => p.IsStatic);
+		}
+
+		if (contextIndexSettings != null)
+		{
+			indexSettingsRef = $"global::{contextSymbol.ToDisplayString()}.{contextIndexSettings.Name}";
+		}
+		else if (configTypeSymbol != null)
+		{
+			var configIndexSettings = configTypeSymbol.GetMembers("IndexSettings")
+				.OfType<IPropertySymbol>()
+				.FirstOrDefault(p => p.IsStatic);
+			if (configIndexSettings != null)
+				indexSettingsRef = $"global::{configTypeSymbol.ToDisplayString()}.IndexSettings";
+		}
+
+		if (indexSettingsRef == null)
+		{
+			var typeIndexSettings = targetType.GetMembers("IndexSettings")
+				.OfType<IPropertySymbol>()
+				.FirstOrDefault(p => p.IsStatic);
+			if (typeIndexSettings != null)
+				indexSettingsRef = $"global::{targetType.ToDisplayString()}.IndexSettings";
+		}
+
 		return new TypeRegistration(
 			targetType.Name,
 			targetType.ToDisplayString(),
@@ -362,7 +401,8 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			configureAnalysisRef,
 			hasConfigureMappings,
 			analysisComponents,
-			variant
+			variant,
+			indexSettingsRef
 		);
 	}
 

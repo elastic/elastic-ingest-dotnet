@@ -67,6 +67,26 @@ public class BootstrapTests(IngestionCluster cluster) : IntegrationTestBase(clus
 	}
 
 	[Test]
+	public async Task BootstrapIncludesIndexSettingsFromConfiguration()
+	{
+		var ctx = TestMappingContext.ProductCatalog.Context;
+		var options = new IngestChannelOptions<ProductCatalog>(Transport, ctx)
+		{
+			BufferOptions = new BufferOptions { OutboundBufferMaxSize = 1 }
+		};
+		var channel = new IngestChannel<ProductCatalog>(options);
+
+		var result = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
+		result.Should().BeTrue();
+
+		var settingsTemplate = await Transport.RequestAsync<StringResponse>(
+			HttpMethod.GET, $"/_component_template/{Prefix}-template-settings");
+		settingsTemplate.ApiCallDetails.HttpStatusCode.Should().Be(200);
+		settingsTemplate.Body.Should().Contain("\"index.default_pipeline\"");
+		settingsTemplate.Body.Should().Contain("\"products-default-pipeline\"");
+	}
+
+	[Test]
 	public async Task WithIlmBootstrapCreatesIlmPolicy()
 	{
 		var ilmCheck = await Transport.RequestAsync<StringResponse>(

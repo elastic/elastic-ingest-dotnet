@@ -31,7 +31,8 @@ internal sealed record TypeRegistration(
 	string? ConfigureAnalysisReference,
 	bool HasConfigureMappings,
 	AnalysisComponentsModel AnalysisComponents,
-	string? Variant = null
+	string? Variant = null,
+	string? IndexSettingsReference = null
 )
 {
 	/// <summary>
