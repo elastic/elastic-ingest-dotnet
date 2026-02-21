@@ -77,18 +77,22 @@ let private generateApiChanges (arguments:ParseResults<Arguments>) =
         |> Seq.map (fun p -> Path.GetFileNameWithoutExtension(Paths.RootRelative p.FullName).Replace("." + currentVersion, ""))
     nugetPackages
     |> Seq.iter(fun p ->
-        let outputFile =
-            let f = sprintf "breaking-changes-%s.md" p
-            Path.Combine(output, f)
-        let args =
-            [
-                "assembly-differ"
-                (sprintf "previous-nuget|%s|%s|%s" p currentVersion Paths.MainTFM);
-                (sprintf "directory|.artifacts/bin/%s/release_%s" p Paths.MainTFM);
-                "-a"; "true"; "--target"; p; "-f"; "github-comment"; "--output"; outputFile
-            ]
-        
-        exec "dotnet" args |> ignore
+        let binDir = sprintf ".artifacts/bin/%s/release_%s" p Paths.MainTFM
+        if Directory.Exists(binDir) then
+            let outputFile =
+                let f = sprintf "breaking-changes-%s.md" p
+                Path.Combine(output, f)
+            let args =
+                [
+                    "assembly-differ"
+                    (sprintf "previous-nuget|%s|%s|%s" p currentVersion Paths.MainTFM);
+                    (sprintf "directory|%s" binDir);
+                    "-a"; "true"; "--target"; p; "-f"; "github-comment"; "--output"; outputFile
+                ]
+            
+            exec "dotnet" args |> ignore
+        else
+            printfn "Skipping API diff for %s (no %s build found)" p Paths.MainTFM
     )
     
 let private generateReleaseNotes (arguments:ParseResults<Arguments>) =

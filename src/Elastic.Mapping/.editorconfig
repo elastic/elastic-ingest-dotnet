@@ -1,0 +1,3 @@
+# Suppress namespace matching folder structure - we intentionally use Elastic.Mapping for all
+[*.cs]
+dotnet_diagnostic.IDE0130.severity = none
