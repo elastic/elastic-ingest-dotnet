@@ -9,7 +9,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Elastic.Ingest.Elasticsearch\Elastic.Ingest.Elasticsearch.csproj"/>
-    <!-- Source generator for [Entity<T>] / [ElasticsearchMappingContext] -->
+    <ProjectReference Include="..\..\src\Elastic.Mapping.Generator\Elastic.Mapping.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
