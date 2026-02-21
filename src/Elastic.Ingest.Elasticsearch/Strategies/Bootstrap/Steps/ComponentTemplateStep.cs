@@ -73,6 +73,10 @@ public class ComponentTemplateStep : IBootstrapStep
 		if (!context.IsServerless && _ilmPolicy is not null)
 			overallSettings["index.lifecycle.name"] = _ilmPolicy;
 
+		if (context.AdditionalSettings != null)
+			foreach (var kv in context.AdditionalSettings)
+				overallSettings[kv.Key] = kv.Value;
+
 		var settings = new StringBuilder("{");
 		var settingsAsJson = string.Join(",\n", overallSettings.Select(kv => $"  \"{kv.Key}\": \"{kv.Value}\""));
 		if (!string.IsNullOrWhiteSpace(settingsAsJson))

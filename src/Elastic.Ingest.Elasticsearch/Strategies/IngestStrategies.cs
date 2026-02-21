@@ -34,7 +34,8 @@ public static class IngestStrategies
 	/// </summary>
 	public static IIngestStrategy<TEvent> DataStream<TEvent>(
 		ElasticsearchTypeContext tc,
-		IBootstrapStrategy? bootstrap = null) where TEvent : class
+		IBootstrapStrategy? bootstrap = null,
+		IReadOnlyDictionary<string, string>? additionalSettings = null) where TEvent : class
 	{
 		return new IngestStrategy<TEvent>(tc,
 			bootstrap ?? BootstrapStrategies.DataStream(),
@@ -42,7 +43,8 @@ public static class IngestStrategies
 				ResolveDataStreamName(tc),
 				DefaultBulkPathAndQuery),
 			new AlwaysCreateProvisioning(),
-			new NoAliasStrategy());
+			new NoAliasStrategy(),
+			additionalSettings: additionalSettings);
 	}
 
 	/// <summary>
@@ -57,7 +59,8 @@ public static class IngestStrategies
 	/// </summary>
 	public static IIngestStrategy<TEvent> Index<TEvent>(
 		ElasticsearchTypeContext tc,
-		IBootstrapStrategy? bootstrap = null) where TEvent : class
+		IBootstrapStrategy? bootstrap = null,
+		IReadOnlyDictionary<string, string>? additionalSettings = null) where TEvent : class
 	{
 		var writeTarget = tc.IndexStrategy?.WriteTarget ?? typeof(TEvent).Name.ToLowerInvariant();
 		var indexFormat = tc.IndexStrategy?.DatePattern != null
@@ -73,7 +76,8 @@ public static class IngestStrategies
 			tc.GetContentHash != null
 				? new HashBasedReuseProvisioning()
 				: new AlwaysCreateProvisioning(),
-			ResolveAliasStrategy(tc));
+			ResolveAliasStrategy(tc),
+			additionalSettings: additionalSettings);
 	}
 
 	/// <summary>

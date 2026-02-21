@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Collections.Generic;
 using Elastic.Transport;
 
 namespace Elastic.Ingest.Elasticsearch.Strategies;
@@ -43,6 +44,12 @@ public class BootstrapContext
 	/// Function to get settings that accompany mappings (analysis settings, etc.).
 	/// </summary>
 	public Func<string>? GetMappingSettings { get; init; }
+
+	/// <summary>
+	/// Additional index settings to include in the settings component template
+	/// (e.g. <c>index.default_pipeline</c>).
+	/// </summary>
+	public IReadOnlyDictionary<string, string>? AdditionalSettings { get; init; }
 
 	/// <summary>
 	/// Data stream type (e.g. "logs", "metrics") for inferring built-in component templates.

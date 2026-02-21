@@ -2,6 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Elastic.Channels;
 using Elastic.Ingest.Elasticsearch.Strategies;
@@ -64,6 +65,32 @@ public class BootstrapTests(IngestionCluster cluster) : IntegrationTestBase(clus
 		var indexTemplate = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/_index_template/{Prefix}-template");
 		indexTemplate.ApiCallDetails.HttpStatusCode.Should().Be(200);
+	}
+
+	[Test]
+	public async Task BootstrapIncludesAdditionalSettingsInComponentTemplate()
+	{
+		var ctx = TestMappingContext.ProductCatalog.Context;
+		var additionalSettings = new Dictionary<string, string>
+		{
+			["index.default_pipeline"] = "my-test-pipeline"
+		};
+		var strategy = IngestStrategies.Index<ProductCatalog>(ctx,
+			additionalSettings: additionalSettings);
+		var options = new IngestChannelOptions<ProductCatalog>(Transport, strategy, ctx)
+		{
+			BufferOptions = new BufferOptions { OutboundBufferMaxSize = 1 }
+		};
+		var channel = new IngestChannel<ProductCatalog>(options);
+
+		var result = await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
+		result.Should().BeTrue();
+
+		var settingsTemplate = await Transport.RequestAsync<StringResponse>(
+			HttpMethod.GET, $"/_component_template/{Prefix}-template-settings");
+		settingsTemplate.ApiCallDetails.HttpStatusCode.Should().Be(200);
+		settingsTemplate.Body.Should().Contain("\"index.default_pipeline\"");
+		settingsTemplate.Body.Should().Contain("\"my-test-pipeline\"");
 	}
 
 	[Test]
