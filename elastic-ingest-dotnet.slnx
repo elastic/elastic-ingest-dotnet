@@ -36,12 +36,15 @@
     <Project Path="src/Elastic.Ingest.Elasticsearch/Elastic.Ingest.Elasticsearch.csproj" />
     <Project Path="src/Elastic.Ingest.OpenTelemetry/Elastic.Ingest.OpenTelemetry.csproj" />
     <Project Path="src/Elastic.Ingest.Transport/Elastic.Ingest.Transport.csproj" />
+    <Project Path="src/Elastic.Mapping/Elastic.Mapping.csproj" />
+    <Project Path="src/Elastic.Mapping.Generator/Elastic.Mapping.Generator.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <File Path="tests/Directory.Build.props" />
     <Project Path="tests/Elastic.Channels.Tests/Elastic.Channels.Tests.csproj" />
     <Project Path="tests/Elastic.Ingest.Elasticsearch.IntegrationTests/Elastic.Ingest.Elasticsearch.IntegrationTests.csproj" />
     <Project Path="tests/Elastic.Ingest.Elasticsearch.Tests/Elastic.Ingest.Elasticsearch.Tests.csproj" />
+    <Project Path="tests/Elastic.Mapping.Tests/Elastic.Mapping.Tests.csproj" />
   </Folder>
   <Project Path="docs/docs.csproj" />
 </Solution>

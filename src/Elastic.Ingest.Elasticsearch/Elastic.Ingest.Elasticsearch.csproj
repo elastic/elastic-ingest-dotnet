@@ -26,7 +26,7 @@
                       IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"/>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Elastic.Mapping" Version="0.4.1" />
+    <ProjectReference Include="..\Elastic.Mapping\Elastic.Mapping.csproj" />
   </ItemGroup>
 
 </Project>
