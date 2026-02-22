@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Transport;
@@ -20,7 +21,7 @@ public class LatestAndSearchAliasStrategy : IAliasStrategy
 	/// <summary>
 	/// Creates a new latest-and-search alias strategy.
 	/// </summary>
-	/// <param name="indexFormat">The format string for computing alias/index names (e.g., "products-{0:yyyy.MM.dd.HHmmss}").</param>
+	/// <param name="indexFormat">The format string for computing alias/index names (e.g., "products-{0}").</param>
 	public LatestAndSearchAliasStrategy(string indexFormat) => _indexFormat = indexFormat;
 
 	/// <inheritdoc />
@@ -32,14 +33,31 @@ public class LatestAndSearchAliasStrategy : IAliasStrategy
 	public bool ApplyAliases(AliasContext context) =>
 		ApplyLatestAlias(context) && ApplyActiveSearchAlias(context, context.IndexName);
 
-	/// <summary> Applies the "latest" alias to the current index. </summary>
+	/// <summary>
+	/// Applies the "latest" alias to the current index.
+	/// <para>
+	/// When <see cref="AliasContext.IndexName"/> is empty, the concrete index is resolved via
+	/// the <c>_resolve/index</c> API. This can happen when the caller (e.g.,
+	/// <see cref="IncrementalSyncOrchestrator{TEvent}"/>) does not know the timestamped index
+	/// name at call time. Prefer passing a precomputed index name via
+	/// <see cref="IngestChannel{TEvent}.IndexName"/> to avoid the extra round-trip.
+	/// </para>
+	/// </summary>
 	public async Task<bool> ApplyLatestAliasAsync(AliasContext context, CancellationToken ctx = default)
 	{
 		var latestAlias = string.Format(System.Globalization.CultureInfo.InvariantCulture, _indexFormat, "latest");
 		var matchingIndices = string.Format(System.Globalization.CultureInfo.InvariantCulture, _indexFormat, "*");
 
+		var indexName = context.IndexName;
+		if (string.IsNullOrEmpty(indexName))
+		{
+			indexName = await ResolveLatestIndexAsync(context.Transport, matchingIndices, ctx).ConfigureAwait(false);
+			if (string.IsNullOrEmpty(indexName))
+				return false;
+		}
+
 		var removeAction = $$"""{ "remove": { "index": "{{matchingIndices}}", "alias": "{{latestAlias}}" } }""";
-		var addAction = $$"""{ "add": { "index": "{{context.IndexName}}", "alias": "{{latestAlias}}" } }""";
+		var addAction = $$"""{ "add": { "index": "{{indexName}}", "alias": "{{latestAlias}}" } }""";
 
 		var currentLatest = await ResolveAliasIndexAsync(context.Transport, matchingIndices, latestAlias, ctx).ConfigureAwait(false);
 		var actions = !string.IsNullOrEmpty(currentLatest)
@@ -81,13 +99,25 @@ public class LatestAndSearchAliasStrategy : IAliasStrategy
 		return response.ApiCallDetails.HasSuccessfulStatusCode;
 	}
 
+	/// <summary>
+	/// Applies the "latest" alias to the current index (synchronous).
+	/// See <see cref="ApplyLatestAliasAsync"/> for details on empty index name handling.
+	/// </summary>
 	private bool ApplyLatestAlias(AliasContext context)
 	{
 		var latestAlias = string.Format(System.Globalization.CultureInfo.InvariantCulture, _indexFormat, "latest");
 		var matchingIndices = string.Format(System.Globalization.CultureInfo.InvariantCulture, _indexFormat, "*");
 
+		var indexName = context.IndexName;
+		if (string.IsNullOrEmpty(indexName))
+		{
+			indexName = ResolveLatestIndex(context.Transport, matchingIndices);
+			if (string.IsNullOrEmpty(indexName))
+				return false;
+		}
+
 		var removeAction = $$"""{ "remove": { "index": "{{matchingIndices}}", "alias": "{{latestAlias}}" } }""";
-		var addAction = $$"""{ "add": { "index": "{{context.IndexName}}", "alias": "{{latestAlias}}" } }""";
+		var addAction = $$"""{ "add": { "index": "{{indexName}}", "alias": "{{latestAlias}}" } }""";
 
 		var currentLatest = ResolveAliasIndex(context.Transport, matchingIndices, latestAlias);
 		var actions = !string.IsNullOrEmpty(currentLatest)
@@ -126,6 +156,50 @@ public class LatestAndSearchAliasStrategy : IAliasStrategy
 		var body = $$"""{ "actions": [ {{actions}} ] }""";
 		var response = context.Transport.Post<StringResponse>("_aliases", PostData.String(body));
 		return response.ApiCallDetails.HasSuccessfulStatusCode;
+	}
+
+	/// <summary>
+	/// Resolves the most recent concrete index matching the pattern via the <c>_resolve/index</c> API.
+	/// Returns the last index name (alphabetically descending), which for date-patterned indices
+	/// corresponds to the most recently created index.
+	/// </summary>
+	private static async Task<string?> ResolveLatestIndexAsync(ITransport transport, string matchingIndices, CancellationToken ctx)
+	{
+		var response = await transport.RequestAsync<JsonResponse>(
+			HttpMethod.GET, $"_resolve/index/{matchingIndices}", cancellationToken: ctx
+		).ConfigureAwait(false);
+		return ExtractLatestIndexName(response);
+	}
+
+	/// <summary>
+	/// Resolves the most recent concrete index matching the pattern via the <c>_resolve/index</c> API (synchronous).
+	/// </summary>
+	private static string? ResolveLatestIndex(ITransport transport, string matchingIndices)
+	{
+		var response = transport.Request<JsonResponse>(
+			HttpMethod.GET, $"_resolve/index/{matchingIndices}"
+		);
+		return ExtractLatestIndexName(response);
+	}
+
+	/// <summary>
+	/// Extracts the last index name from a <c>_resolve/index</c> response.
+	/// Response shape: <c>{ "indices": [{ "name": "my-index-2026.02.22" }, ...] }</c>.
+	/// Indices are returned in alphabetical order; the last entry is the most recent
+	/// for date-patterned index names.
+	/// </summary>
+	private static string? ExtractLatestIndexName(JsonResponse response)
+	{
+		if (response.Body is not JsonObject root)
+			return null;
+
+		var indices = root["indices"]?.AsArray();
+		if (indices == null || indices.Count == 0)
+			return null;
+
+		// Take the last index — alphabetically last matches the most recent date-patterned name
+		var name = indices[indices.Count - 1]?["name"]?.GetValue<string>();
+		return string.IsNullOrEmpty(name) ? null : name;
 	}
 
 	private static async Task<string?> ResolveAliasIndexAsync(ITransport transport, string matchingIndices, string alias, CancellationToken ctx)

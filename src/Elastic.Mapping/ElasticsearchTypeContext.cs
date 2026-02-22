@@ -26,6 +26,10 @@ namespace Elastic.Mapping;
 /// <param name="GetTimestamp">Generated accessor delegate for the [Timestamp] property. Returns timestamp for data streams/date patterns.</param>
 /// <param name="ConfigureAnalysis">Optional delegate for configuring analysis settings at runtime.</param>
 /// <param name="MappedType">The CLR type this context maps.</param>
+/// <param name="IndexPatternUseBatchDate">
+/// When true, the index pattern uses a single fixed batch date (captured at channel creation)
+/// instead of per-document timestamps. All documents in a batch are written to the same concrete index.
+/// </param>
 public record ElasticsearchTypeContext(
 	Func<string> GetSettingsJson,
 	Func<string> GetMappingsJson,
@@ -43,7 +47,8 @@ public record ElasticsearchTypeContext(
 	Func<object, DateTimeOffset?>? GetTimestamp = null,
 	Func<AnalysisBuilder, AnalysisBuilder>? ConfigureAnalysis = null,
 	Type? MappedType = null,
-	IReadOnlyDictionary<string, string>? IndexSettings = null
+	IReadOnlyDictionary<string, string>? IndexSettings = null,
+	bool IndexPatternUseBatchDate = false
 )
 {
 	/// <summary>

@@ -18,15 +18,13 @@ public static class IngestStrategies
 	/// Auto-detect the appropriate strategy from the <see cref="ElasticsearchTypeContext.EntityTarget"/>.
 	/// </summary>
 	public static IIngestStrategy<TEvent> ForContext<TEvent>(
-		ElasticsearchTypeContext tc) where TEvent : class
-	{
-		return tc.EntityTarget switch
+		ElasticsearchTypeContext tc, DateTimeOffset? batchTimestamp = null) where TEvent : class =>
+		tc.EntityTarget switch
 		{
 			EntityTarget.WiredStream => WiredStream<TEvent>(tc),
 			EntityTarget.DataStream => DataStream<TEvent>(tc),
-			_ => Index<TEvent>(tc)
+			_ => Index<TEvent>(tc, batchTimestamp: batchTimestamp)
 		};
-	}
 
 	/// <summary>
 	/// Creates a data stream ingest strategy with optional custom bootstrap.
@@ -53,26 +51,32 @@ public static class IngestStrategies
 
 	/// <summary>
 	/// Creates an index ingest strategy with optional custom bootstrap.
+	/// When <see cref="ElasticsearchTypeContext.IndexPatternUseBatchDate"/> is true and a
+	/// <see cref="IndexStrategy.DatePattern"/> is configured, the index name is precomputed
+	/// from <paramref name="batchTimestamp"/> (or <see cref="DateTimeOffset.UtcNow"/> if null)
+	/// at strategy creation time. All documents in the batch are written to this single fixed
+	/// index (e.g., <c>my-index-2026.02.22.143055</c>).
 	/// </summary>
 	public static IIngestStrategy<TEvent> Index<TEvent>(
 		ElasticsearchTypeContext tc,
-		IBootstrapStrategy? bootstrap = null) where TEvent : class
+		IBootstrapStrategy? bootstrap = null,
+		DateTimeOffset? batchTimestamp = null) where TEvent : class
 	{
+		bootstrap ??= BootstrapStrategies.Index();
+
 		var writeTarget = tc.IndexStrategy?.WriteTarget ?? typeof(TEvent).Name.ToLowerInvariant();
-		var indexFormat = tc.IndexStrategy?.DatePattern != null
+		var batchDate = tc.IndexPatternUseBatchDate ? batchTimestamp ?? DateTimeOffset.UtcNow : (DateTimeOffset?)null;
+		var indexFormat = tc.IndexStrategy?.DatePattern != null && batchDate != null
+			? $"{writeTarget}-{batchDate.Value.ToString(tc.IndexStrategy.DatePattern, System.Globalization.CultureInfo.InvariantCulture)}"
+			: tc.IndexStrategy?.DatePattern != null
 			? $"{writeTarget}-{{0:{tc.IndexStrategy.DatePattern}}}"
 			: writeTarget;
 
-		return new IngestStrategy<TEvent>(tc,
-			bootstrap ?? BootstrapStrategies.Index(),
-			new TypeContextIndexIngestStrategy<TEvent>(
-				tc,
-				indexFormat,
-				DefaultBulkPathAndQuery),
-			tc.GetContentHash != null
-				? new HashBasedReuseProvisioning()
-				: new AlwaysCreateProvisioning(),
-			ResolveAliasStrategy(tc));
+		var documentIngestStrategy = new TypeContextIndexIngestStrategy<TEvent>(tc, indexFormat, DefaultBulkPathAndQuery);
+		IIndexProvisioningStrategy provisionStrategy = tc.GetContentHash != null ? new HashBasedReuseProvisioning() : new AlwaysCreateProvisioning();
+		var resolveAliasStrategy = ResolveAliasStrategy(tc);
+
+		return new IngestStrategy<TEvent>(tc, bootstrap, documentIngestStrategy, provisionStrategy, resolveAliasStrategy);
 	}
 
 	/// <summary>
