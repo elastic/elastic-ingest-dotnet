@@ -53,8 +53,6 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	private readonly ITransport _transport;
 	private readonly ElasticsearchTypeContext _primaryTypeContext;
 	private readonly ElasticsearchTypeContext _secondaryTypeContext;
-	private readonly IIngestStrategy<TEvent>? _primaryStrategy;
-	private readonly IIngestStrategy<TEvent>? _secondaryStrategy;
 	private readonly DateTimeOffset _batchTimestamp = DateTimeOffset.UtcNow;
 	private readonly List<Func<ITransport, CancellationToken, Task>> _preBootstrapTasks = new();
 
@@ -80,23 +78,6 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		_transport = transport;
 		_primaryTypeContext = primary;
 		_secondaryTypeContext = secondary;
-	}
-
-	/// <summary>
-	/// Creates the orchestrator with explicit strategies.
-	/// </summary>
-	public IncrementalSyncOrchestrator(
-		ITransport transport,
-		ElasticsearchTypeContext primary,
-		ElasticsearchTypeContext secondary,
-		IIngestStrategy<TEvent> primaryStrategy,
-		IIngestStrategy<TEvent> secondaryStrategy)
-	{
-		_transport = transport;
-		_primaryTypeContext = primary;
-		_secondaryTypeContext = secondary;
-		_primaryStrategy = primaryStrategy;
-		_secondaryStrategy = secondaryStrategy;
 	}
 
 	/// <summary> The field name used for last-updated range queries. </summary>
@@ -134,17 +115,14 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	/// Creates channels, runs bootstrap, and determines the ingest strategy by comparing
 	/// template hashes and checking secondary alias existence.
 	/// </summary>
-	public async Task<IngestSyncStrategy> StartAsync(
-		BootstrapMethod method, CancellationToken ctx = default)
+	public async Task<IngestSyncStrategy> StartAsync(BootstrapMethod method, CancellationToken ctx = default)
 	{
 		// 1. Run pre-bootstrap tasks
 		foreach (var task in _preBootstrapTasks)
 			await task(_transport, ctx).ConfigureAwait(false);
 
 		// 2. Create and bootstrap primary channel
-		var primaryOpts = _primaryStrategy != null
-			? new IngestChannelOptions<TEvent>(_transport, _primaryStrategy, _primaryTypeContext)
-			: new IngestChannelOptions<TEvent>(_transport, _primaryTypeContext);
+		var primaryOpts = new IngestChannelOptions<TEvent>(_transport, _primaryTypeContext, _batchTimestamp);
 		ConfigurePrimary?.Invoke(primaryOpts);
 		_primaryChannel = new IngestChannel<TEvent>(primaryOpts);
 
@@ -163,9 +141,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			_strategy = IngestSyncStrategy.Multiplex;
 
 		// 4. Create and bootstrap secondary channel
-		var secondaryOpts = _secondaryStrategy != null
-			? new IngestChannelOptions<TEvent>(_transport, _secondaryStrategy, _secondaryTypeContext)
-			: new IngestChannelOptions<TEvent>(_transport, _secondaryTypeContext);
+		var secondaryOpts = new IngestChannelOptions<TEvent>(_transport, _secondaryTypeContext, _batchTimestamp);
 		ConfigureSecondary?.Invoke(secondaryOpts);
 		_secondaryChannel = new IngestChannel<TEvent>(secondaryOpts);
 

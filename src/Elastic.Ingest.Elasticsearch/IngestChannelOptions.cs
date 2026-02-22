@@ -19,9 +19,12 @@ public class IngestChannelOptions<TEvent> : IngestChannelOptionsBase<TEvent>
 {
 	/// <summary>
 	/// Zero-config: auto-infers strategy from the <see cref="ElasticsearchTypeContext"/>.
+	/// When <paramref name="batchTimestamp"/> is provided and <c>IndexPatternUseBatchDate</c> is true,
+	/// the channel uses that timestamp instead of capturing <c>DateTimeOffset.UtcNow</c> at creation time.
 	/// </summary>
-	public IngestChannelOptions(ITransport transport, ElasticsearchTypeContext typeContext)
-		: this(transport, IngestStrategies.ForContext<TEvent>(typeContext), typeContext) { }
+	public IngestChannelOptions(ITransport transport, ElasticsearchTypeContext typeContext,
+		DateTimeOffset? batchTimestamp = null)
+		: this(transport, IngestStrategies.ForContext<TEvent>(typeContext, batchTimestamp), typeContext) { }
 
 	/// <summary>
 	/// Explicit strategy with optional mapping context.
