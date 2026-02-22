@@ -75,15 +75,8 @@ public class AnalysisVerificationTests(IngestionCluster cluster) : IntegrationTe
 	}
 
 	[Test]
-	public async Task RuntimeFieldsAreNotDeployedToTemplate()
+	public async Task RuntimeFieldsAreDeployedToTemplate()
 	{
-		// ROOT CAUSE: Elastic.Mapping's MergeIntoMappings merges field overrides
-		// from ConfigureMappings into GetMappingsJson but excludes runtime fields.
-		// The source generator does NOT expose ConfigureMappings as a runtime delegate
-		// on ElasticsearchTypeContext (unlike ConfigureAnalysis), so the ingest library
-		// cannot discover runtime fields. Fix requires Elastic.Mapping to include
-		// MappingOverrides.RuntimeFields in the "runtime" block of GetMappingsJson output.
-		// Once fixed, ComponentTemplateStep will deploy them automatically.
 		var ctx = TestMappingContext.ProductCatalog.Context;
 		var options = new IngestChannelOptions<ProductCatalog>(Transport, ctx)
 		{
@@ -96,8 +89,8 @@ public class AnalysisVerificationTests(IngestionCluster cluster) : IntegrationTe
 			HttpMethod.GET, $"/_component_template/{Prefix}-template-mappings");
 		mappingsTemplate.ApiCallDetails.HttpStatusCode.Should().Be(200);
 
-		mappingsTemplate.Body.Should().NotContain("\"price_tier\"",
-			"runtime fields from ConfigureMappings are not currently deployed to templates");
+		mappingsTemplate.Body.Should().Contain("\"price_tier\"",
+			"runtime fields from ConfigureMappings should be deployed to templates via MergeIntoMappings");
 	}
 
 	[Test]
@@ -215,22 +208,9 @@ public class IndexedAnalysisVerificationTests(IngestionCluster cluster) : Integr
 	}
 
 	[Test]
-	public async Task RuntimeFieldIsQueryableViaSearchTimeDefinition()
+	public async Task RuntimeFieldIsQueryableFromTemplate()
 	{
-		// Runtime fields from ConfigureMappings are not yet deployed to templates
-		// (see RuntimeFieldsAreNotDeployedToTemplate for root cause). Until
-		// Elastic.Mapping includes them in GetMappingsJson, supply at search time.
-		var body = """
-		{
-			"runtime_mappings": {
-				"price_tier": {
-					"type": "keyword",
-					"script": { "source": "if (doc['price'].value < 10) emit('budget'); else if (doc['price'].value < 100) emit('mid'); else emit('premium');" }
-				}
-			},
-			"query": { "term": { "price_tier": "mid" } }
-		}
-		""";
+		var body = """{ "query": { "term": { "price_tier": "mid" } } }""";
 		var search = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.POST, $"/{_concreteIndex}/_search", PostData.String(body));
 

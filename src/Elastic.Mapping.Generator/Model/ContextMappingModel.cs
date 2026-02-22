@@ -29,7 +29,8 @@ internal sealed record TypeRegistration(
 	IngestPropertyModel IngestProperties,
 	string? ConfigurationClassName,
 	string? ConfigureAnalysisReference,
-	bool HasConfigureMappings,
+	string? ConfigureMappingsReference,
+	string? ConfigureMappingsBuilderType,
 	AnalysisComponentsModel AnalysisComponents,
 	string? Variant = null,
 	string? IndexSettingsReference = null
