@@ -70,6 +70,9 @@ let private validatePackages (arguments:ParseResults<Arguments>) =
     
 
 let private generateApiChanges (arguments:ParseResults<Arguments>) =
+    if not Paths.GenerateApiChanges then
+        printfn "Skipping API changes generation (GenerateApiChanges is disabled)"
+    else
     let output = Paths.RootRelative <| Paths.Output.FullName
     let currentVersion = currentVersion.Value
     let nugetPackages =
