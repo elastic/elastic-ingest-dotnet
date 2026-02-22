@@ -64,6 +64,8 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 
 	private string? _primaryWriteAlias;
 	private string? _secondaryWriteAlias;
+	private string? _primaryIndexName;
+	private string? _secondaryIndexName;
 	private string? _secondaryReindexTarget;
 
 	/// <summary>
@@ -150,6 +152,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		await _primaryChannel.BootstrapElasticsearchAsync(method, ctx).ConfigureAwait(false);
 
 		_primaryWriteAlias = ResolvePrimaryWriteAlias();
+		_primaryIndexName = _primaryChannel.IndexName;
 		if (primaryServerHash != _primaryChannel.ChannelHash)
 			_strategy = IngestSyncStrategy.Multiplex;
 
@@ -166,6 +169,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		ConfigureSecondary?.Invoke(secondaryOpts);
 		_secondaryChannel = new IngestChannel<TEvent>(secondaryOpts);
 
+		_secondaryIndexName = _secondaryChannel.IndexName;
 		var secondaryServerHash = await _secondaryChannel.GetIndexTemplateHashAsync(ctx).ConfigureAwait(false) ?? string.Empty;
 		await _secondaryChannel.BootstrapElasticsearchAsync(method, ctx).ConfigureAwait(false);
 
@@ -237,14 +241,14 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		// 1. Drain + refresh + alias primary
 		await _primaryChannel!.WaitForDrainAsync(drainMaxWait, ctx).ConfigureAwait(false);
 		await _primaryChannel.RefreshAsync(ctx).ConfigureAwait(false);
-		await _primaryChannel.ApplyAliasesAsync(string.Empty, ctx).ConfigureAwait(false);
+		await _primaryChannel.ApplyAliasesAsync(_primaryIndexName!, ctx).ConfigureAwait(false);
 
 		if (_strategy == IngestSyncStrategy.Multiplex)
 		{
 			// 2a. Drain + refresh + alias secondary
 			await _secondaryChannel!.WaitForDrainAsync(drainMaxWait, ctx).ConfigureAwait(false);
 			await _secondaryChannel.RefreshAsync(ctx).ConfigureAwait(false);
-			await _secondaryChannel.ApplyAliasesAsync(string.Empty, ctx).ConfigureAwait(false);
+			await _secondaryChannel.ApplyAliasesAsync(_secondaryIndexName!, ctx).ConfigureAwait(false);
 
 			// 3. Delete old from primary
 			await DeleteOldDocumentsAsync(_primaryWriteAlias!, ctx).ConfigureAwait(false);
@@ -278,8 +282,8 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			await DeleteOldDocumentsAsync(_primaryWriteAlias!, ctx).ConfigureAwait(false);
 
 			// 6. Apply aliases
-			await _primaryChannel.ApplyAliasesAsync(string.Empty, ctx).ConfigureAwait(false);
-			await _secondaryChannel!.ApplyAliasesAsync(string.Empty, ctx).ConfigureAwait(false);
+			await _primaryChannel.ApplyAliasesAsync(_primaryIndexName!, ctx).ConfigureAwait(false);
+			await _secondaryChannel!.ApplyAliasesAsync(_secondaryIndexName!, ctx).ConfigureAwait(false);
 
 			// 7. Refresh both
 			await _primaryChannel.RefreshAsync(ctx).ConfigureAwait(false);
@@ -327,9 +331,9 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	public async Task<bool> ApplyAllAliasesAsync(CancellationToken ctx = default)
 	{
 		EnsureStarted();
-		if (!await _primaryChannel!.ApplyAliasesAsync(string.Empty, ctx).ConfigureAwait(false))
+		if (!await _primaryChannel!.ApplyAliasesAsync(_primaryIndexName!, ctx).ConfigureAwait(false))
 			return false;
-		return await _secondaryChannel!.ApplyAliasesAsync(string.Empty, ctx).ConfigureAwait(false);
+		return await _secondaryChannel!.ApplyAliasesAsync(_secondaryIndexName!, ctx).ConfigureAwait(false);
 	}
 
 	/// <inheritdoc />

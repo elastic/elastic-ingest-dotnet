@@ -112,6 +112,13 @@ public class IngestChannel<TEvent> : IngestChannelBase<TEvent, IngestChannelOpti
 	public IIndexProvisioningStrategy ProvisioningStrategy => _strategy.Provisioning;
 
 	/// <summary>
+	/// The concrete index name or pattern used for refresh and alias operations.
+	/// For batch-date indices (<see cref="Mapping.ElasticsearchTypeContext.IndexPatternUseBatchDate"/>),
+	/// this is the fixed concrete index name (e.g., <c>my-index-2026.02.22.143055</c>).
+	/// </summary>
+	public string IndexName => _strategy.DocumentIngest.RefreshTargets;
+
+	/// <summary>
 	/// Triggers a manual rollover of the target index or data stream.
 	/// Requires the strategy to include a <see cref="IRolloverStrategy"/>.
 	/// </summary>

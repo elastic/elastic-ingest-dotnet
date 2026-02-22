@@ -61,14 +61,18 @@ public class TypeContextIndexIngestStrategy<TDocument> : IDocumentIngestStrategy
 
 		var id = _typeContext.GetId?.Invoke(document!);
 
-		// Content hash-based scripted upsert
+		// Content hash-based scripted upsert.
+		// Combines channelHash (derived from template settings/mappings) with the document's
+		// content hash so that mapping or settings changes invalidate all content hashes,
+		// forcing documents to be re-indexed even when their content hasn't changed.
 		if (!string.IsNullOrWhiteSpace(channelHash) && id != null && _typeContext.GetContentHash is not null)
 		{
 			var contentHash = _typeContext.GetContentHash(document!);
 			if (contentHash != null)
 			{
+				var combinedHash = HashedBulkUpdate.CreateHash(channelHash, contentHash);
 				var hashInfo = new HashedBulkUpdate(
-					_typeContext.ContentHashFieldName ?? "content_hash", contentHash);
+					_typeContext.ContentHashFieldName ?? "content_hash", combinedHash);
 				return _skipIndexNameOnOperations
 					? new ScriptedHashUpdateOperation { Id = id, UpdateInformation = hashInfo }
 					: new ScriptedHashUpdateOperation { Id = id, Index = index, UpdateInformation = hashInfo };

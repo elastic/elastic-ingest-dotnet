@@ -36,4 +36,20 @@ public static class TypeContextResolver
 			return readAlias!;
 		return ResolveWriteAlias(tc);
 	}
+
+	/// <summary>
+	/// Resolves the concrete index name for a given timestamp.
+	/// When a <see cref="IndexStrategy.DatePattern"/> is configured, produces a timestamped name
+	/// such as <c>my-index-2026.02.22.143055</c>. Otherwise returns the fixed write target.
+	/// </summary>
+	public static string ResolveIndexName(ElasticsearchTypeContext tc, DateTimeOffset timestamp)
+	{
+		var writeTarget = tc.IndexStrategy?.WriteTarget;
+		if (string.IsNullOrEmpty(writeTarget))
+			throw new InvalidOperationException("TypeContext must have IndexStrategy.WriteTarget");
+
+		return tc.IndexStrategy?.DatePattern is { } pattern
+			? $"{writeTarget}-{timestamp.ToString(pattern, System.Globalization.CultureInfo.InvariantCulture)}"
+			: writeTarget!;
+	}
 }

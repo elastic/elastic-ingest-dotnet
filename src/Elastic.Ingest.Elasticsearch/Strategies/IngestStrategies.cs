@@ -18,15 +18,13 @@ public static class IngestStrategies
 	/// Auto-detect the appropriate strategy from the <see cref="ElasticsearchTypeContext.EntityTarget"/>.
 	/// </summary>
 	public static IIngestStrategy<TEvent> ForContext<TEvent>(
-		ElasticsearchTypeContext tc) where TEvent : class
-	{
-		return tc.EntityTarget switch
+		ElasticsearchTypeContext tc) where TEvent : class =>
+		tc.EntityTarget switch
 		{
 			EntityTarget.WiredStream => WiredStream<TEvent>(tc),
 			EntityTarget.DataStream => DataStream<TEvent>(tc),
 			_ => Index<TEvent>(tc)
 		};
-	}
 
 	/// <summary>
 	/// Creates a data stream ingest strategy with optional custom bootstrap.
@@ -53,13 +51,20 @@ public static class IngestStrategies
 
 	/// <summary>
 	/// Creates an index ingest strategy with optional custom bootstrap.
+	/// When <see cref="ElasticsearchTypeContext.IndexPatternUseBatchDate"/> is true and a
+	/// <see cref="IndexStrategy.DatePattern"/> is configured, the index name is precomputed
+	/// from <see cref="DateTimeOffset.UtcNow"/> at strategy creation time. All documents in the
+	/// batch are written to this single fixed index (e.g., <c>my-index-2026.02.22.143055</c>).
 	/// </summary>
 	public static IIngestStrategy<TEvent> Index<TEvent>(
 		ElasticsearchTypeContext tc,
 		IBootstrapStrategy? bootstrap = null) where TEvent : class
 	{
 		var writeTarget = tc.IndexStrategy?.WriteTarget ?? typeof(TEvent).Name.ToLowerInvariant();
-		var indexFormat = tc.IndexStrategy?.DatePattern != null
+		var batchDate = tc.IndexPatternUseBatchDate ? DateTimeOffset.UtcNow : (DateTimeOffset?)null;
+		var indexFormat = tc.IndexStrategy?.DatePattern != null && batchDate != null
+			? $"{writeTarget}-{batchDate.Value.ToString(tc.IndexStrategy.DatePattern, System.Globalization.CultureInfo.InvariantCulture)}"
+			: tc.IndexStrategy?.DatePattern != null
 			? $"{writeTarget}-{{0:{tc.IndexStrategy.DatePattern}}}"
 			: writeTarget;
 
