@@ -8,15 +8,10 @@
 		<IsPackable>true</IsPackable>
 		<Description>Elasticsearch mapping source generator for AOT-compatible compile-time mapping generation</Description>
 		<PackageTags>elasticsearch;mapping;source-generator;aot</PackageTags>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<GenerateDocumentationFile>false</GenerateDocumentationFile>
 		<IsAotCompatible>false</IsAotCompatible>
 		<NoWarn>$(NoWarn);IL2026;IL3050</NoWarn>
 	</PropertyGroup>
-
-	<ItemGroup>
-		<None Include="README.md" Pack="true" PackagePath="\" />
-	</ItemGroup>
 
 	<!-- Include the generator as an analyzer (project-to-project) -->
 	<ItemGroup>
