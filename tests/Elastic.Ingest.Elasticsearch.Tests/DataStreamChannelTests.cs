@@ -11,7 +11,7 @@ using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.Tests;
 
-public class DataStreamChannelTests : ChannelTestWithSingleDocResponseBase
+public class DataStreamChannelTests
 {
 	[Test]
 	public void DataStreamChannelUsesCorrectUrlAndOperationHeader()
@@ -20,7 +20,7 @@ public class DataStreamChannelTests : ChannelTestWithSingleDocResponseBase
 
 		var wait = new ManualResetEvent(false);
 
-		using var channel = new DataStreamChannel<TestDocument>(new DataStreamChannelOptions<TestDocument>(Transport)
+		using var channel = new DataStreamChannel<TestDocument>(new DataStreamChannelOptions<TestDocument>(TestSetup.SharedTransport)
 		{
 			BufferOptions = new()
 			{

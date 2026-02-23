@@ -4,6 +4,7 @@
 
 using System;
 using System.IO;
+using System.Text;
 using System.Threading;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Transport;
@@ -12,9 +13,13 @@ using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.Tests;
 
-public class SubPathTests : ChannelTestWithSingleDocResponseBase
+public class SubPathTests
 {
-	public SubPathTests() : base("https://localhost:9200/subpath") { }
+	private static readonly ITransport Transport =
+		new DistributedTransport<TransportConfiguration>(
+			new TransportConfiguration(new SingleNodePool(new Uri("https://localhost:9200/subpath")),
+					new InMemoryRequestInvoker(Encoding.UTF8.GetBytes("{\"items\":[{\"create\":{\"status\":201}}]}")))
+				{ DisablePings = true, DebugMode = true });
 
 	[Test]
 	public void IndexChannelWithFixedIndexNameUsesCorrectUrlAndOperationHeader() =>

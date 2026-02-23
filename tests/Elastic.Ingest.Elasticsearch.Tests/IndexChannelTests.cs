@@ -12,7 +12,7 @@ using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.Tests;
 
-public class IndexChannelTests : ChannelTestWithSingleDocResponseBase
+public class IndexChannelTests
 {
 	[Test]
 	public void IndexChannelWithFixedIndexNameUsesCorrectUrlAndOperationHeader() =>
@@ -28,7 +28,7 @@ public class IndexChannelTests : ChannelTestWithSingleDocResponseBase
 
 		var wait = new ManualResetEvent(false);
 
-		var options = new IndexChannelOptions<TestDocument>(Transport)
+		var options = new IndexChannelOptions<TestDocument>(TestSetup.SharedTransport)
 		{
 			BufferOptions = new()
 			{
