@@ -4,6 +4,7 @@
 
 #pragma warning disable CA1720 // Identifier contains type name - intentional, matches Elasticsearch field types
 
+using System.Text.Json.Nodes;
 using Elastic.Mapping.Mappings.Definitions;
 
 namespace Elastic.Mapping.Mappings.Builders;
@@ -116,12 +117,18 @@ public sealed class FieldBuilder
 	/// <summary>Creates a wildcard field.</summary>
 	public WildcardFieldBuilder Wildcard() => new(this);
 
+	/// <summary>Creates a token_count field.</summary>
+	public TokenCountFieldBuilder TokenCount() => new(this);
+
 	/// <summary>Creates a version field.</summary>
 	public FieldBuilder Version()
 	{
 		_definition = new VersionFieldDefinition();
 		return this;
 	}
+
+	/// <summary>Creates a raw field with an arbitrary type and properties.</summary>
+	public RawFieldBuilder Raw(string type) => new(this, type);
 
 	internal void SetDefinition(IFieldDefinition definition) => _definition = definition;
 
@@ -143,6 +150,27 @@ public sealed class MultiFieldBuilder
 
 	/// <summary>Creates a search_as_you_type multi-field.</summary>
 	public SearchAsYouTypeMultiFieldBuilder SearchAsYouType() => new(this);
+
+	/// <summary>Creates a semantic_text multi-field.</summary>
+	public SemanticTextMultiFieldBuilder SemanticText() => new(this);
+
+	/// <summary>Creates a completion multi-field.</summary>
+	public CompletionMultiFieldBuilder Completion() => new(this);
+
+	/// <summary>Creates a dense_vector multi-field.</summary>
+	public DenseVectorMultiFieldBuilder DenseVector() => new(this);
+
+	/// <summary>Creates a constant_keyword multi-field.</summary>
+	public ConstantKeywordMultiFieldBuilder ConstantKeyword() => new(this);
+
+	/// <summary>Creates a wildcard multi-field.</summary>
+	public WildcardMultiFieldBuilder Wildcard() => new(this);
+
+	/// <summary>Creates a token_count multi-field.</summary>
+	public TokenCountMultiFieldBuilder TokenCount() => new(this);
+
+	/// <summary>Creates a raw multi-field with an arbitrary type and properties.</summary>
+	public RawMultiFieldBuilder Raw(string type) => new(this, type);
 
 	internal void SetDefinition(IFieldDefinition definition) => _definition = definition;
 
@@ -258,6 +286,261 @@ public sealed class SearchAsYouTypeMultiFieldBuilder
 			builder._searchAnalyzer,
 			builder._maxShingleSize
 		));
+		return builder._parent;
+	}
+}
+
+/// <summary>Builder for semantic_text multi-fields.</summary>
+public sealed class SemanticTextMultiFieldBuilder
+{
+	private readonly MultiFieldBuilder _parent;
+	private string? _inferenceId;
+
+	internal SemanticTextMultiFieldBuilder(MultiFieldBuilder parent) => _parent = parent;
+
+	/// <summary>Sets the inference ID.</summary>
+	public SemanticTextMultiFieldBuilder InferenceId(string inferenceId)
+	{
+		_inferenceId = inferenceId;
+		return this;
+	}
+
+	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
+	public static implicit operator MultiFieldBuilder(SemanticTextMultiFieldBuilder builder)
+	{
+		builder._parent.SetDefinition(new SemanticTextFieldDefinition(builder._inferenceId));
+		return builder._parent;
+	}
+}
+
+/// <summary>Builder for completion multi-fields.</summary>
+public sealed class CompletionMultiFieldBuilder
+{
+	private readonly MultiFieldBuilder _parent;
+	private string? _analyzer;
+	private string? _searchAnalyzer;
+
+	internal CompletionMultiFieldBuilder(MultiFieldBuilder parent) => _parent = parent;
+
+	/// <summary>Sets the analyzer.</summary>
+	public CompletionMultiFieldBuilder Analyzer(string analyzer)
+	{
+		_analyzer = analyzer;
+		return this;
+	}
+
+	/// <summary>Sets the search analyzer.</summary>
+	public CompletionMultiFieldBuilder SearchAnalyzer(string searchAnalyzer)
+	{
+		_searchAnalyzer = searchAnalyzer;
+		return this;
+	}
+
+	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
+	public static implicit operator MultiFieldBuilder(CompletionMultiFieldBuilder builder)
+	{
+		builder._parent.SetDefinition(new CompletionFieldDefinition(
+			builder._analyzer,
+			builder._searchAnalyzer
+		));
+		return builder._parent;
+	}
+}
+
+/// <summary>Builder for dense_vector multi-fields.</summary>
+public sealed class DenseVectorMultiFieldBuilder
+{
+	private readonly MultiFieldBuilder _parent;
+	private int _dims;
+	private string? _similarity;
+	private bool? _index;
+
+	internal DenseVectorMultiFieldBuilder(MultiFieldBuilder parent) => _parent = parent;
+
+	/// <summary>Sets the dimensions.</summary>
+	public DenseVectorMultiFieldBuilder Dims(int dims)
+	{
+		_dims = dims;
+		return this;
+	}
+
+	/// <summary>Sets the similarity measure.</summary>
+	public DenseVectorMultiFieldBuilder Similarity(string similarity)
+	{
+		_similarity = similarity;
+		return this;
+	}
+
+	/// <summary>Sets whether the field is indexed.</summary>
+	public DenseVectorMultiFieldBuilder Index(bool index)
+	{
+		_index = index;
+		return this;
+	}
+
+	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
+	public static implicit operator MultiFieldBuilder(DenseVectorMultiFieldBuilder builder)
+	{
+		builder._parent.SetDefinition(new DenseVectorFieldDefinition(
+			builder._dims,
+			builder._similarity,
+			builder._index
+		));
+		return builder._parent;
+	}
+}
+
+/// <summary>Builder for constant_keyword multi-fields.</summary>
+public sealed class ConstantKeywordMultiFieldBuilder
+{
+	private readonly MultiFieldBuilder _parent;
+	private string? _value;
+
+	internal ConstantKeywordMultiFieldBuilder(MultiFieldBuilder parent) => _parent = parent;
+
+	/// <summary>Sets the constant value.</summary>
+	public ConstantKeywordMultiFieldBuilder Value(string value)
+	{
+		_value = value;
+		return this;
+	}
+
+	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
+	public static implicit operator MultiFieldBuilder(ConstantKeywordMultiFieldBuilder builder)
+	{
+		builder._parent.SetDefinition(new ConstantKeywordFieldDefinition(builder._value));
+		return builder._parent;
+	}
+}
+
+/// <summary>Builder for wildcard multi-fields.</summary>
+public sealed class WildcardMultiFieldBuilder
+{
+	private readonly MultiFieldBuilder _parent;
+	private int? _ignoreAbove;
+
+	internal WildcardMultiFieldBuilder(MultiFieldBuilder parent) => _parent = parent;
+
+	/// <summary>Sets the ignore_above value.</summary>
+	public WildcardMultiFieldBuilder IgnoreAbove(int ignoreAbove)
+	{
+		_ignoreAbove = ignoreAbove;
+		return this;
+	}
+
+	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
+	public static implicit operator MultiFieldBuilder(WildcardMultiFieldBuilder builder)
+	{
+		builder._parent.SetDefinition(new WildcardFieldDefinition(builder._ignoreAbove));
+		return builder._parent;
+	}
+}
+
+/// <summary>Builder for token_count multi-fields.</summary>
+public sealed class TokenCountMultiFieldBuilder
+{
+	private readonly MultiFieldBuilder _parent;
+	private string? _analyzer;
+	private bool? _enablePositionIncrements;
+	private bool? _docValues;
+	private bool? _index;
+
+	internal TokenCountMultiFieldBuilder(MultiFieldBuilder parent) => _parent = parent;
+
+	/// <summary>Sets the analyzer used to break the string into tokens.</summary>
+	public TokenCountMultiFieldBuilder Analyzer(string analyzer)
+	{
+		_analyzer = analyzer;
+		return this;
+	}
+
+	/// <summary>Sets whether position increments are counted.</summary>
+	public TokenCountMultiFieldBuilder EnablePositionIncrements(bool enable)
+	{
+		_enablePositionIncrements = enable;
+		return this;
+	}
+
+	/// <summary>Sets whether doc_values are enabled.</summary>
+	public TokenCountMultiFieldBuilder DocValues(bool docValues)
+	{
+		_docValues = docValues;
+		return this;
+	}
+
+	/// <summary>Sets whether the field is indexed.</summary>
+	public TokenCountMultiFieldBuilder Index(bool index)
+	{
+		_index = index;
+		return this;
+	}
+
+	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
+	public static implicit operator MultiFieldBuilder(TokenCountMultiFieldBuilder builder)
+	{
+		builder._parent.SetDefinition(new TokenCountFieldDefinition(
+			builder._analyzer,
+			builder._enablePositionIncrements,
+			builder._docValues,
+			builder._index
+		));
+		return builder._parent;
+	}
+}
+
+/// <summary>Builder for raw multi-fields with an arbitrary type and properties.</summary>
+public sealed class RawMultiFieldBuilder
+{
+	private readonly MultiFieldBuilder _parent;
+	private readonly string _type;
+	private readonly JsonObject _properties = [];
+
+	internal RawMultiFieldBuilder(MultiFieldBuilder parent, string type)
+	{
+		_parent = parent;
+		_type = type;
+	}
+
+	/// <summary>Sets an arbitrary property on the field definition.</summary>
+	public RawMultiFieldBuilder Set(string key, string value)
+	{
+		_properties[key] = value;
+		return this;
+	}
+
+	/// <summary>Sets an arbitrary boolean property on the field definition.</summary>
+	public RawMultiFieldBuilder Set(string key, bool value)
+	{
+		_properties[key] = value;
+		return this;
+	}
+
+	/// <summary>Sets an arbitrary integer property on the field definition.</summary>
+	public RawMultiFieldBuilder Set(string key, int value)
+	{
+		_properties[key] = value;
+		return this;
+	}
+
+	/// <summary>Sets an arbitrary JSON node property on the field definition.</summary>
+	public RawMultiFieldBuilder Set(string key, JsonNode? value)
+	{
+		_properties[key] = value?.DeepClone();
+		return this;
+	}
+
+	/// <summary>Merges all entries from the given JSON object into the field definition.</summary>
+	public RawMultiFieldBuilder Properties(JsonObject properties)
+	{
+		foreach (var kvp in properties)
+			_properties[kvp.Key] = kvp.Value?.DeepClone();
+		return this;
+	}
+
+	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
+	public static implicit operator MultiFieldBuilder(RawMultiFieldBuilder builder)
+	{
+		builder._parent.SetDefinition(new RawFieldDefinition(builder._type, builder._properties));
 		return builder._parent;
 	}
 }

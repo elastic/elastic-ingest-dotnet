@@ -683,10 +683,71 @@ public sealed record WildcardFieldDefinition(
 	}
 }
 
+/// <summary>A token_count field definition.</summary>
+public sealed record TokenCountFieldDefinition(
+	string? Analyzer = null,
+	bool? EnablePositionIncrements = null,
+	bool? DocValues = null,
+	bool? Index = null
+) : IFieldDefinition
+{
+	public string Type => "token_count";
+
+	public JsonObject ToJson()
+	{
+		var obj = new JsonObject { ["type"] = Type };
+
+		if (Analyzer != null)
+			obj["analyzer"] = Analyzer;
+
+		if (EnablePositionIncrements.HasValue)
+			obj["enable_position_increments"] = EnablePositionIncrements.Value;
+
+		if (DocValues.HasValue)
+			obj["doc_values"] = DocValues.Value;
+
+		if (Index.HasValue)
+			obj["index"] = Index.Value;
+
+		return obj;
+	}
+}
+
 /// <summary>A version field definition.</summary>
 public sealed record VersionFieldDefinition : IFieldDefinition
 {
 	public string Type => "version";
 
 	public JsonObject ToJson() => new() { ["type"] = Type };
+}
+
+/// <summary>A raw field definition with an arbitrary type and additional properties.</summary>
+public sealed record RawFieldDefinition(
+	string FieldType,
+	JsonObject? AdditionalProperties = null,
+	IReadOnlyDictionary<string, IFieldDefinition>? MultiFields = null
+) : IFieldDefinition
+{
+	public string Type => FieldType;
+
+	public JsonObject ToJson()
+	{
+		var obj = new JsonObject { ["type"] = Type };
+
+		if (AdditionalProperties != null)
+		{
+			foreach (var kvp in AdditionalProperties)
+				obj[kvp.Key] = kvp.Value?.DeepClone();
+		}
+
+		if (MultiFields is { Count: > 0 })
+		{
+			var fields = new JsonObject();
+			foreach (var kvp in MultiFields)
+				fields[kvp.Key] = kvp.Value.ToJson();
+			obj["fields"] = fields;
+		}
+
+		return obj;
+	}
 }

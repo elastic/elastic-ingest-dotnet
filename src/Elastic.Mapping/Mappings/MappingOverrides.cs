@@ -94,12 +94,13 @@ public sealed class MappingOverrides
 		return node.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
 	}
 
+	private static readonly HashSet<string> ObjectTypes = ["object", "nested"];
+
 	private static void MergeFieldAtPath(JsonObject properties, string path, IFieldDefinition definition)
 	{
 		var parts = path.Split('.');
 		var current = properties;
 
-		// Navigate to the nested location, creating parent objects as needed
 		for (var i = 0; i < parts.Length - 1; i++)
 		{
 			var part = parts[i];
@@ -111,24 +112,26 @@ public sealed class MappingOverrides
 				current[part] = next;
 			}
 
-			var nextProps = next["properties"]?.AsObject();
-			if (nextProps == null)
+			var parentType = next["type"]?.GetValue<string>();
+			var isLeafType = parentType != null && !ObjectTypes.Contains(parentType);
+			var containerKey = isLeafType ? "fields" : "properties";
+
+			var container = next[containerKey]?.AsObject();
+			if (container == null)
 			{
-				nextProps = [];
-				next["properties"] = nextProps;
+				container = [];
+				next[containerKey] = container;
 			}
 
-			current = nextProps;
+			current = container;
 		}
 
-		// Set the field definition at the final location
 		var fieldName = parts[^1];
 		var existing = current[fieldName]?.AsObject();
 		var newDef = definition.ToJson();
 
 		if (existing != null)
 		{
-			// Merge new definition into existing
 			foreach (var kvp in newDef)
 				existing[kvp.Key] = kvp.Value?.DeepClone();
 		}

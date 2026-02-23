@@ -94,11 +94,18 @@ public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBa
 
 	/// <summary>
 	/// Builds the mapping overrides from all configured fields, runtime fields, and dynamic templates.
+	/// Later entries override earlier ones when paths collide.
 	/// </summary>
-	public MappingOverrides Build() =>
-		new(
-			_fields.ToDictionary(x => x.Path, x => x.Definition),
-			_runtimeFields.ToDictionary(x => x.Name, x => x.Definition),
-			[.. _dynamicTemplates]
-		);
+	public MappingOverrides Build()
+	{
+		var fields = new Dictionary<string, IFieldDefinition>();
+		foreach (var (path, def) in _fields)
+			fields[path] = def;
+
+		var runtimeFields = new Dictionary<string, RuntimeFieldDefinition>();
+		foreach (var (name, def) in _runtimeFields)
+			runtimeFields[name] = def;
+
+		return new(fields, runtimeFields, [.. _dynamicTemplates]);
+	}
 }

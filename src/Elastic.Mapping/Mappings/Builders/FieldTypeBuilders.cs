@@ -2,6 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System.Text.Json.Nodes;
 using Elastic.Mapping.Mappings.Definitions;
 
 namespace Elastic.Mapping.Mappings.Builders;
@@ -928,6 +929,128 @@ public sealed class WildcardFieldBuilder
 	public static implicit operator FieldBuilder(WildcardFieldBuilder builder)
 	{
 		builder._parent.SetDefinition(new WildcardFieldDefinition(builder._ignoreAbove));
+		return builder._parent;
+	}
+}
+
+/// <summary>Builder for token_count fields.</summary>
+public sealed class TokenCountFieldBuilder
+{
+	private readonly FieldBuilder _parent;
+	private string? _analyzer;
+	private bool? _enablePositionIncrements;
+	private bool? _docValues;
+	private bool? _index;
+
+	internal TokenCountFieldBuilder(FieldBuilder parent) => _parent = parent;
+
+	/// <summary>Sets the analyzer used to break the string into tokens.</summary>
+	public TokenCountFieldBuilder Analyzer(string analyzer)
+	{
+		_analyzer = analyzer;
+		return this;
+	}
+
+	/// <summary>Sets whether position increments are counted.</summary>
+	public TokenCountFieldBuilder EnablePositionIncrements(bool enable)
+	{
+		_enablePositionIncrements = enable;
+		return this;
+	}
+
+	/// <summary>Sets whether doc_values are enabled.</summary>
+	public TokenCountFieldBuilder DocValues(bool docValues)
+	{
+		_docValues = docValues;
+		return this;
+	}
+
+	/// <summary>Sets whether the field is indexed.</summary>
+	public TokenCountFieldBuilder Index(bool index)
+	{
+		_index = index;
+		return this;
+	}
+
+	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
+	public static implicit operator FieldBuilder(TokenCountFieldBuilder builder)
+	{
+		builder._parent.SetDefinition(new TokenCountFieldDefinition(
+			builder._analyzer,
+			builder._enablePositionIncrements,
+			builder._docValues,
+			builder._index
+		));
+		return builder._parent;
+	}
+}
+
+/// <summary>Builder for raw fields with an arbitrary type and properties.</summary>
+public sealed class RawFieldBuilder
+{
+	private readonly FieldBuilder _parent;
+	private readonly string _type;
+	private readonly JsonObject _properties = [];
+	private readonly List<(string Name, IFieldDefinition Definition)> _multiFields = [];
+
+	internal RawFieldBuilder(FieldBuilder parent, string type)
+	{
+		_parent = parent;
+		_type = type;
+	}
+
+	/// <summary>Sets an arbitrary string property on the field definition.</summary>
+	public RawFieldBuilder Set(string key, string value)
+	{
+		_properties[key] = value;
+		return this;
+	}
+
+	/// <summary>Sets an arbitrary boolean property on the field definition.</summary>
+	public RawFieldBuilder Set(string key, bool value)
+	{
+		_properties[key] = value;
+		return this;
+	}
+
+	/// <summary>Sets an arbitrary integer property on the field definition.</summary>
+	public RawFieldBuilder Set(string key, int value)
+	{
+		_properties[key] = value;
+		return this;
+	}
+
+	/// <summary>Sets an arbitrary JSON node property on the field definition.</summary>
+	public RawFieldBuilder Set(string key, JsonNode? value)
+	{
+		_properties[key] = value?.DeepClone();
+		return this;
+	}
+
+	/// <summary>Merges all entries from the given JSON object into the field definition.</summary>
+	public RawFieldBuilder Properties(JsonObject properties)
+	{
+		foreach (var kvp in properties)
+			_properties[kvp.Key] = kvp.Value?.DeepClone();
+		return this;
+	}
+
+	/// <summary>Adds a multi-field.</summary>
+	public RawFieldBuilder MultiField(string name, Func<MultiFieldBuilder, MultiFieldBuilder> configure)
+	{
+		var builder = new MultiFieldBuilder();
+		_ = configure(builder);
+		_multiFields.Add((name, builder.GetDefinition()));
+		return this;
+	}
+
+	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
+	public static implicit operator FieldBuilder(RawFieldBuilder builder)
+	{
+		Dictionary<string, IFieldDefinition>? multiFields = builder._multiFields.Count > 0
+			? builder._multiFields.ToDictionary(x => x.Name, x => x.Definition)
+			: null;
+		builder._parent.SetDefinition(new RawFieldDefinition(builder._type, builder._properties, multiFields));
 		return builder._parent;
 	}
 }
