@@ -86,7 +86,7 @@ internal static class ContextEmitter
 		var combinedHash = SharedEmitterHelpers.ComputeHash(indexJson);
 
 		sb.AppendLine($"{indent}/// <summary>Generated Elasticsearch resolver for {reg.ResolverName}.</summary>");
-		sb.AppendLine($"{indent}public sealed class {reg.ResolverName}Resolver");
+		sb.AppendLine($"{indent}public sealed class {reg.ResolverName}Resolver : global::Elastic.Mapping.IStaticMappingResolver<global::{typeFqn}>");
 		sb.AppendLine($"{indent}{{");
 
 		// Hashes as instance properties backed by constants
@@ -183,7 +183,57 @@ internal static class ContextEmitter
 		sb.AppendLine($"{indent}\t\tTextFields: TextFields");
 		sb.AppendLine($"{indent}\t);");
 
+		// IStaticMappingResolver<T> members
+		EmitBatchTrackingMembers(sb, reg, typeFqn, indent + "\t");
+
 		sb.AppendLine($"{indent}}}");
+	}
+
+	private static void EmitBatchTrackingMembers(StringBuilder sb, TypeRegistration reg, string typeFqn, string indent)
+	{
+		var ingest = reg.IngestProperties;
+		sb.AppendLine();
+
+		// SetBatchIndexDate
+		if (ingest.BatchIndexDatePropertyName != null)
+		{
+			sb.AppendLine($"{indent}/// <inheritdoc />");
+			sb.AppendLine($"{indent}public global::System.Action<global::{typeFqn}, global::System.DateTimeOffset>? SetBatchIndexDate {{ get; }} =");
+			sb.AppendLine($"{indent}\tstatic (obj, val) => obj.{ingest.BatchIndexDatePropertyName} = val;");
+		}
+		else
+		{
+			sb.AppendLine($"{indent}/// <inheritdoc />");
+			sb.AppendLine($"{indent}public global::System.Action<global::{typeFqn}, global::System.DateTimeOffset>? SetBatchIndexDate => null;");
+		}
+		sb.AppendLine();
+
+		// SetLastUpdated
+		if (ingest.LastUpdatedPropertyName != null)
+		{
+			sb.AppendLine($"{indent}/// <inheritdoc />");
+			sb.AppendLine($"{indent}public global::System.Action<global::{typeFqn}, global::System.DateTimeOffset>? SetLastUpdated {{ get; }} =");
+			sb.AppendLine($"{indent}\tstatic (obj, val) => obj.{ingest.LastUpdatedPropertyName} = val;");
+		}
+		else
+		{
+			sb.AppendLine($"{indent}/// <inheritdoc />");
+			sb.AppendLine($"{indent}public global::System.Action<global::{typeFqn}, global::System.DateTimeOffset>? SetLastUpdated => null;");
+		}
+		sb.AppendLine();
+
+		// BatchIndexDateFieldName
+		if (ingest.BatchIndexDateFieldName != null)
+			sb.AppendLine($"{indent}/// <inheritdoc />\n{indent}public string? BatchIndexDateFieldName => \"{ingest.BatchIndexDateFieldName}\";");
+		else
+			sb.AppendLine($"{indent}/// <inheritdoc />\n{indent}public string? BatchIndexDateFieldName => null;");
+		sb.AppendLine();
+
+		// LastUpdatedFieldName
+		if (ingest.LastUpdatedFieldName != null)
+			sb.AppendLine($"{indent}/// <inheritdoc />\n{indent}public string? LastUpdatedFieldName => \"{ingest.LastUpdatedFieldName}\";");
+		else
+			sb.AppendLine($"{indent}/// <inheritdoc />\n{indent}public string? LastUpdatedFieldName => null;");
 	}
 
 	private static void EmitAccessorDelegate(StringBuilder sb, string? propertyName, string typeFqn, string paramName, bool isLast, string indent)

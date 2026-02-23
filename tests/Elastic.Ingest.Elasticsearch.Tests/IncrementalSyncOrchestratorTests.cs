@@ -136,21 +136,23 @@ public class IncrementalSyncOrchestratorTests
 	}
 
 	[Test]
-	public async Task StartSelectsMultiplexWhenHashesDiffer()
+	public async Task StartSelectsReindexWhenSecondaryExistsDespiteHashMismatch()
 	{
-		// Server returns empty hash (no existing template) -> hash mismatch -> Multiplex
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		// Server returns empty hash (no existing template) → hash mismatch, but the
+		// secondary HEAD returns 200 (exists) → forced back to Reindex because
+		// scripted upserts fail on semantic_text indices.
+		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateOrchestrator(transport);
 
-		var strategy = await orchestrator.StartAsync(BootstrapMethod.Silent);
-		strategy.Should().Be(IngestSyncStrategy.Multiplex);
-		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Multiplex);
+		var context = await orchestrator.StartAsync(BootstrapMethod.Silent);
+		context.Strategy.Should().Be(IngestSyncStrategy.Reindex);
+		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Reindex);
 	}
 
 	[Test]
 	public async Task StartExecutesPreBootstrapTasks()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateOrchestrator(transport);
 
 		var taskExecuted = false;
@@ -167,7 +169,7 @@ public class IncrementalSyncOrchestratorTests
 	[Test]
 	public async Task AddPreBootstrapTaskReturnsSelfForChaining()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateOrchestrator(transport);
 
 		var result = orchestrator
@@ -179,13 +181,14 @@ public class IncrementalSyncOrchestratorTests
 	}
 
 	[Test]
-	public async Task MultiplexWritesToBothChannels()
+	public async Task ReindexWritesToPrimaryOnly()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		// Secondary exists (HEAD 200) → Reindex; writes only go to primary
+		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateOrchestrator(transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
-		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Multiplex);
+		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Reindex);
 
 		var result = orchestrator.TryWrite(new TestDocument { Timestamp = DateTimeOffset.UtcNow });
 		result.Should().BeTrue();
@@ -194,7 +197,7 @@ public class IncrementalSyncOrchestratorTests
 	[Test]
 	public async Task TryWriteManyWritesMultipleDocuments()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateOrchestrator(transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
@@ -211,7 +214,7 @@ public class IncrementalSyncOrchestratorTests
 	[Test]
 	public async Task WaitToWriteAsyncWritesDocument()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateOrchestrator(transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
@@ -223,7 +226,7 @@ public class IncrementalSyncOrchestratorTests
 	[Test]
 	public async Task WaitToWriteManyAsyncWritesDocuments()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateOrchestrator(transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
@@ -241,28 +244,34 @@ public class IncrementalSyncOrchestratorTests
 	public async Task OnPostCompleteIsCalledDuringComplete()
 	{
 		var transport = CreateTransportWithTaskResponse();
-		using var orchestrator = CreateSimpleOrchestrator(transport);
+		var primary = CreateSimpleTypeContext("primary-docs");
+		var secondary = CreateSimpleTypeContext("secondary-docs");
 
 		OrchestratorContext<TestDocument>? capturedContext = null;
-		orchestrator.OnPostComplete = (ctx, ct) =>
+		ITransport? capturedTransport = null;
+		using var orchestrator = new IncrementalSyncOrchestrator<TestDocument>(transport, primary, secondary)
 		{
-			capturedContext = ctx;
-			return Task.CompletedTask;
+			OnPostComplete = (ctx, t, ct) =>
+			{
+				capturedContext = ctx;
+				capturedTransport = t;
+				return Task.CompletedTask;
+			}
 		};
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
 		await orchestrator.CompleteAsync(drainMaxWait: TimeSpan.FromSeconds(5));
 
 		capturedContext.Should().NotBeNull();
-		capturedContext!.Transport.Should().BeSameAs(transport);
-		capturedContext.Strategy.Should().Be(orchestrator.Strategy);
+		capturedTransport.Should().BeSameAs(transport);
+		capturedContext!.Strategy.Should().Be(orchestrator.Strategy);
 		capturedContext.BatchTimestamp.Should().Be(orchestrator.BatchTimestamp);
 	}
 
 	[Test]
 	public async Task DisposeDisposesChannels()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		var transport = CreateTransportWithTaskResponse();
 		var orchestrator = CreateOrchestrator(transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
@@ -294,13 +303,14 @@ public class IncrementalSyncOrchestratorTests
 	[Test]
 	public async Task ConfigurePrimaryIsInvoked()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
-		using var orchestrator = CreateOrchestrator(transport);
+		var transport = CreateTransportWithTaskResponse();
+		var primary = CreateTypeContext("primary-docs", "primary-search", "primary-docs-*");
+		var secondary = CreateTypeContext("secondary-docs", "secondary-search", "secondary-docs-*");
 
 		var invoked = false;
-		orchestrator.ConfigurePrimary = opts =>
+		using var orchestrator = new IncrementalSyncOrchestrator<TestDocument>(transport, primary, secondary)
 		{
-			invoked = true;
+			ConfigurePrimary = _ => invoked = true
 		};
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
@@ -310,13 +320,14 @@ public class IncrementalSyncOrchestratorTests
 	[Test]
 	public async Task ConfigureSecondaryIsInvoked()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
-		using var orchestrator = CreateOrchestrator(transport);
+		var transport = CreateTransportWithTaskResponse();
+		var primary = CreateTypeContext("primary-docs", "primary-search", "primary-docs-*");
+		var secondary = CreateTypeContext("secondary-docs", "secondary-search", "secondary-docs-*");
 
 		var invoked = false;
-		orchestrator.ConfigureSecondary = opts =>
+		using var orchestrator = new IncrementalSyncOrchestrator<TestDocument>(transport, primary, secondary)
 		{
-			invoked = true;
+			ConfigureSecondary = _ => invoked = true
 		};
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
@@ -324,13 +335,14 @@ public class IncrementalSyncOrchestratorTests
 	}
 
 	[Test]
-	public async Task CompleteAsyncMultiplexDrainsBothChannels()
+	public async Task CompleteAsyncReindexDrainsPrimaryAndReindexes()
 	{
+		// Secondary exists (task response returns 200 for HEAD) → Reindex strategy
 		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateSimpleOrchestrator(transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
-		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Multiplex);
+		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Reindex);
 
 		orchestrator.TryWrite(new TestDocument { Timestamp = DateTimeOffset.UtcNow });
 
@@ -341,7 +353,7 @@ public class IncrementalSyncOrchestratorTests
 	[Test]
 	public async Task DrainAllAsyncDoesNotThrow()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateOrchestrator(transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
@@ -352,7 +364,7 @@ public class IncrementalSyncOrchestratorTests
 	[Test]
 	public async Task RefreshAllAsyncReturnsResult()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateOrchestrator(transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
@@ -364,7 +376,7 @@ public class IncrementalSyncOrchestratorTests
 	[Test]
 	public async Task ApplyAllAliasesAsyncReturnsResult()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateSimpleOrchestrator(transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
@@ -376,7 +388,7 @@ public class IncrementalSyncOrchestratorTests
 	[Test]
 	public async Task MultiplePreBootstrapTasksAllExecuteInOrder()
 	{
-		var transport = CreateTransport(v => v.ClientCalls(c => c.SucceedAlways()));
+		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateOrchestrator(transport);
 
 		var executionOrder = new List<int>();

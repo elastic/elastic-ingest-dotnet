@@ -22,6 +22,19 @@ public class TypeContextIndexIngestStrategy<TDocument> : IDocumentIngestStrategy
 	private readonly string _url;
 	private readonly string _refreshTargets;
 	private readonly string _indexFormat;
+	private Func<object, string, string, HashedBulkUpdate>? _hashInfoFactory;
+
+	/// <summary>
+	/// Optional factory that overrides how <see cref="HashedBulkUpdate"/> is created for
+	/// scripted hash upserts. Parameters: (document, fieldName, combinedHash).
+	/// Used by <see cref="IncrementalSyncOrchestrator{TEvent}"/> to inject a custom
+	/// hash-match script that updates batch tracking fields instead of NOOPing.
+	/// </summary>
+	public Func<object, string, string, HashedBulkUpdate>? HashInfoFactory
+	{
+		get => _hashInfoFactory;
+		set => _hashInfoFactory = value;
+	}
 
 	/// <summary>
 	/// Creates a new TypeContext-driven index ingest strategy.
@@ -71,8 +84,10 @@ public class TypeContextIndexIngestStrategy<TDocument> : IDocumentIngestStrategy
 			if (contentHash != null)
 			{
 				var combinedHash = HashedBulkUpdate.CreateHash(channelHash, contentHash);
-				var hashInfo = new HashedBulkUpdate(
-					_typeContext.ContentHashFieldName ?? "content_hash", combinedHash);
+				var hashInfo = _hashInfoFactory != null
+					? _hashInfoFactory(document!, _typeContext.ContentHashFieldName ?? "content_hash", combinedHash)
+					: new HashedBulkUpdate(
+						_typeContext.ContentHashFieldName ?? "content_hash", combinedHash);
 				return _skipIndexNameOnOperations
 					? new ScriptedHashUpdateOperation { Id = id, UpdateInformation = hashInfo }
 					: new ScriptedHashUpdateOperation { Id = id, Index = index, UpdateInformation = hashInfo };

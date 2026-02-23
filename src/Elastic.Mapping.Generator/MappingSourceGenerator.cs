@@ -26,6 +26,8 @@ public class MappingSourceGenerator : IIncrementalGenerator
 	private const string IdAttributeName = "Elastic.Mapping.IdAttribute";
 	private const string ContentHashAttributeName = "Elastic.Mapping.ContentHashAttribute";
 	private const string TimestampAttributeName = "Elastic.Mapping.TimestampAttribute";
+	private const string BatchIndexDateAttributeName = "Elastic.Mapping.BatchIndexDateAttribute";
+	private const string LastUpdatedAttributeName = "Elastic.Mapping.LastUpdatedAttribute";
 
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
@@ -212,6 +214,8 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		string? idPropName = null, idPropType = null;
 		string? contentHashPropName = null, contentHashPropType = null, contentHashFieldName = null;
 		string? timestampPropName = null, timestampPropType = null;
+		string? batchIndexDatePropName = null, batchIndexDateFieldName = null;
+		string? lastUpdatedPropName = null, lastUpdatedFieldName = null;
 
 		foreach (var member in targetType.GetMembers())
 		{
@@ -231,19 +235,22 @@ public class MappingSourceGenerator : IIncrementalGenerator
 					contentHashPropName = prop.Name;
 					contentHashPropType = prop.Type.ToDisplayString();
 
-					// Resolve the JSON field name from [JsonPropertyName] or naming policy
-					contentHashFieldName = prop.GetAttributes()
-						.Where(a => a.AttributeClass?.ToDisplayString() == JsonPropertyNameAttributeName)
-						.Select(a => a.ConstructorArguments.FirstOrDefault().Value as string)
-						.FirstOrDefault()
-						?? Analysis.TypeAnalyzer.ApplyNamingPolicy(
-							prop.Name,
-							stjConfig?.PropertyNamingPolicy ?? Model.NamingPolicy.Unspecified);
+					contentHashFieldName = ResolveJsonFieldName(prop, stjConfig);
 				}
 				else if (attrName == TimestampAttributeName)
 				{
 					timestampPropName = prop.Name;
 					timestampPropType = prop.Type.ToDisplayString();
+				}
+				else if (attrName == BatchIndexDateAttributeName)
+				{
+					batchIndexDatePropName = prop.Name;
+					batchIndexDateFieldName = ResolveJsonFieldName(prop, stjConfig);
+				}
+				else if (attrName == LastUpdatedAttributeName)
+				{
+					lastUpdatedPropName = prop.Name;
+					lastUpdatedFieldName = ResolveJsonFieldName(prop, stjConfig);
 				}
 			}
 		}
@@ -251,9 +258,20 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		return new IngestPropertyModel(
 			idPropName, idPropType,
 			contentHashPropName, contentHashPropType, contentHashFieldName,
-			timestampPropName, timestampPropType
+			timestampPropName, timestampPropType,
+			batchIndexDatePropName, batchIndexDateFieldName,
+			lastUpdatedPropName, lastUpdatedFieldName
 		);
 	}
+
+	private static string ResolveJsonFieldName(IPropertySymbol prop, StjContextConfig? stjConfig) =>
+		prop.GetAttributes()
+			.Where(a => a.AttributeClass?.ToDisplayString() == JsonPropertyNameAttributeName)
+			.Select(a => a.ConstructorArguments.FirstOrDefault().Value as string)
+			.FirstOrDefault()
+		?? Analysis.TypeAnalyzer.ApplyNamingPolicy(
+			prop.Name,
+			stjConfig?.PropertyNamingPolicy ?? Model.NamingPolicy.Unspecified);
 
 	private static TypeRegistration? BuildTypeRegistration(
 		INamedTypeSymbol targetType,
