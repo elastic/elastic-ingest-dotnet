@@ -93,9 +93,9 @@ public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBa
 		_dynamicTemplates.Count > 0;
 
 	/// <summary>
-	/// Builds the mapping overrides. Called by framework, not by model code.
+	/// Builds the mapping overrides from all configured fields, runtime fields, and dynamic templates.
 	/// </summary>
-	internal MappingOverrides Build() =>
+	public MappingOverrides Build() =>
 		new(
 			_fields.ToDictionary(x => x.Path, x => x.Definition),
 			_runtimeFields.ToDictionary(x => x.Name, x => x.Definition),

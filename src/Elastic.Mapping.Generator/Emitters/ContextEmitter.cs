@@ -163,7 +163,7 @@ internal static class ContextEmitter
 		EmitSearchStrategy(sb, reg, indent + "\t");
 
 		// JSON methods as instance methods (static backing)
-		EmitJsonMethods(sb, settingsJson, mappingsJson, indexJson, indent + "\t");
+		EmitJsonMethods(sb, settingsJson, mappingsJson, indexJson, reg, indent + "\t");
 
 		// Fields, FieldMapping, IgnoredProperties, GetPropertyMap as instance-accessible
 		SharedEmitterHelpers.EmitFieldsClass(sb, typeModel, indent + "\t");
@@ -348,15 +348,36 @@ internal static class ContextEmitter
 			sb.AppendLine($"{indent}\tReadAlias = \"{idx.ReadAlias}\",");
 	}
 
-	private static void EmitJsonMethods(StringBuilder sb, string settingsJson, string mappingsJson, string indexJson, string indent)
+	private static void EmitJsonMethods(StringBuilder sb, string settingsJson, string mappingsJson, string indexJson, TypeRegistration reg, string indent)
 	{
 		// Static backing methods — referenced by the Context field initializer
 		sb.AppendLine($"{indent}private static string _GetSettingsJson() =>");
 		SharedEmitterHelpers.EmitRawStringLiteral(sb, settingsJson, indent + "\t");
 		sb.AppendLine();
 
-		sb.AppendLine($"{indent}private static string _GetMappingJson() =>");
-		SharedEmitterHelpers.EmitRawStringLiteral(sb, mappingsJson, indent + "\t");
+		if (reg.ConfigureMappingsReference != null && reg.ConfigureMappingsBuilderType != null)
+		{
+			// Emit base JSON as a static field, then merge overrides from ConfigureMappings at static init
+			sb.AppendLine($"{indent}private static string _GetBaseMappingJson() =>");
+			SharedEmitterHelpers.EmitRawStringLiteral(sb, mappingsJson, indent + "\t");
+			sb.AppendLine();
+
+			sb.AppendLine($"{indent}private static readonly string _mergedMappingJson = _ApplyMappingOverrides();");
+			sb.AppendLine();
+			sb.AppendLine($"{indent}private static string _ApplyMappingOverrides()");
+			sb.AppendLine($"{indent}{{");
+			sb.AppendLine($"{indent}\tvar builder = new {reg.ConfigureMappingsBuilderType}();");
+			sb.AppendLine($"{indent}\tbuilder = {reg.ConfigureMappingsReference}(builder);");
+			sb.AppendLine($"{indent}\treturn builder.Build().MergeIntoMappings(_GetBaseMappingJson());");
+			sb.AppendLine($"{indent}}}");
+			sb.AppendLine();
+			sb.AppendLine($"{indent}private static string _GetMappingJson() => _mergedMappingJson;");
+		}
+		else
+		{
+			sb.AppendLine($"{indent}private static string _GetMappingJson() =>");
+			SharedEmitterHelpers.EmitRawStringLiteral(sb, mappingsJson, indent + "\t");
+		}
 		sb.AppendLine();
 
 		sb.AppendLine($"{indent}private static string _GetIndexJson() =>");
