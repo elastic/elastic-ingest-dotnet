@@ -4,6 +4,7 @@
 
 using System;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using Elastic.Channels;
 using Elastic.Ingest.Elasticsearch.Indices;
@@ -16,22 +17,35 @@ namespace Elastic.Ingest.Elasticsearch.Tests;
 
 public static class TestSetup
 {
-	public static DistributedTransport<ITransportConfiguration> CreateClient(Func<VirtualCluster, VirtualCluster> setup)
-	{
-		var cluster = Virtual.Elasticsearch.Bootstrap(numberOfNodes: 1).Ping(c=>c.SucceedAlways());
-		var virtualSettings = setup(cluster)
+	private static readonly byte[] EmptyTextResponse = Encoding.UTF8.GetBytes("");
+
+	private static readonly Lazy<ITransport> LazySharedTransport = new(() =>
+		Virtual.Elasticsearch
+			.Bootstrap(1)
+			.ClientCalls(r => r.OnPath("_bulk").SucceedAlways()
+				.ReturnResponse(new { items = new[] { new { create = new { status = 201 } } } }))
+			.ClientCalls(r => r.OnPath("_reindex").SucceedAlways()
+				.ReturnResponse(new { task = "n:1" }))
+			.ClientCalls(r => r.OnPath("_tasks").SucceedAlways()
+				.ReturnResponse(new { completed = true }))
+			.ClientCalls(r => r.OnPath("_delete_by_query").SucceedAlways()
+				.ReturnResponse(new { task = "n:1" }))
+			.ClientCalls(r => r.OnPath("_cat").SucceedAlways()
+				.ReturnByteResponse(EmptyTextResponse, "text/plain"))
+			.ClientCalls(r => r.SucceedAlways()
+				.ReturnResponse(new { }))
 			.StaticNodePool()
-			.Settings(s=>s.DisablePing());
+			.Settings(s => s.DisablePing().EnableDebugMode())
+			.RequestHandler
+	);
 
-		//var audit = new Auditor(() => virtualSettings);
-		//audit.VisualizeCalls(cluster.ClientCallRules.Count);
+	public static ITransport SharedTransport => LazySharedTransport.Value;
 
-		var settings = new TransportConfigurationDescriptor(virtualSettings.ConnectionPool, virtualSettings.Connection)
-			.DisablePing()
-			.EnableDebugMode();
-
-		return new DistributedTransport(settings);
-	}
+	public static ITransport CreateClient(Func<VirtualCluster, VirtualCluster> setup) =>
+		setup(Virtual.Elasticsearch.Bootstrap(numberOfNodes: 1).Ping(c => c.SucceedAlways()))
+			.StaticNodePool()
+			.Settings(s => s.DisablePing().EnableDebugMode())
+			.RequestHandler;
 
 	public static ClientCallRule BulkResponse(this ClientCallRule rule, params int[] statusCodes) =>
 		rule.Succeeds(TimesHelper.Once).ReturnResponse(BulkResponseBuilder.CreateResponse(statusCodes));
@@ -44,7 +58,7 @@ public static class TestSetup
 		private int _retries;
 		private int _maxRetriesExceeded;
 
-		public TestSession(DistributedTransport<ITransportConfiguration> transport)
+		public TestSession(ITransport transport)
 		{
 			Transport = transport;
 			BufferOptions = new BufferOptions
@@ -74,7 +88,7 @@ public static class TestSetup
 
 		public IndexChannel<TestDocument> Channel { get; }
 
-		public DistributedTransport<ITransportConfiguration> Transport { get; }
+		public ITransport Transport { get; }
 
 		public IndexChannelOptions<TestDocument> ChannelOptions { get; }
 
@@ -102,7 +116,7 @@ public static class TestSetup
 		}
 	}
 
-	public static TestSession CreateTestSession(DistributedTransport<ITransportConfiguration> transport) => new(transport);
+	public static TestSession CreateTestSession(ITransport transport) => new(transport);
 
 	public static void WriteAndWait(this TestSession session, int events = 1)
 	{
