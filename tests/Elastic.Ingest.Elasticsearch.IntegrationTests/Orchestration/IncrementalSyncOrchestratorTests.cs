@@ -81,8 +81,8 @@ public class IncrementalSyncOrchestratorTests(IngestionCluster cluster)
 			Transport, TestMappingContext.HashableArticlePrimary, TestMappingContext.HashableArticleSecondary
 		);
 
-		var strategy1 = await orch1.StartAsync(BootstrapMethod.Failure);
-		strategy1.Should().Be(IngestSyncStrategy.Multiplex,
+		var context1 = await orch1.StartAsync(BootstrapMethod.Failure);
+		context1.Strategy.Should().Be(IngestSyncStrategy.Multiplex,
 			"first run should Multiplex because the secondary index does not exist yet");
 
 		for (var i = 0; i < 10; i++)
@@ -109,8 +109,8 @@ public class IncrementalSyncOrchestratorTests(IngestionCluster cluster)
 			Transport, TestMappingContext.HashableArticlePrimary, TestMappingContext.HashableArticleSecondary
 		);
 
-		var strategy2 = await orch2.StartAsync(BootstrapMethod.Failure);
-		strategy2.Should().Be(IngestSyncStrategy.Reindex,
+		var context2 = await orch2.StartAsync(BootstrapMethod.Failure);
+		context2.Strategy.Should().Be(IngestSyncStrategy.Reindex,
 			"second run should Reindex because the secondary index already exists");
 
 		for (var i = 0; i < 7; i++)

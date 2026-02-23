@@ -144,8 +144,8 @@ public class IncrementalSyncOrchestratorTests
 		var transport = CreateTransportWithTaskResponse();
 		using var orchestrator = CreateOrchestrator(transport);
 
-		var strategy = await orchestrator.StartAsync(BootstrapMethod.Silent);
-		strategy.Should().Be(IngestSyncStrategy.Reindex);
+		var context = await orchestrator.StartAsync(BootstrapMethod.Silent);
+		context.Strategy.Should().Be(IngestSyncStrategy.Reindex);
 		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Reindex);
 	}
 
@@ -244,21 +244,27 @@ public class IncrementalSyncOrchestratorTests
 	public async Task OnPostCompleteIsCalledDuringComplete()
 	{
 		var transport = CreateTransportWithTaskResponse();
-		using var orchestrator = CreateSimpleOrchestrator(transport);
+		var primary = CreateSimpleTypeContext("primary-docs");
+		var secondary = CreateSimpleTypeContext("secondary-docs");
 
 		OrchestratorContext<TestDocument>? capturedContext = null;
-		orchestrator.OnPostComplete = (ctx, ct) =>
+		ITransport? capturedTransport = null;
+		using var orchestrator = new IncrementalSyncOrchestrator<TestDocument>(transport, primary, secondary)
 		{
-			capturedContext = ctx;
-			return Task.CompletedTask;
+			OnPostComplete = (ctx, t, ct) =>
+			{
+				capturedContext = ctx;
+				capturedTransport = t;
+				return Task.CompletedTask;
+			}
 		};
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
 		await orchestrator.CompleteAsync(drainMaxWait: TimeSpan.FromSeconds(5));
 
 		capturedContext.Should().NotBeNull();
-		capturedContext!.Transport.Should().BeSameAs(transport);
-		capturedContext.Strategy.Should().Be(orchestrator.Strategy);
+		capturedTransport.Should().BeSameAs(transport);
+		capturedContext!.Strategy.Should().Be(orchestrator.Strategy);
 		capturedContext.BatchTimestamp.Should().Be(orchestrator.BatchTimestamp);
 	}
 
@@ -298,12 +304,13 @@ public class IncrementalSyncOrchestratorTests
 	public async Task ConfigurePrimaryIsInvoked()
 	{
 		var transport = CreateTransportWithTaskResponse();
-		using var orchestrator = CreateOrchestrator(transport);
+		var primary = CreateTypeContext("primary-docs", "primary-search", "primary-docs-*");
+		var secondary = CreateTypeContext("secondary-docs", "secondary-search", "secondary-docs-*");
 
 		var invoked = false;
-		orchestrator.ConfigurePrimary = opts =>
+		using var orchestrator = new IncrementalSyncOrchestrator<TestDocument>(transport, primary, secondary)
 		{
-			invoked = true;
+			ConfigurePrimary = _ => invoked = true
 		};
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
@@ -314,12 +321,13 @@ public class IncrementalSyncOrchestratorTests
 	public async Task ConfigureSecondaryIsInvoked()
 	{
 		var transport = CreateTransportWithTaskResponse();
-		using var orchestrator = CreateOrchestrator(transport);
+		var primary = CreateTypeContext("primary-docs", "primary-search", "primary-docs-*");
+		var secondary = CreateTypeContext("secondary-docs", "secondary-search", "secondary-docs-*");
 
 		var invoked = false;
-		orchestrator.ConfigureSecondary = opts =>
+		using var orchestrator = new IncrementalSyncOrchestrator<TestDocument>(transport, primary, secondary)
 		{
-			invoked = true;
+			ConfigureSecondary = _ => invoked = true
 		};
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);

@@ -18,30 +18,28 @@ using Elastic.Transport;
 namespace Elastic.Ingest.Elasticsearch;
 
 /// <summary>
-/// Context provided to <see cref="IncrementalSyncOrchestrator{TEvent}.OnPostComplete"/> hooks.
+/// Context returned by <see cref="IncrementalSyncOrchestrator{TEvent}.StartAsync"/> and passed
+/// to <see cref="IncrementalSyncOrchestrator{TEvent}.OnPostComplete"/> hooks.
 /// </summary>
 public class OrchestratorContext<TEvent> where TEvent : class
 {
-	/// <summary> The transport used by the orchestrator. </summary>
-	public required ITransport Transport { get; init; }
-
 	/// <summary> The resolved ingest strategy (Reindex or Multiplex). </summary>
-	public required IngestSyncStrategy Strategy { get; init; }
+	public IngestSyncStrategy Strategy { get; init; }
 
 	/// <summary> The batch timestamp used for range queries during completion. </summary>
-	public required DateTimeOffset BatchTimestamp { get; init; }
+	public DateTimeOffset BatchTimestamp { get; init; }
 
 	/// <summary> The resolved primary write alias (or data stream name). </summary>
-	public required string PrimaryWriteAlias { get; init; }
+	public string PrimaryWriteAlias { get; init; } = null!;
 
 	/// <summary> The resolved secondary write alias (or data stream name). </summary>
-	public required string? SecondaryWriteAlias { get; init; }
+	public string? SecondaryWriteAlias { get; init; }
 
 	/// <summary> The resolved primary read target (ReadAlias or fallback to write alias). </summary>
-	public required string PrimaryReadAlias { get; init; }
+	public string PrimaryReadAlias { get; init; } = null!;
 
 	/// <summary> The resolved secondary read target (ReadAlias or fallback to write alias). </summary>
-	public required string? SecondaryReadAlias { get; init; }
+	public string? SecondaryReadAlias { get; init; }
 }
 
 /// <summary>
@@ -72,6 +70,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	private string? _secondaryIndexName;
 	private string? _secondaryReindexTarget;
 	private DateTimeOffset _reindexCutoff;
+	private OrchestratorContext<TEvent>? _context;
 
 	/// <summary>
 	/// Creates the orchestrator from two <see cref="IStaticMappingResolver{T}"/> instances
@@ -131,7 +130,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	public Action<IngestChannelOptions<TEvent>>? ConfigureSecondary { get; init; }
 
 	/// <summary> Optional hook that runs after <see cref="CompleteAsync"/> finishes all operations. </summary>
-	public Func<OrchestratorContext<TEvent>, CancellationToken, Task>? OnPostComplete { get; init; }
+	public Func<OrchestratorContext<TEvent>, ITransport, CancellationToken, Task>? OnPostComplete { get; init; }
 
 	/// <summary> The resolved ingest strategy after <see cref="StartAsync"/> completes. </summary>
 	public IngestSyncStrategy Strategy => _strategy;
@@ -151,11 +150,12 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 
 	/// <summary>
 	/// Creates channels, runs bootstrap, and determines the ingest strategy.
+	/// Returns the orchestrator context with resolved aliases and strategy.
 	/// Multiplex (write to both) is only used when creating new backing indices —
 	/// if the secondary already exists, Reindex is always used because the secondary
 	/// may contain semantic_text fields that reject scripted bulk upserts.
 	/// </summary>
-	public async Task<IngestSyncStrategy> StartAsync(BootstrapMethod method, CancellationToken ctx = default)
+	public async Task<OrchestratorContext<TEvent>> StartAsync(BootstrapMethod method, CancellationToken ctx = default)
 	{
 		// 1. Run pre-bootstrap tasks
 		foreach (var task in _preBootstrapTasks)
@@ -226,7 +226,8 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			_reindexCutoff = await QueryMaxBatchDateAsync(_secondaryWriteAlias!, ctx).ConfigureAwait(false);
 		}
 
-		return _strategy;
+		_context = BuildContext();
+		return _context;
 	}
 
 	/// <inheritdoc />
@@ -340,20 +341,8 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		}
 
 		// 8. Post-complete hook
-		if (OnPostComplete != null)
-		{
-			var context = new OrchestratorContext<TEvent>
-			{
-				Transport = _transport,
-				Strategy = _strategy,
-				BatchTimestamp = _batchTimestamp,
-				PrimaryWriteAlias = _primaryWriteAlias!,
-				SecondaryWriteAlias = _secondaryWriteAlias,
-				PrimaryReadAlias = TypeContextResolver.ResolveReadTarget(_primaryTypeContext),
-				SecondaryReadAlias = TypeContextResolver.ResolveReadTarget(_secondaryTypeContext),
-			};
-			await OnPostComplete(context, ctx).ConfigureAwait(false);
-		}
+		if (OnPostComplete != null && _context != null)
+			await OnPostComplete(_context, _transport, ctx).ConfigureAwait(false);
 
 		return true;
 	}
@@ -405,6 +394,17 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		var secondary = await _secondaryChannel!.WaitToWriteAsync(item, ctx).ConfigureAwait(false);
 		return primary && secondary;
 	}
+
+	private OrchestratorContext<TEvent> BuildContext() =>
+		new()
+		{
+			Strategy = _strategy,
+			BatchTimestamp = _batchTimestamp,
+			PrimaryWriteAlias = _primaryWriteAlias!,
+			SecondaryWriteAlias = _secondaryWriteAlias,
+			PrimaryReadAlias = TypeContextResolver.ResolveReadTarget(_primaryTypeContext),
+			SecondaryReadAlias = TypeContextResolver.ResolveReadTarget(_secondaryTypeContext),
+		};
 
 	private string ResolvePrimaryWriteAlias() =>
 		TypeContextResolver.ResolveWriteAlias(_primaryTypeContext);
