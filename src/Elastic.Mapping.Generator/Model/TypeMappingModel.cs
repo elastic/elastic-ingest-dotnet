@@ -72,7 +72,7 @@ internal sealed record EntityConfigModel(
 );
 
 /// <summary>
-/// Tracks which properties have [Id], [ContentHash], [Timestamp] attributes.
+/// Tracks which properties have [Id], [ContentHash], [Timestamp], [BatchIndexDate], [LastUpdated] attributes.
 /// </summary>
 internal sealed record IngestPropertyModel(
 	string? IdPropertyName,
@@ -81,5 +81,9 @@ internal sealed record IngestPropertyModel(
 	string? ContentHashPropertyType,
 	string? ContentHashFieldName,
 	string? TimestampPropertyName,
-	string? TimestampPropertyType
+	string? TimestampPropertyType,
+	string? BatchIndexDatePropertyName,
+	string? BatchIndexDateFieldName,
+	string? LastUpdatedPropertyName,
+	string? LastUpdatedFieldName
 );

@@ -215,10 +215,12 @@ public partial class HashableArticle
 	[JsonPropertyName("hash")]
 	public string Hash { get; set; } = string.Empty;
 
+	[BatchIndexDate]
 	[Date]
 	[JsonPropertyName("index_batch_date")]
 	public DateTimeOffset IndexBatchDate { get; set; }
 
+	[LastUpdated]
 	[Date]
 	[JsonPropertyName("last_updated")]
 	public DateTimeOffset LastUpdated { get; set; }

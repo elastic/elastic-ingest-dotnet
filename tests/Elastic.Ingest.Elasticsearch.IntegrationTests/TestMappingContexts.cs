@@ -69,6 +69,26 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 	Name = "hashable-articles",
 	Configuration = typeof(HashableArticleConfig))]
 
+// ── Orchestrator primary/secondary pair for HashableArticle ─────────────
+[Entity<HashableArticle>(
+	Target = EntityTarget.Index,
+	Name = "orch-primary",
+	Variant = "Primary",
+	WriteAlias = "orch-primary",
+	ReadAlias = "orch-primary-search",
+	SearchPattern = "orch-primary-*",
+	DatePattern = "yyyy.MM.dd.HHmmss",
+	Configuration = typeof(HashableArticleConfig))]
+[Entity<HashableArticle>(
+	Target = EntityTarget.Index,
+	Name = "orch-secondary",
+	Variant = "Secondary",
+	WriteAlias = "orch-secondary",
+	ReadAlias = "orch-secondary-search",
+	SearchPattern = "orch-secondary-*",
+	DatePattern = "yyyy.MM.dd.HHmmss",
+	Configuration = typeof(HashableArticleConfig))]
+
 // ── Semantic search: semantic-articles ──────────────────────────────────
 [Entity<SemanticArticle>(
 	Target = EntityTarget.Index,
