@@ -360,13 +360,14 @@ await bootstrapper.BootstrapAsync(BootstrapMethod.Failure, definition);
 
 [Elastic.Esql](https://github.com/elastic/esql-dotnet) lets you write LINQ and
 get ES|QL query strings with full IntelliSense and compile-time checking. You
-can feed the generated queries straight into Agent Builder tool definitions:
+can feed the generated queries straight into Agent Builder tool definitions.
+
+### Inline queries
 
 ```csharp
 using Elastic.Esql.Core;
 using Elastic.AgentBuilder.Tools;
 
-// Write LINQ, get ES|QL
 var query = new EsqlQueryable<Book>()
     .Where(b => b.PageCount > 200)
     .OrderByDescending(b => b.PageCount)
@@ -374,7 +375,6 @@ var query = new EsqlQueryable<Book>()
     .ToString();
 // "FROM books | WHERE page_count > 200 | SORT page_count DESC | LIMIT 50"
 
-// Use the generated query in an Agent Builder tool
 var tool = await client.CreateToolAsync(new CreateEsqlToolRequest
 {
     Id = "long-books",
@@ -383,32 +383,44 @@ var tool = await client.CreateToolAsync(new CreateEsqlToolRequest
 });
 ```
 
-For parameterized queries, build the static parts with LINQ and add the
-parameter placeholders for values the agent should supply at runtime:
+### Parameterized queries
+
+Elastic.Esql natively captures C# variables and turns them into named
+parameters when you call `ToEsqlString(inlineParameters: false)`. Use this to
+define the query shape in LINQ while exposing parameters the agent supplies at
+runtime:
 
 ```csharp
-var baseQuery = new EsqlQueryable<Order>()
-    .Where(o => o.Status == "shipped")
-    .OrderByDescending(o => o.CreatedAt)
-    .ToString();
-// "FROM orders | WHERE status == \"shipped\" | SORT created_at DESC"
+var minPages = 100;
+var limit = 25;
 
-// Append a LIMIT parameter the agent controls
-var parameterizedQuery = $"{baseQuery} | LIMIT ?limit";
+var queryable = new EsqlQueryable<Book>()
+    .Where(b => b.PageCount > minPages)
+    .OrderByDescending(b => b.PageCount)
+    .Take(limit);
+
+var esql = queryable.ToEsqlString(inlineParameters: false);
+// "FROM books | WHERE page_count > ?minPages | SORT page_count DESC | LIMIT ?limit"
 
 await client.CreateToolAsync(new CreateEsqlToolRequest
 {
-    Id = "shipped-orders",
-    Description = "List recently shipped orders",
+    Id = "top-books",
+    Description = "Find books above a page threshold",
     Configuration = new EsqlToolConfiguration
     {
-        Query = parameterizedQuery,
+        Query = esql,
         Params = new Dictionary<string, EsqlToolParam>
         {
+            ["minPages"] = new()
+            {
+                Type = "integer",
+                Description = "Minimum number of pages",
+                DefaultValue = 100
+            },
             ["limit"] = new()
             {
                 Type = "integer",
-                Description = "Maximum number of orders to return",
+                Description = "Maximum number of results to return",
                 DefaultValue = 25
             }
         }
@@ -417,7 +429,7 @@ await client.CreateToolAsync(new CreateEsqlToolRequest
 ```
 
 This gives you compile-time field name resolution and IntelliSense for the
-query logic, while still allowing the agent to supply dynamic parameters.
+query logic, while the agent supplies dynamic parameter values at runtime.
 
 ## Microsoft.Extensions.AI & MCP
 
