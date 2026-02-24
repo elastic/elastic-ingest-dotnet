@@ -131,8 +131,8 @@ public class ElasticMappingTests
 	[Test]
 	public void ServerMetricsEventConfigureMappingsProducesRuntimeField()
 	{
-		var builder = new ServerMetricsEventMappingsBuilder();
-		var result = ServerMetricsEventConfig.ConfigureMappings(builder);
+		var config = new ServerMetricsEventConfig();
+		var result = config.ConfigureMappings(new Elastic.Mapping.Mappings.MappingsBuilder<ServerMetricsEvent>());
 		result.HasConfiguration.Should().BeTrue(
 			"ConfigureMappings adds an is_slow runtime field");
 	}
@@ -237,8 +237,8 @@ public class ElasticMappingTests
 	[Test]
 	public void ProductCatalogConfigureMappingsProducesRuntimeField()
 	{
-		var builder = new ProductCatalogMappingsBuilder();
-		var result = ProductCatalogConfig.ConfigureMappings(builder);
+		var config = new ProductCatalogConfig();
+		var result = config.ConfigureMappings(new Elastic.Mapping.Mappings.MappingsBuilder<ProductCatalog>());
 		result.HasConfiguration.Should().BeTrue(
 			"ConfigureMappings adds a price_tier runtime field");
 	}
