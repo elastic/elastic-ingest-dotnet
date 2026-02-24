@@ -137,7 +137,7 @@ public class Tag
 }
 
 // ============================================================================
-// EXTENDED MAPPING CONTEXT: tests Entity attribute options not covered above
+// EXTENDED MAPPING CONTEXT: tests attribute options not covered above
 // ============================================================================
 
 [ElasticsearchMappingContext]
@@ -151,6 +151,47 @@ public class Tag
 [Index<GeoDocument>(Name = "geo-docs")]
 [Index<SimpleDocument>(Name = "simple-semantic", Variant = "Semantic")]
 public static partial class ExtendedTestMappingContext;
+
+// ============================================================================
+// TEMPLATED MAPPING CONTEXT: tests NameTemplate + CreateContext generation
+// ============================================================================
+
+[ElasticsearchMappingContext]
+[Index<KnowledgeArticle>(
+	NameTemplate = "docs-{searchType}-{env}",
+	DatePattern = "yyyy.MM.dd.HHmmss"
+)]
+[Index<KnowledgeArticle>(
+	NameTemplate = "articles-{team}-{component}",
+	Variant = "Multi"
+)]
+[Index<LocationRecord>(
+	NameTemplate = "geo-{namespace}"
+)]
+public static partial class TemplatedMappingContext;
+
+/// <summary>Test model for templated index with custom + well-known placeholders.</summary>
+public class KnowledgeArticle
+{
+	[Id]
+	public string ArticleId { get; set; } = string.Empty;
+
+	[Timestamp]
+	public DateTimeOffset PublishedAt { get; set; }
+
+	[Text]
+	public string Title { get; set; } = string.Empty;
+}
+
+/// <summary>Test model for templated index with only a well-known namespace placeholder.</summary>
+public class LocationRecord
+{
+	[Id]
+	public string RecordId { get; set; } = string.Empty;
+
+	public double Latitude { get; set; }
+	public double Longitude { get; set; }
+}
 
 /// <summary>
 /// Test model for rolling index with date pattern, refresh interval, and dynamic=false.

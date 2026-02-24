@@ -116,8 +116,13 @@ internal static class ContextEmitter
 		var mappingsHash = SharedEmitterHelpers.ComputeHash(mappingsJson);
 		var combinedHash = SharedEmitterHelpers.ComputeHash(indexJson);
 
+		var templated = IsTemplated(reg);
+
 		sb.AppendLine($"{indent}/// <summary>Generated Elasticsearch resolver for {reg.ResolverName}.</summary>");
-		sb.AppendLine($"{indent}public sealed class {reg.ResolverName}Resolver : global::Elastic.Mapping.IStaticMappingResolver<global::{typeFqn}>");
+		if (templated)
+			sb.AppendLine($"{indent}public sealed class {reg.ResolverName}Resolver");
+		else
+			sb.AppendLine($"{indent}public sealed class {reg.ResolverName}Resolver : global::Elastic.Mapping.IStaticMappingResolver<global::{typeFqn}>");
 		sb.AppendLine($"{indent}{{");
 
 		// Hashes as instance properties backed by constants
@@ -125,8 +130,6 @@ internal static class ContextEmitter
 		sb.AppendLine($"{indent}\tprivate const string _settingsHash = \"{settingsHash}\";");
 		sb.AppendLine($"{indent}\tprivate const string _mappingsHash = \"{mappingsHash}\";");
 		sb.AppendLine();
-
-		var templated = IsTemplated(reg);
 		var contextFieldName = templated ? "_baseContext" : "Context";
 		var contextVisibility = templated ? "private" : "public";
 
