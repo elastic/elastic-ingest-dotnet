@@ -36,7 +36,7 @@ public static class IngestStrategies
 		return new IngestStrategy<TEvent>(tc,
 			bootstrap ?? BootstrapStrategies.DataStream(),
 			new DataStreamIngestStrategy<TEvent>(
-				ResolveDataStreamName(tc),
+				tc.ResolveDataStreamName(),
 				DefaultBulkPathAndQuery),
 			new AlwaysCreateProvisioning(),
 			new NoAliasStrategy());
@@ -64,13 +64,8 @@ public static class IngestStrategies
 	{
 		bootstrap ??= BootstrapStrategies.Index();
 
-		var writeTarget = tc.IndexStrategy?.WriteTarget ?? typeof(TEvent).Name.ToLowerInvariant();
 		var batchDate = tc.IndexPatternUseBatchDate ? batchTimestamp ?? DateTimeOffset.UtcNow : (DateTimeOffset?)null;
-		var indexFormat = tc.IndexStrategy?.DatePattern != null && batchDate != null
-			? $"{writeTarget}-{batchDate.Value.ToString(tc.IndexStrategy.DatePattern, System.Globalization.CultureInfo.InvariantCulture)}"
-			: tc.IndexStrategy?.DatePattern != null
-			? $"{writeTarget}-{{0:{tc.IndexStrategy.DatePattern}}}"
-			: writeTarget;
+		var indexFormat = tc.ResolveIndexFormat(batchDate);
 
 		var documentIngestStrategy = new TypeContextIndexIngestStrategy<TEvent>(tc, indexFormat, DefaultBulkPathAndQuery);
 		IIndexProvisioningStrategy provisionStrategy = tc.GetContentHash != null ? new HashBasedReuseProvisioning() : new AlwaysCreateProvisioning();
@@ -92,81 +87,11 @@ public static class IngestStrategies
 			new NoAliasStrategy());
 	}
 
-	/// <summary>
-	/// Resolves the effective data stream name from a <see cref="ElasticsearchTypeContext"/>.
-	/// When <c>DataStreamName</c> is null (namespace omitted on the attribute), falls back to
-	/// <c>{Type}-{Dataset}-{ResolveDefaultNamespace()}</c> using environment variables.
-	/// </summary>
-	internal static string ResolveDataStreamName(ElasticsearchTypeContext tc)
-	{
-		if (tc.IndexStrategy?.DataStreamName != null)
-			return tc.IndexStrategy.DataStreamName;
-
-		if (tc.IndexStrategy?.Type != null && tc.IndexStrategy?.Dataset != null)
-		{
-			var ns = tc.IndexStrategy.Namespace
-				?? ElasticsearchTypeContext.ResolveDefaultNamespace();
-			return $"{tc.IndexStrategy.Type}-{tc.IndexStrategy.Dataset}-{ns}";
-		}
-
-		throw new InvalidOperationException(
-			"DataStream targets require either DataStreamName or Type+Dataset on IndexStrategy.");
-	}
-
-	/// <summary>
-	/// Resolves the template name from a <see cref="ElasticsearchTypeContext"/>.
-	/// </summary>
-	internal static string ResolveTemplateName(ElasticsearchTypeContext? tc)
-	{
-		if (tc == null)
-			throw new InvalidOperationException(
-				"TemplateName must be set explicitly when ElasticsearchTypeContext is not provided.");
-
-		return tc.EntityTarget switch
-		{
-			EntityTarget.DataStream when tc.IndexStrategy?.Type != null && tc.IndexStrategy?.Dataset != null =>
-				$"{tc.IndexStrategy.Type}-{tc.IndexStrategy.Dataset}",
-			EntityTarget.Index when tc.IndexStrategy?.WriteTarget != null =>
-				$"{tc.IndexStrategy.WriteTarget}-template",
-			_ => tc.MappedType?.Name.ToLowerInvariant() + "-template"
-				?? throw new InvalidOperationException("Cannot resolve template name from TypeContext.")
-		};
-	}
-
-	/// <summary>
-	/// Resolves the template wildcard from a <see cref="ElasticsearchTypeContext"/>.
-	/// </summary>
-	internal static string ResolveTemplateWildcard(ElasticsearchTypeContext? tc)
-	{
-		if (tc == null)
-			throw new InvalidOperationException(
-				"TemplateWildcard must be set explicitly when ElasticsearchTypeContext is not provided.");
-
-		return tc.EntityTarget switch
-		{
-			EntityTarget.DataStream when tc.IndexStrategy?.Type != null && tc.IndexStrategy?.Dataset != null =>
-				$"{tc.IndexStrategy.Type}-{tc.IndexStrategy.Dataset}-*",
-			// Date-rolling indices produce names like "prefix-2024.01.01" → wildcard matches all
-			EntityTarget.Index when tc.IndexStrategy is { WriteTarget: { } wt, DatePattern: not null } =>
-				$"{wt}-*",
-			// Fixed-name index: use trailing wildcard so the pattern matches the exact index name
-			// (idx-products*  matches  idx-products) while remaining a valid wildcard expression
-			EntityTarget.Index when tc.IndexStrategy?.WriteTarget != null =>
-				$"{tc.IndexStrategy.WriteTarget}*",
-			_ => tc.MappedType?.Name.ToLowerInvariant() + "-*"
-				?? throw new InvalidOperationException("Cannot resolve template wildcard from TypeContext.")
-		};
-	}
 
 	internal static IAliasStrategy ResolveAliasStrategy(ElasticsearchTypeContext? tc)
 	{
 		if (tc?.SearchStrategy?.ReadAlias != null && tc.IndexStrategy?.WriteTarget != null)
-		{
-			var indexFormat = tc.IndexStrategy.DatePattern != null
-				? $"{tc.IndexStrategy.WriteTarget}-{{0}}"
-				: tc.IndexStrategy.WriteTarget;
-			return new LatestAndSearchAliasStrategy(indexFormat);
-		}
+			return new LatestAndSearchAliasStrategy(tc.ResolveAliasFormat());
 
 		return new NoAliasStrategy();
 	}

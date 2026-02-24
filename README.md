@@ -30,7 +30,7 @@ public class Product
 
 // 2. Declare a mapping context
 [ElasticsearchMappingContext]
-[Entity<Product>]
+[Index<Product>(Name = "products")]
 public static partial class MyContext;
 
 // 3. Create a channel and write

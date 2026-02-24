@@ -12,11 +12,10 @@ LogsDB mode optimizes data streams for log storage with synthetic `_source` and 
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<LogEntry>(
-    Target = EntityTarget.DataStream,
-    DataStreamType = "logs",
-    DataStreamDataset = "myapp",
-    DataStreamNamespace = "production",
+[DataStream<LogEntry>(
+    Type = "logs",
+    Dataset = "myapp",
+    Namespace = "production",
     DataStreamMode = DataStreamMode.LogsDb
 )]
 public static partial class LogsContext;
@@ -32,9 +31,7 @@ Wired streams are serverless managed ingestion endpoints. Unlike data streams, *
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<LogEntry>(
-    Target = EntityTarget.WiredStream
-)]
+[WiredStream<LogEntry>(Type = "logs", Dataset = "myapp")]
 public static partial class WiredContext;
 ```
 

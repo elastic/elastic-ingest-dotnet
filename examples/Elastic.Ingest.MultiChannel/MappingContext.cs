@@ -7,21 +7,17 @@ using Elastic.Mapping;
 namespace Elastic.Ingest.MultiChannel;
 
 [ElasticsearchMappingContext]
-[Entity<KnowledgeArticle>(
-	Target = EntityTarget.Index,
+[Index<KnowledgeArticle>(
 	Name = "knowledge-lexical",
 	WriteAlias = "knowledge-lexical",
 	ReadAlias = "knowledge-lexical-search",
-	SearchPattern = "knowledge-lexical-*",
 	DatePattern = "yyyy.MM.dd.HHmmss"
 )]
-[Entity<KnowledgeArticle>(
-	Target = EntityTarget.Index,
+[Index<KnowledgeArticle>(
 	Name = "knowledge-semantic",
 	Variant = "Semantic",
 	WriteAlias = "knowledge-semantic",
 	ReadAlias = "knowledge-semantic-search",
-	SearchPattern = "knowledge-semantic-*",
 	DatePattern = "yyyy.MM.dd.HHmmss"
 )]
 public static partial class ExampleMappingContext;

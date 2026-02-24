@@ -42,11 +42,10 @@ Dimension fields identify what the metric is about (host, service, metric name).
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<MetricEvent>(
-    Target = EntityTarget.DataStream,
-    DataStreamType = "metrics",
-    DataStreamDataset = "myapp",
-    DataStreamNamespace = "production",
+[DataStream<MetricEvent>(
+    Type = "metrics",
+    Dataset = "myapp",
+    Namespace = "production",
     DataStreamMode = DataStreamMode.Tsdb
 )]
 public static partial class MetricsContext;

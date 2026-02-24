@@ -50,7 +50,7 @@ public class IncrementalSyncOrchestratorTests(IngestionCluster cluster)
 		r.Context.IndexStrategy!.WriteTarget!;
 
 	private static string WriteAlias(IStaticMappingResolver<HashableArticle> r) =>
-		TypeContextResolver.ResolveWriteAlias(r.Context);
+		r.Context.ResolveWriteAlias();
 
 	private static readonly string PrimaryAlias = WriteAlias(TestMappingContext.HashableArticlePrimary);
 	private static readonly string SecondaryAlias = WriteAlias(TestMappingContext.HashableArticleSecondary);

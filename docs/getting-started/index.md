@@ -46,13 +46,15 @@ The mapping context is a source-generated class that tells the channel what to c
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<Product>]
+[Index<Product>(Name = "products")]
 public static partial class MyContext;
 ```
 
-`[Entity<Product>]` with no parameters targets an index named `product` (the type name, lowercased). The source generator produces `MyContext.Product.Context` -- an `ElasticsearchTypeContext` containing mappings JSON, settings, and accessor delegates.
+`[Index<Product>(Name = "products")]` targets an index named `products`. The source generator produces `MyContext.Product.Context` -- an `ElasticsearchTypeContext` containing mappings JSON, settings, and accessor delegates.
 
-See [mapping context](mapping-context.md) for the full `[Entity<>]` parameter reference and how each option drives strategy selection.
+For data streams, use `[DataStream<T>]`. For serverless wired streams, use `[WiredStream<T>]`. For runtime-parameterized index names, use `NameTemplate` -- see [templated index names](templated-index-names.md).
+
+See [mapping context](mapping-context.md) for the full attribute reference and how each option drives strategy selection.
 
 ## Create and use a channel
 
@@ -77,17 +79,17 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), ctx);
 
 ## What the channel inferred
 
-From `[Entity<Product>]` and the document attributes, the channel auto-resolved:
+From `[Index<Product>]` and the document attributes, the channel auto-resolved:
 
 | Behavior | Resolved to | Why |
 |----------|------------|-----|
-| Entity target | `EntityTarget.Index` | Default when no `Target` specified |
+| Entity target | `EntityTarget.Index` | `[Index<T>]` attribute used |
 | Ingest | `TypeContextIndexIngestStrategy` | `[Id]` present: uses `index` operations (upserts) |
 | Bootstrap | `ComponentTemplateStep` + `IndexTemplateStep` | Index target needs component and index templates |
 | Provisioning | `AlwaysCreateProvisioning` | No `[ContentHash]` on the document |
 | Alias | `NoAliasStrategy` | No `WriteAlias`/`ReadAlias` configured |
 
-Different `[Entity<>]` parameters resolve to different strategies. See [mapping context](mapping-context.md) for the full resolution table, or [index management](../index-management/index.md) for more control over indices, data streams, and lifecycle.
+Different attribute parameters resolve to different strategies. See [mapping context](mapping-context.md) for the full resolution table, or [index management](../index-management/index.md) for more control over indices, data streams, and lifecycle.
 
 ## What happens at runtime
 
@@ -97,6 +99,7 @@ Different `[Entity<>]` parameters resolve to different strategies. See [mapping 
 
 ## Next steps
 
-- [Mapping context](mapping-context.md): full `[Entity<>]` reference and strategy resolution
+- [Mapping context](mapping-context.md): full attribute reference and strategy resolution
+- [Templated index names](templated-index-names.md): runtime-parameterized index names
 - [Channels](../channels/index.md): buffer tuning, callbacks, and channel lifecycle
 - [Use cases](../use-cases/index.md): end-to-end guides for every ingestion pattern

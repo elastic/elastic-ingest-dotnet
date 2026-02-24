@@ -30,7 +30,7 @@ public class Product
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<Product>]
+[Index<Product>(Name = "products")]
 public static partial class MyContext;
 ```
 
@@ -48,7 +48,7 @@ foreach (var product in products)
 await channel.WaitForDrainAsync(TimeSpan.FromSeconds(10), ctx);
 ```
 
-From `[Entity<Product>]` the channel infers: target an index named `product`, create component and index templates, use `index` bulk operations, and create a new index on each bootstrap.
+From `[Index<Product>]` the channel infers: target an index named `products`, create component and index templates, use `index` bulk operations, and create a new index on each bootstrap.
 
 ## Strategies
 

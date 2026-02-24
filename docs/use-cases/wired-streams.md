@@ -36,7 +36,7 @@ public class LogEntry
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<LogEntry>(Target = EntityTarget.WiredStream)]
+[WiredStream<LogEntry>(Type = "logs", Dataset = "myapp")]
 public static partial class WiredContext;
 ```
 

@@ -60,18 +60,16 @@ Key attributes:
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<Product>(
-    Target = EntityTarget.Index,
+[Index<Product>(
     Name = "products",
     WriteAlias = "products",
     ReadAlias = "products-search",
-    SearchPattern = "products-*",
     DatePattern = "yyyy.MM.dd.HHmmss"
 )]
 public static partial class CatalogContext;
 ```
 
-The `DatePattern` creates time-stamped index names (for example, `products-2026.02.15.120000`). The `WriteAlias` and `ReadAlias` enable zero-downtime alias swapping.
+The `DatePattern` creates time-stamped index names (for example, `products-2026.02.15.120000`) and auto-derives a search pattern (`products-*`). The `WriteAlias` and `ReadAlias` enable zero-downtime alias swapping.
 
 ## Channel setup
 
