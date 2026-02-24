@@ -11,22 +11,19 @@ namespace Elastic.Mapping.Tests;
 // ============================================================================
 
 [ElasticsearchMappingContext]
-[Entity<LogEntry>(
-	Target = EntityTarget.Index,
+[Index<LogEntry>(
 	WriteAlias = "logs-write",
 	ReadAlias = "logs-read",
-	SearchPattern = "logs-*",
 	Shards = 3,
 	Replicas = 2
 )]
-[Entity<NginxAccessLog>(
-	Target = EntityTarget.DataStream,
+[DataStream<NginxAccessLog>(
 	Type = "logs",
 	Dataset = "nginx.access",
 	Namespace = "production"
 )]
-[Entity<SimpleDocument>(Target = EntityTarget.Index, Name = "simple-docs")]
-[Entity<AdvancedDocument>(Target = EntityTarget.Index, Name = "advanced-docs")]
+[Index<SimpleDocument>(Name = "simple-docs")]
+[Index<AdvancedDocument>(Name = "advanced-docs")]
 public static partial class TestMappingContext
 {
 	/// <summary>Configures LogEntry-specific analysis settings (context-level).</summary>
@@ -144,17 +141,15 @@ public class Tag
 // ============================================================================
 
 [ElasticsearchMappingContext]
-[Entity<RollingIndex>(
-	Target = EntityTarget.Index,
+[Index<RollingIndex>(
 	Name = "rolling",
 	WriteAlias = "rolling-write",
-	SearchPattern = "rolling-*",
 	DatePattern = "yyyy.MM",
 	RefreshInterval = "5s",
 	Dynamic = false
 )]
-[Entity<GeoDocument>(Target = EntityTarget.Index, Name = "geo-docs")]
-[Entity<SimpleDocument>(Target = EntityTarget.Index, Name = "simple-semantic", Variant = "Semantic")]
+[Index<GeoDocument>(Name = "geo-docs")]
+[Index<SimpleDocument>(Name = "simple-semantic", Variant = "Semantic")]
 public static partial class ExtendedTestMappingContext;
 
 /// <summary>
@@ -205,7 +200,7 @@ public class GeoDocument
 public partial class TestJsonContext : JsonSerializerContext;
 
 [ElasticsearchMappingContext(JsonContext = typeof(TestJsonContext))]
-[Entity<SnakeCaseDocument>(Target = EntityTarget.Index, Name = "snake-docs")]
+[Index<SnakeCaseDocument>(Name = "snake-docs")]
 public static partial class StjTestMappingContext;
 
 /// <summary>

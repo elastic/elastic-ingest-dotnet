@@ -32,8 +32,8 @@ public class IngestStrategy<TEvent> : IIngestStrategy<TEvent>
 		AliasStrategy = alias ?? throw new ArgumentNullException(nameof(alias));
 		Rollover = rollover;
 
-		TemplateName = IngestStrategies.ResolveTemplateName(typeContext);
-		TemplateWildcard = IngestStrategies.ResolveTemplateWildcard(typeContext);
+		TemplateName = typeContext.ResolveTemplateName();
+		TemplateWildcard = typeContext.ResolveSearchPattern();
 		GetMappingsJson = typeContext.GetMappingsJson;
 		GetMappingSettings = BuildMergedSettings(typeContext);
 		DataStreamType = typeContext.IndexStrategy?.Type;

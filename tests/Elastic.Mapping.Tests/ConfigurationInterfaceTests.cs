@@ -57,19 +57,16 @@ public class ConfigurationInterfaceTests
 	[Test]
 	public void Instance_GetTypeMetadata_ReturnsContextForKnownType()
 	{
-		var metadata = TestMappingContext.Instance.GetTypeMetadata(typeof(LogEntry));
+		TestMappingContext.Instance.All.TryGetValue(typeof(LogEntry), out var metadata).Should().BeTrue();
 
 		metadata.Should().NotBeNull();
 		metadata!.PropertyToField["Timestamp"].Should().Be("@timestamp");
-		metadata.SearchPattern.Should().Be("logs-*");
 	}
 
 	[Test]
 	public void Instance_GetTypeMetadata_ReturnsNullForUnknownType()
 	{
-		var metadata = TestMappingContext.Instance.GetTypeMetadata(typeof(string));
-
-		metadata.Should().BeNull();
+		TestMappingContext.Instance.All.TryGetValue(typeof(string), out _).Should().BeFalse();
 	}
 
 	[Test]
