@@ -21,12 +21,28 @@ public partial class AgentBuilderClient
 	private readonly string _pathPrefix;
 
 	/// <summary>
-	/// Creates a new <see cref="AgentBuilderClient"/>.
+	/// Creates a new <see cref="AgentBuilderClient"/> from an <see cref="AgentTransportConfiguration"/>.
+	/// This is the recommended constructor — it auto-wires the <c>kbn-xsrf</c> header and
+	/// reads the <see cref="AgentTransportConfiguration.Space"/> for path prefixing.
 	/// </summary>
-	/// <param name="transport">
-	/// An <see cref="ITransport"/> configured for Kibana.
-	/// Use <c>KibanaTransport.Create()</c> from <c>Elastic.Transport.AgentBuilder</c>.
-	/// </param>
+	public AgentBuilderClient(AgentTransportConfiguration configuration)
+		: this(new AgentTransport(configuration), configuration.Space)
+	{
+	}
+
+	/// <summary>
+	/// Creates a new <see cref="AgentBuilderClient"/> from a pre-configured <see cref="AgentTransport"/>.
+	/// </summary>
+	public AgentBuilderClient(AgentTransport transport)
+		: this(transport, transport.AgentConfiguration.Space)
+	{
+	}
+
+	/// <summary>
+	/// Creates a new <see cref="AgentBuilderClient"/> from a raw <see cref="ITransport"/>.
+	/// You are responsible for setting the <c>kbn-xsrf</c> header on the transport.
+	/// </summary>
+	/// <param name="transport">An <see cref="ITransport"/> configured for Kibana.</param>
 	/// <param name="space">Optional Kibana space name. When set, all API paths are prefixed with <c>/s/{space}</c>.</param>
 	public AgentBuilderClient(ITransport transport, string? space = null)
 	{

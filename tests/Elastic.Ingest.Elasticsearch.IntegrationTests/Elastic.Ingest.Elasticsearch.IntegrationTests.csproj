@@ -4,7 +4,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <Nullable>enable</Nullable>
-    <UserSecretsId>elastic-ingest-integration-tests</UserSecretsId>
     <!-- CS0108: generated analysis accessor hides base member (Elastic.Mapping generator issue) -->
     <NoWarn>$(NoWarn);CS0108</NoWarn>
   </PropertyGroup>

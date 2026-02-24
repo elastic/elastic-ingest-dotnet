@@ -22,7 +22,8 @@ with full AOT compatibility via `System.Text.Json` source generators.
 
 ## Getting Started
 
-Create a transport that targets your Kibana instance, then create the client.
+`AgentTransportConfiguration` handles all Kibana-specific wiring automatically
+(the `kbn-xsrf` header, Cloud ID → Kibana URL resolution, and space prefixes).
 
 ### From an Elastic Cloud ID
 
@@ -30,14 +31,61 @@ Create a transport that targets your Kibana instance, then create the client.
 using Elastic.Transport;
 using Elastic.AgentBuilder;
 
-var transport = new DistributedTransport(
-    new TransportConfigurationDescriptor("my-cloud-id", new ApiKey("base64key"), CloudService.Kibana)
-        .GlobalHeaders(new NameValueCollection { { "kbn-xsrf", "true" } }));
-
-var client = new AgentBuilderClient(transport);
+var config = new AgentTransportConfiguration("my-cloud-id", new ApiKey("base64key"));
+var client = new AgentBuilderClient(config);
 ```
 
 ### From a direct Kibana URL
+
+```csharp
+var config = new AgentTransportConfiguration(
+    new Uri("https://my-kibana:5601"), new ApiKey("base64key"));
+var client = new AgentBuilderClient(config);
+```
+
+### Basic authentication
+
+```csharp
+var config = new AgentTransportConfiguration(
+    "my-cloud-id", new BasicAuthentication("user", "password"));
+var client = new AgentBuilderClient(config);
+```
+
+### Kibana Spaces
+
+Set the `Space` property to scope all API calls to a specific Kibana space.
+All requests will be prefixed with `/s/{Space}/api/agent_builder/...`:
+
+```csharp
+var config = new AgentTransportConfiguration("my-cloud-id", new ApiKey("base64key"))
+{
+    Space = "my-space"
+};
+var client = new AgentBuilderClient(config);
+```
+
+### Using AgentTransport directly
+
+If you need an `ITransport` instance (for example, to share with
+`Elastic.Extensions.AI` or custom code), create an `AgentTransport`:
+
+```csharp
+var config = new AgentTransportConfiguration("my-cloud-id", new ApiKey("base64key"))
+{
+    Space = "analytics"
+};
+var transport = new AgentTransport(config);
+
+// Pass to the client
+var client = new AgentBuilderClient(transport);
+
+// Or use the transport directly — kbn-xsrf is already wired
+```
+
+### Advanced: raw ITransport
+
+For full control you can pass any `ITransport` directly.
+You are responsible for setting the `kbn-xsrf` header yourself:
 
 ```csharp
 var transport = new DistributedTransport(
@@ -45,16 +93,7 @@ var transport = new DistributedTransport(
         .Authentication(new ApiKey("base64key"))
         .GlobalHeaders(new NameValueCollection { { "kbn-xsrf", "true" } }));
 
-var client = new AgentBuilderClient(transport);
-```
-
-### Kibana Spaces
-
-Pass a space name to scope all API calls:
-
-```csharp
 var client = new AgentBuilderClient(transport, space: "my-space");
-// All requests will be prefixed with /s/my-space/api/agent_builder/...
 ```
 
 ## Creating Tools
@@ -317,36 +356,70 @@ await bootstrapper.BootstrapAsync(BootstrapMethod.Failure, definition);
 // Safe to call on every application startup — unchanged resources are skipped
 ```
 
-## MCP Integration
+## Using with Elastic.Esql — LINQ-generated queries
 
-Connect to the Kibana Agent Builder MCP server. The returned tools implement
-`AIFunction` from `Microsoft.Extensions.AI` so they work with any `IChatClient`.
+[Elastic.Esql](https://github.com/elastic/esql-dotnet) lets you write LINQ and
+get ES|QL query strings with full IntelliSense and compile-time checking. You
+can feed the generated queries straight into Agent Builder tool definitions:
 
 ```csharp
-using Elastic.AgentBuilder.Mcp;
-using ModelContextProtocol.Client;
+using Elastic.Esql.Core;
+using Elastic.AgentBuilder.Tools;
 
-// From a direct Kibana URL
-var mcpClient = await AgentBuilderMcp.CreateClientAsync(
-    new Uri("https://my-kibana:5601"),
-    "base64apikey");
+// Write LINQ, get ES|QL
+var query = new EsqlQueryable<Book>()
+    .Where(b => b.PageCount > 200)
+    .OrderByDescending(b => b.PageCount)
+    .Take(50)
+    .ToString();
+// "FROM books | WHERE page_count > 200 | SORT page_count DESC | LIMIT 50"
 
-// From a Cloud ID
-var mcpClient = await AgentBuilderMcp.CreateClientFromCloudIdAsync(
-    "my-cloud-id", "base64apikey");
-
-// Optionally scope to a space and/or namespace
-var mcpClient = await AgentBuilderMcp.CreateClientAsync(
-    new Uri("https://my-kibana:5601"),
-    "base64apikey",
-    space: "my-space",
-    namespaceFilter: "agent_builder");
-
-// List available tools
-IList<McpClientTool> tools = await mcpClient.ListToolsAsync();
-foreach (var tool in tools)
-    Console.WriteLine($"{tool.Name}: {tool.Description}");
-
-// Use tools with any IChatClient via Microsoft.Extensions.AI
-// chatClient.AsBuilder().UseFunctionInvocation().Build()
+// Use the generated query in an Agent Builder tool
+var tool = await client.CreateToolAsync(new CreateEsqlToolRequest
+{
+    Id = "long-books",
+    Description = "Find books with more than 200 pages",
+    Configuration = new EsqlToolConfiguration { Query = query }
+});
 ```
+
+For parameterized queries, build the static parts with LINQ and add the
+parameter placeholders for values the agent should supply at runtime:
+
+```csharp
+var baseQuery = new EsqlQueryable<Order>()
+    .Where(o => o.Status == "shipped")
+    .OrderByDescending(o => o.CreatedAt)
+    .ToString();
+// "FROM orders | WHERE status == \"shipped\" | SORT created_at DESC"
+
+// Append a LIMIT parameter the agent controls
+var parameterizedQuery = $"{baseQuery} | LIMIT ?limit";
+
+await client.CreateToolAsync(new CreateEsqlToolRequest
+{
+    Id = "shipped-orders",
+    Description = "List recently shipped orders",
+    Configuration = new EsqlToolConfiguration
+    {
+        Query = parameterizedQuery,
+        Params = new Dictionary<string, EsqlToolParam>
+        {
+            ["limit"] = new()
+            {
+                Type = "integer",
+                Description = "Maximum number of orders to return",
+                DefaultValue = 25
+            }
+        }
+    }
+});
+```
+
+This gives you compile-time field name resolution and IntelliSense for the
+query logic, while still allowing the agent to supply dynamic parameters.
+
+## Microsoft.Extensions.AI & MCP
+
+For `IChatClient` integration, MCP tool discovery, and DI extensions see the
+companion package **[Elastic.Extensions.AI](https://www.nuget.org/packages/Elastic.Extensions.AI)**.

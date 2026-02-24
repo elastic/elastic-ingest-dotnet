@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
 
-namespace Elastic.AgentBuilder.Mcp;
+namespace Elastic.Extensions.AI;
 
 /// <summary>
 /// Factory for creating an MCP client connected to the Kibana Agent Builder MCP server.

@@ -3,7 +3,6 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Collections.Specialized;
 using Elastic.Transport;
 using Microsoft.Extensions.Configuration;
 
@@ -15,8 +14,6 @@ namespace Elastic.AgentBuilder.IntegrationTests;
 /// </summary>
 public abstract class AgentBuilderTestBase : IDisposable
 {
-	private static readonly NameValueCollection KibanaHeaders = new() { { "kbn-xsrf", "true" } };
-
 	protected AgentBuilderClient Client { get; }
 	protected string? CloudId { get; }
 
@@ -31,19 +28,20 @@ public abstract class AgentBuilderTestBase : IDisposable
 		CloudId = config["Parameters:CloudId"];
 		var space = config["Parameters:KibanaSpace"];
 
-		ITransport transport;
+		AgentTransportConfiguration transportConfig;
 		if (!string.IsNullOrEmpty(CloudId) && !string.IsNullOrEmpty(apiKey))
 		{
-			var descriptor = new TransportConfigurationDescriptor(CloudId, new ApiKey(apiKey), CloudService.Kibana)
-				.GlobalHeaders(KibanaHeaders);
-			transport = new DistributedTransport(descriptor);
+			transportConfig = new AgentTransportConfiguration(CloudId, new ApiKey(apiKey))
+			{
+				Space = space
+			};
 		}
 		else if (!string.IsNullOrEmpty(kibanaUrl) && !string.IsNullOrEmpty(apiKey))
 		{
-			var descriptor = new TransportConfigurationDescriptor(new SingleNodePool(new Uri(kibanaUrl)))
-				.Authentication(new ApiKey(apiKey))
-				.GlobalHeaders(KibanaHeaders);
-			transport = new DistributedTransport(descriptor);
+			transportConfig = new AgentTransportConfiguration(new Uri(kibanaUrl), new ApiKey(apiKey))
+			{
+				Space = space
+			};
 		}
 		else
 		{
@@ -61,7 +59,7 @@ public abstract class AgentBuilderTestBase : IDisposable
 				"Optional: dotnet user-secrets set \"Parameters:KibanaSpace\" \"<space-name>\"");
 		}
 
-		Client = new AgentBuilderClient(transport, space);
+		Client = new AgentBuilderClient(transportConfig);
 	}
 
 	public virtual void Dispose() => GC.SuppressFinalize(this);

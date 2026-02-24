@@ -4,6 +4,7 @@
 
 using System.Collections.Generic;
 using Elastic.AgentBuilder.Tools;
+using Elastic.Transport;
 using FluentAssertions;
 
 namespace Elastic.AgentBuilder.Tests;
@@ -13,6 +14,8 @@ public class BootstrapHashTests
 	[Test]
 	public void SameDefinition_ProducesSameHash()
 	{
+		var config = new TransportConfiguration();
+
 		var request = CreateSampleRequest();
 		var hash1 = AgentBuilderBootstrapper.ComputeHash(request, AgentBuilderSerializationContext.Default.CreateEsqlToolRequest);
 		var hash2 = AgentBuilderBootstrapper.ComputeHash(request, AgentBuilderSerializationContext.Default.CreateEsqlToolRequest);
