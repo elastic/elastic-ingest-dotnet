@@ -131,8 +131,8 @@ public class ElasticMappingTests
 	[Test]
 	public void ServerMetricsEventConfigureMappingsProducesRuntimeField()
 	{
-		var builder = new ServerMetricsEventMappingsBuilder();
-		var result = ServerMetricsEventConfig.ConfigureMappings(builder);
+		var config = new ServerMetricsEventConfig();
+		var result = config.ConfigureMappings(new Elastic.Mapping.Mappings.MappingsBuilder<ServerMetricsEvent>());
 		result.HasConfiguration.Should().BeTrue(
 			"ConfigureMappings adds an is_slow runtime field");
 	}
@@ -237,8 +237,8 @@ public class ElasticMappingTests
 	[Test]
 	public void ProductCatalogConfigureMappingsProducesRuntimeField()
 	{
-		var builder = new ProductCatalogMappingsBuilder();
-		var result = ProductCatalogConfig.ConfigureMappings(builder);
+		var config = new ProductCatalogConfig();
+		var result = config.ConfigureMappings(new Elastic.Mapping.Mappings.MappingsBuilder<ProductCatalog>());
 		result.HasConfiguration.Should().BeTrue(
 			"ConfigureMappings adds a price_tier runtime field");
 	}
@@ -401,15 +401,13 @@ public class ElasticMappingTests
 	[Test]
 	public void AllContextsAreRegistered()
 	{
-		TestMappingContext.All.Should().HaveCount(8);
-		TestMappingContext.All.Should().Contain(TestMappingContext.ServerMetricsEvent.Context);
-		TestMappingContext.All.Should().Contain(TestMappingContext.ServerMetricsEventV2.Context);
-		TestMappingContext.All.Should().Contain(TestMappingContext.ProductCatalog.Context);
-		TestMappingContext.All.Should().Contain(TestMappingContext.ProductCatalogV2.Context);
-		TestMappingContext.All.Should().Contain(TestMappingContext.ProductCatalogCatalog.Context);
-		TestMappingContext.All.Should().Contain(TestMappingContext.ProductCatalogV2Catalog.Context);
-		TestMappingContext.All.Should().Contain(TestMappingContext.HashableArticle.Context);
-		TestMappingContext.All.Should().Contain(TestMappingContext.SemanticArticle.Context);
+		// All is now keyed by Type — variants of the same type share a single entry
+		TestMappingContext.All.Should().ContainKey(typeof(ServerMetricsEvent));
+		TestMappingContext.All.Should().ContainKey(typeof(ServerMetricsEventV2));
+		TestMappingContext.All.Should().ContainKey(typeof(ProductCatalog));
+		TestMappingContext.All.Should().ContainKey(typeof(ProductCatalogV2));
+		TestMappingContext.All.Should().ContainKey(typeof(HashableArticle));
+		TestMappingContext.All.Should().ContainKey(typeof(SemanticArticle));
 	}
 
 	// --- V2 variants (mapping evolution) ---

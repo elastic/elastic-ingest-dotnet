@@ -19,9 +19,9 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests.ManualAlias;
  * Tests:    End-to-end document ingestion into date-rolling aliased indices
  *
  * Document: ProductCatalog (Elastic.Mapping)
- *   Entity: Index  Name="cat-products"  Variant="Catalog"
- *           WriteAlias="cat-products"  ReadAlias="cat-products-search"
- *           SearchPattern="cat-products-*"  DatePattern="yyyy.MM.dd.HHmmss"
+ *   Index: Name="cat-products"  Variant="Catalog"
+ *          WriteAlias="cat-products"  ReadAlias="cat-products-search"
+ *          DatePattern="yyyy.MM.dd.HHmmss"
  *
  *   ┌───────────────────────────────────────────────────────────────────┐
  *   │  IngestChannel<ProductCatalog>                                    │

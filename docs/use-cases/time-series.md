@@ -43,11 +43,10 @@ For time-series data, you typically don't need `[Id]` (documents are append-only
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<LogEntry>(
-    Target = EntityTarget.DataStream,
-    DataStreamType = "logs",
-    DataStreamDataset = "myapp",
-    DataStreamNamespace = "production"
+[DataStream<LogEntry>(
+    Type = "logs",
+    Dataset = "myapp",
+    Namespace = "production"
 )]
 public static partial class LoggingContext;
 ```

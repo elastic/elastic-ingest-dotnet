@@ -32,10 +32,10 @@ public sealed class ServerReindex
 		if (options.Body == null)
 		{
 			_source = options.Source
-				?? (options.SourceContext != null ? TypeContextResolver.ResolveWriteAlias(options.SourceContext) : null)
+				?? (options.SourceContext != null ? options.SourceContext.ResolveWriteAlias() : null)
 				?? throw new InvalidOperationException("Either Source or SourceContext must be provided on ServerReindexOptions when Body is not set.");
 			_destination = options.Destination
-				?? (options.DestinationContext != null ? TypeContextResolver.ResolveWriteAlias(options.DestinationContext) : null)
+				?? (options.DestinationContext != null ? options.DestinationContext.ResolveWriteAlias() : null)
 				?? throw new InvalidOperationException("Either Destination or DestinationContext must be provided on ServerReindexOptions when Body is not set.");
 		}
 		else

@@ -34,7 +34,7 @@ public class MappingGeneratorTests
 	public void Index_GeneratesSearchStrategy()
 	{
 		var strategy = TestMappingContext.LogEntry.SearchStrategy;
-		strategy.Pattern.Should().Be("logs-*");
+		strategy.Pattern.Should().BeNull("no DatePattern → no auto-derived search pattern");
 		strategy.ReadAlias.Should().Be("logs-read");
 	}
 
@@ -173,17 +173,17 @@ public class MappingGeneratorTests
 	public void Context_AllProperty_ContainsAllRegistrations()
 	{
 		var all = TestMappingContext.All;
+		// 4 registrations but LogEntry, NginxAccessLog, SimpleDocument, AdvancedDocument = 4 unique types
 		all.Should().HaveCount(4);
 	}
 
 	[Test]
-	public void Context_AllProperty_ContainsValidContexts()
+	public void Context_AllProperty_ContainsValidMetadata()
 	{
-		foreach (var ctx in TestMappingContext.All)
+		foreach (var (type, metadata) in TestMappingContext.All)
 		{
-			ctx.Hash.Should().NotBeNullOrEmpty();
-			ctx.GetSettingsJson().Should().NotBeNullOrEmpty();
-			ctx.GetMappingsJson().Should().NotBeNullOrEmpty();
+			type.Should().NotBeNull();
+			metadata.PropertyToField.Should().NotBeEmpty();
 		}
 	}
 
@@ -207,7 +207,7 @@ public class MappingGeneratorTests
 	public void Context_MixedStrategies_AllCompile()
 	{
 		TestMappingContext.All.Should().HaveCount(4);
-		foreach (var ctx in TestMappingContext.All)
-			ctx.Hash.Should().NotBeNullOrEmpty();
+		foreach (var (_, metadata) in TestMappingContext.All)
+			metadata.PropertyToField.Should().NotBeEmpty();
 	}
 }

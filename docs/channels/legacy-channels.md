@@ -23,11 +23,10 @@ var channel = new DataStreamChannel<LogEvent>(
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<LogEvent>(
-    Target = EntityTarget.DataStream,
-    DataStreamType = "logs",
-    DataStreamDataset = "myapp",
-    DataStreamNamespace = "default"
+[DataStream<LogEvent>(
+    Type = "logs",
+    Dataset = "myapp",
+    Namespace = "default"
 )]
 public static partial class LogContext;
 
@@ -55,8 +54,7 @@ var channel = new IndexChannel<Product>(
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<Product>(
-    Target = EntityTarget.Index,
+[Index<Product>(
     Name = "products",
     DatePattern = "yyyy.MM.dd"
 )]
@@ -84,12 +82,10 @@ var channel = new IngestChannel<Product>(options);
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<Product>(
-    Target = EntityTarget.Index,
+[Index<Product>(
     Name = "products",
     WriteAlias = "products",
     ReadAlias = "products-search",
-    SearchPattern = "products-*",
     DatePattern = "yyyy.MM.dd.HHmmss"
 )]
 public static partial class CatalogContext;

@@ -36,11 +36,10 @@ public class AppEvent
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<AppEvent>(
-    Target = EntityTarget.DataStream,
-    DataStreamType = "logs",
-    DataStreamDataset = "myapp",
-    DataStreamNamespace = "production"
+[DataStream<AppEvent>(
+    Type = "logs",
+    Dataset = "myapp",
+    Namespace = "production"
 )]
 public static partial class AppEventContext;
 ```

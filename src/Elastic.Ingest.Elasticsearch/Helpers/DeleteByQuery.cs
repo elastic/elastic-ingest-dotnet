@@ -28,7 +28,7 @@ public sealed class DeleteByQuery
 		_transport = transport;
 		_options = options;
 		_index = options.Index
-			?? (options.TypeContext != null ? TypeContextResolver.ResolveWriteAlias(options.TypeContext) : null)
+			?? (options.TypeContext != null ? options.TypeContext.ResolveWriteAlias() : null)
 			?? throw new InvalidOperationException("Either Index or TypeContext must be provided on DeleteByQueryOptions.");
 	}
 

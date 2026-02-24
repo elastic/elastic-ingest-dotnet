@@ -8,18 +8,15 @@ using FluentAssertions;
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Strategies;
 
 /*
- * Tests: TypeContextResolver — static utility that resolves index names
- *        from ElasticsearchTypeContext metadata
- *
- * Source: src/Elastic.Ingest.Elasticsearch/TypeContextResolver.cs
+ * Tests: ElasticsearchTypeContext resolve methods
  *
  * No Elasticsearch cluster required — pure unit tests.
  *
- *   ResolveWriteAlias(ctx)
+ *   ResolveWriteAlias()
  *   ├── No DatePattern  → WriteTarget       ("idx-products")
  *   └── Has DatePattern → WriteTarget-latest ("cat-products-latest")
  *
- *   ResolveReadTarget(ctx)
+ *   ResolveReadTarget()
  *   ├── Has ReadAlias  → ReadAlias          ("cat-products-search")
  *   └── No ReadAlias   → falls back to ResolveWriteAlias()
  */
@@ -29,7 +26,7 @@ public class TypeContextResolverTests
 	public void WriteAliasForFixedIndexIsWriteTarget()
 	{
 		var ctx = TestMappingContext.ProductCatalog.Context;
-		var alias = TypeContextResolver.ResolveWriteAlias(ctx);
+		var alias = ctx.ResolveWriteAlias();
 		alias.Should().Be("idx-products",
 			"no DatePattern → WriteTarget used directly");
 	}
@@ -38,7 +35,7 @@ public class TypeContextResolverTests
 	public void WriteAliasForDateRollingIndexAppendsLatest()
 	{
 		var ctx = TestMappingContext.ProductCatalogCatalog.Context;
-		var alias = TypeContextResolver.ResolveWriteAlias(ctx);
+		var alias = ctx.ResolveWriteAlias();
 		alias.Should().Be("cat-products-latest",
 			"DatePattern set → WriteTarget + '-latest'");
 	}
@@ -47,7 +44,7 @@ public class TypeContextResolverTests
 	public void ReadTargetFallsBackToWriteAlias()
 	{
 		var ctx = TestMappingContext.ProductCatalog.Context;
-		var target = TypeContextResolver.ResolveReadTarget(ctx);
+		var target = ctx.ResolveReadTarget();
 		target.Should().Be("idx-products",
 			"no ReadAlias → falls back to write alias");
 	}
@@ -56,7 +53,7 @@ public class TypeContextResolverTests
 	public void ReadTargetUsesReadAliasWhenAvailable()
 	{
 		var ctx = TestMappingContext.ProductCatalogCatalog.Context;
-		var target = TypeContextResolver.ResolveReadTarget(ctx);
+		var target = ctx.ResolveReadTarget();
 		target.Should().Be("cat-products-search",
 			"Catalog variant has ReadAlias = 'cat-products-search'");
 	}
@@ -65,16 +62,40 @@ public class TypeContextResolverTests
 	public void WriteAliasForHashableArticleIsWriteTarget()
 	{
 		var ctx = TestMappingContext.HashableArticle.Context;
-		var alias = TypeContextResolver.ResolveWriteAlias(ctx);
+		var alias = ctx.ResolveWriteAlias();
 		alias.Should().Be("hashable-articles");
 	}
 
 	[Test]
-	public void ReadTargetForDataStreamThrows()
+	public void ResolveIndexNameWithDatePattern()
+	{
+		var ctx = TestMappingContext.ProductCatalogCatalog.Context;
+		var ts = new DateTimeOffset(2026, 2, 24, 14, 30, 55, TimeSpan.Zero);
+		var name = ctx.ResolveIndexName(ts);
+		name.Should().Be("cat-products-2026.02.24.143055");
+	}
+
+	[Test]
+	public void ResolveSearchPatternForDataStream()
 	{
 		var ctx = TestMappingContext.ServerMetricsEvent.Context;
-		var act = () => TypeContextResolver.ResolveWriteAlias(ctx);
-		act.Should().Throw<InvalidOperationException>(
-			"DataStream entity has no IndexStrategy.WriteTarget");
+		var pattern = ctx.ResolveSearchPattern();
+		pattern.Should().Be("logs-srvmetrics-*");
+	}
+
+	[Test]
+	public void ResolveSearchPatternForRollingIndex()
+	{
+		var ctx = TestMappingContext.ProductCatalogCatalog.Context;
+		var pattern = ctx.ResolveSearchPattern();
+		pattern.Should().Be("cat-products-*");
+	}
+
+	[Test]
+	public void ResolveSearchPatternForFixedIndex()
+	{
+		var ctx = TestMappingContext.ProductCatalog.Context;
+		var pattern = ctx.ResolveSearchPattern();
+		pattern.Should().Be("idx-products*");
 	}
 }

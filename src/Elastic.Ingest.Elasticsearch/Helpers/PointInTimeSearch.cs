@@ -39,7 +39,7 @@ public sealed class PointInTimeSearch<TDocument> : IAsyncDisposable
 		_options = options;
 		_serializerOptions = serializerOptions;
 		_index = options.Index
-			?? (options.TypeContext != null ? TypeContextResolver.ResolveReadTarget(options.TypeContext) : null)
+			?? (options.TypeContext != null ? options.TypeContext.ResolveReadTarget() : null)
 			?? throw new InvalidOperationException("Either Index or TypeContext must be provided on PointInTimeSearchOptions.");
 	}
 

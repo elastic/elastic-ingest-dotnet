@@ -21,7 +21,7 @@ Elastic.Ingest.Elasticsearch supports several index management strategies. The r
 
 ## EntityTarget
 
-The `EntityTarget` in your mapping context controls which index management strategy the channel uses:
+The target-specific attribute on your mapping context (`[Index<T>]`, `[DataStream<T>]`, `[WiredStream<T>]`) controls which index management strategy the channel uses:
 
 | EntityTarget | Description | Bootstrap |
 |---|---|---|

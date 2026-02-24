@@ -8,10 +8,11 @@ using Elastic.Mapping.Generator.Model;
 namespace Elastic.Mapping.Generator.Emitters;
 
 /// <summary>
-/// Emits the type-specific MappingsBuilder class for strongly-typed mapping configuration.
+/// Emits extension methods on <c>MappingsBuilder&lt;TDocument&gt;</c> for strongly-typed mapping configuration.
 /// </summary>
 internal static class MappingsBuilderEmitter
 {
+	private const string MappingsBuilderFqn = "global::Elastic.Mapping.Mappings.MappingsBuilder";
 	private const string FieldBuilderFqn = "global::Elastic.Mapping.Mappings.Builders.FieldBuilder";
 	private const string TextFieldBuilderFqn = "global::Elastic.Mapping.Mappings.Builders.TextFieldBuilder";
 	private const string KeywordFieldBuilderFqn = "global::Elastic.Mapping.Mappings.Builders.KeywordFieldBuilder";
@@ -33,7 +34,7 @@ internal static class MappingsBuilderEmitter
 	private const string SemanticTextFieldBuilderFqn = "global::Elastic.Mapping.Mappings.Builders.SemanticTextFieldBuilder";
 
 	/// <summary>
-	/// Emits MappingsBuilder for a type registration within a context.
+	/// Emits extension methods on MappingsBuilder&lt;T&gt; for a type registration within a context.
 	/// </summary>
 	public static string EmitForContext(ContextMappingModel context, TypeRegistration reg)
 	{
@@ -47,7 +48,7 @@ internal static class MappingsBuilderEmitter
 			sb.AppendLine();
 		}
 
-		EmitMappingsBuilderClass(sb, reg.TypeModel, reg.ResolverName, reg.AnalysisComponents);
+		EmitExtensionMethodsClass(sb, reg.TypeModel, reg.TypeFullyQualifiedName, reg.TypeName, reg.AnalysisComponents);
 
 		return sb.ToString();
 	}
@@ -100,37 +101,28 @@ internal static class MappingsBuilderEmitter
 			_ => null
 		};
 
-	private static void EmitMappingsBuilderClass(
+	private static void EmitExtensionMethodsClass(
 		StringBuilder sb,
 		TypeMappingModel model,
-		string typeName,
+		string typeFqn,
+		string resolverName,
 		AnalysisComponentsModel analysisComponents
 	)
 	{
-		var indent = "";
-		var builderClassName = $"{typeName}MappingsBuilder";
-		var analysisPath = $"{typeName}Analysis";
+		var builderType = $"{MappingsBuilderFqn}<global::{typeFqn}>";
+		var extensionClassName = $"{resolverName}MappingsExtensions";
 
-		// Collect nested builders that need to be generated
 		var nestedBuilders = new List<(string PropertyName, string FieldName, NestedTypeModel NestedType)>();
 
-		sb.AppendLine($"{indent}/// <summary>Type-specific mappings builder for {typeName}.</summary>");
-		sb.AppendLine($"{indent}public sealed class {builderClassName} : global::Elastic.Mapping.Mappings.MappingsBuilderBase<{builderClassName}>");
-		sb.AppendLine($"{indent}{{");
+		sb.AppendLine($"/// <summary>Extension methods for configuring {resolverName} mappings on <see cref=\"{MappingsBuilderFqn}{{TDocument}}\"/>.</summary>");
+		sb.AppendLine($"public static class {extensionClassName}");
+		sb.AppendLine("{");
 
-		// Add Analysis accessor if there are analysis components
-		if (analysisComponents.HasAnyComponents)
-		{
-			EmitAnalysisAccessor(sb, indent + "\t", analysisPath);
-			sb.AppendLine();
-		}
-
-		// Generate a method for each non-ignored property
 		var props = model.Properties.Where(p => !p.IsIgnored).ToList();
 		for (var i = 0; i < props.Count; i++)
 		{
 			var prop = props[i];
-			EmitPropertyMethod(sb, indent, builderClassName, prop);
+			EmitPropertyExtensionMethod(sb, builderType, prop);
 
 			if (prop.NestedType != null)
 				nestedBuilders.Add((prop.PropertyName, prop.FieldName, prop.NestedType));
@@ -139,107 +131,108 @@ internal static class MappingsBuilderEmitter
 				sb.AppendLine();
 		}
 
-		// Generate overloaded methods for nested properties
 		foreach (var (propertyName, fieldName, nestedType) in nestedBuilders)
 		{
 			sb.AppendLine();
-			EmitNestedPropertyOverload(sb, indent, builderClassName, propertyName, fieldName, nestedType);
+			EmitNestedPropertyOverload(sb, builderType, propertyName, fieldName, nestedType);
 		}
 
-		sb.AppendLine($"{indent}}}");
+		sb.AppendLine("}");
 		sb.AppendLine();
 
-		// Generate nested builder classes (deduplicate by type name)
+		// Generate nested builder classes (these remain as helper classes, not extensions)
 		var emittedNestedBuilders = new HashSet<string>();
 		foreach (var (propertyName, fieldName, nestedType) in nestedBuilders)
 		{
 			if (emittedNestedBuilders.Add(nestedType.TypeName))
-				EmitNestedBuilderClass(sb, indent, builderClassName, propertyName, fieldName, nestedType);
+				EmitNestedBuilderClass(sb, resolverName, propertyName, fieldName, nestedType);
 		}
 	}
 
-	private static void EmitAnalysisAccessor(StringBuilder sb, string indent, string analysisPath)
+	private static void EmitPropertyExtensionMethod(StringBuilder sb, string builderType, PropertyMappingModel prop)
 	{
-		sb.AppendLine($"{indent}/// <summary>Provides instance-based access to analysis component names.</summary>");
-		sb.AppendLine($"{indent}public sealed class AnalysisAccessor");
-		sb.AppendLine($"{indent}{{");
-		sb.AppendLine($"{indent}\t/// <summary>Analyzer names (built-in and custom).</summary>");
-		sb.AppendLine($"{indent}\tpublic {analysisPath}.AnalyzersAccessor Analyzers => {analysisPath}.Analyzers;");
-		sb.AppendLine($"{indent}\t/// <summary>Tokenizer names (built-in and custom).</summary>");
-		sb.AppendLine($"{indent}\tpublic {analysisPath}.TokenizersAccessor Tokenizers => {analysisPath}.Tokenizers;");
-		sb.AppendLine($"{indent}\t/// <summary>Token filter names (built-in and custom).</summary>");
-		sb.AppendLine($"{indent}\tpublic {analysisPath}.TokenFiltersAccessor TokenFilters => {analysisPath}.TokenFilters;");
-		sb.AppendLine($"{indent}\t/// <summary>Char filter names (built-in and custom).</summary>");
-		sb.AppendLine($"{indent}\tpublic {analysisPath}.CharFiltersAccessor CharFilters => {analysisPath}.CharFilters;");
-		sb.AppendLine($"{indent}\t/// <summary>Normalizer names (custom).</summary>");
-		sb.AppendLine($"{indent}\tpublic {analysisPath}.NormalizersAccessor Normalizers => {analysisPath}.Normalizers;");
-		sb.AppendLine($"{indent}}}");
-		sb.AppendLine();
-		sb.AppendLine($"{indent}private static readonly AnalysisAccessor _analysis = new();");
-		sb.AppendLine($"{indent}/// <summary>Analysis component names for use in mapping configuration.</summary>");
-		sb.AppendLine($"{indent}public AnalysisAccessor Analysis => _analysis;");
+		var inputBuilder = GetBuilderTypeForFieldType(prop.FieldType);
+		var factoryMethod = GetFactoryMethodForFieldType(prop.FieldType);
+
+		if (factoryMethod != null)
+		{
+			sb.AppendLine($"\t/// <summary>Configure the {prop.PropertyName} field (maps to \"{prop.FieldName}\").</summary>");
+			sb.AppendLine($"\tpublic static {builderType} {prop.PropertyName}(this {builderType} self, global::System.Func<{inputBuilder}, {FieldBuilderFqn}> configure)");
+			sb.AppendLine("\t{");
+			sb.AppendLine($"\t\tvar fb = new {FieldBuilderFqn}();");
+			sb.AppendLine($"\t\t_ = configure(fb.{factoryMethod}());");
+			sb.AppendLine($"\t\tself.AddFieldDirect(\"{prop.FieldName}\", fb.GetDefinition());");
+			sb.AppendLine("\t\treturn self;");
+			sb.AppendLine("\t}");
+		}
+		else
+		{
+			sb.AppendLine($"\t/// <summary>Configure the {prop.PropertyName} field (maps to \"{prop.FieldName}\").</summary>");
+			sb.AppendLine($"\tpublic static {builderType} {prop.PropertyName}(this {builderType} self, global::System.Func<{FieldBuilderFqn}, {FieldBuilderFqn}> configure)");
+			sb.AppendLine("\t{");
+			sb.AppendLine($"\t\tself.AddPropertyField(\"{prop.FieldName}\", configure);");
+			sb.AppendLine("\t\treturn self;");
+			sb.AppendLine("\t}");
+		}
 	}
 
 	private static void EmitNestedPropertyOverload(
 		StringBuilder sb,
-		string indent,
-		string builderClassName,
+		string builderType,
 		string propertyName,
 		string fieldName,
 		NestedTypeModel nestedType
 	)
 	{
-		var nestedBuilderClassName = $"{builderClassName}_{nestedType.TypeName}NestedBuilder";
+		var nestedBuilderClassName = $"{nestedType.TypeName}NestedBuilder";
 
-		sb.AppendLine($"{indent}\t/// <summary>Configure nested properties of the {propertyName} field (maps to \"{fieldName}\").</summary>");
-		sb.AppendLine($"{indent}\tpublic {builderClassName} {propertyName}(global::System.Func<{nestedBuilderClassName}, {nestedBuilderClassName}> configure)");
-		sb.AppendLine($"{indent}\t{{");
-		sb.AppendLine($"{indent}\t\tvar nested = new {nestedBuilderClassName}(\"{fieldName}\");");
-		sb.AppendLine($"{indent}\t\t_ = configure(nested);");
-		sb.AppendLine($"{indent}\t\tMergeNestedFields(nested.GetFields());");
-		sb.AppendLine($"{indent}\t\treturn this;");
-		sb.AppendLine($"{indent}\t}}");
+		sb.AppendLine($"\t/// <summary>Configure nested properties of the {propertyName} field (maps to \"{fieldName}\").</summary>");
+		sb.AppendLine($"\tpublic static {builderType} {propertyName}(this {builderType} self, global::System.Func<{nestedBuilderClassName}, {nestedBuilderClassName}> configure)");
+		sb.AppendLine("\t{");
+		sb.AppendLine($"\t\tvar nested = new {nestedBuilderClassName}(\"{fieldName}\");");
+		sb.AppendLine("\t\t_ = configure(nested);");
+		sb.AppendLine("\t\tself.MergeNestedFields(nested.GetFields());");
+		sb.AppendLine("\t\treturn self;");
+		sb.AppendLine("\t}");
 	}
 
 	private static void EmitNestedBuilderClass(
 		StringBuilder sb,
-		string indent,
-		string builderClassName,
+		string resolverName,
 		string propertyName,
 		string fieldName,
 		NestedTypeModel nestedType
 	)
 	{
-		var nestedBuilderClassName = $"{builderClassName}_{nestedType.TypeName}NestedBuilder";
+		var nestedBuilderClassName = $"{nestedType.TypeName}NestedBuilder";
 
-		sb.AppendLine($"{indent}/// <summary>Builder for configuring nested properties of {nestedType.TypeName}.</summary>");
-		sb.AppendLine($"{indent}public sealed class {nestedBuilderClassName}");
-		sb.AppendLine($"{indent}{{");
-		sb.AppendLine($"{indent}\tprivate readonly string _parentPath;");
-		sb.AppendLine($"{indent}\tprivate readonly global::System.Collections.Generic.List<(string Path, global::Elastic.Mapping.Mappings.Definitions.IFieldDefinition Definition)> _fields = [];");
+		sb.AppendLine($"/// <summary>Builder for configuring nested properties of {nestedType.TypeName}.</summary>");
+		sb.AppendLine($"public sealed class {nestedBuilderClassName}");
+		sb.AppendLine("{");
+		sb.AppendLine("\tprivate readonly string _parentPath;");
+		sb.AppendLine($"\tprivate readonly global::System.Collections.Generic.List<(string Path, global::Elastic.Mapping.Mappings.Definitions.IFieldDefinition Definition)> _fields = [];");
 		sb.AppendLine();
-		sb.AppendLine($"{indent}\tinternal {nestedBuilderClassName}(string parentPath) => _parentPath = parentPath;");
+		sb.AppendLine($"\tinternal {nestedBuilderClassName}(string parentPath) => _parentPath = parentPath;");
 		sb.AppendLine();
 
 		var nestedProps = nestedType.Properties.Where(p => !p.IsIgnored).ToList();
 		for (var i = 0; i < nestedProps.Count; i++)
 		{
 			var prop = nestedProps[i];
-			EmitNestedPropertyMethod(sb, indent, nestedBuilderClassName, prop);
+			EmitNestedPropertyMethod(sb, nestedBuilderClassName, prop);
 
 			if (i < nestedProps.Count - 1)
 				sb.AppendLine();
 		}
 
 		sb.AppendLine();
-		sb.AppendLine($"{indent}\tinternal global::System.Collections.Generic.IReadOnlyList<(string Path, global::Elastic.Mapping.Mappings.Definitions.IFieldDefinition Definition)> GetFields() => _fields;");
-		sb.AppendLine($"{indent}}}");
+		sb.AppendLine($"\tinternal global::System.Collections.Generic.IReadOnlyList<(string Path, global::Elastic.Mapping.Mappings.Definitions.IFieldDefinition Definition)> GetFields() => _fields;");
+		sb.AppendLine("}");
 		sb.AppendLine();
 	}
 
 	private static void EmitNestedPropertyMethod(
 		StringBuilder sb,
-		string indent,
 		string nestedBuilderClassName,
 		PropertyMappingModel prop
 	)
@@ -249,52 +242,25 @@ internal static class MappingsBuilderEmitter
 
 		if (factoryMethod != null)
 		{
-			sb.AppendLine($"{indent}\t/// <summary>Configure the {prop.PropertyName} sub-field (maps to \"{{parentPath}}.{prop.FieldName}\").</summary>");
-			sb.AppendLine($"{indent}\tpublic {nestedBuilderClassName} {prop.PropertyName}(global::System.Func<{inputBuilder}, {FieldBuilderFqn}> configure)");
-			sb.AppendLine($"{indent}\t{{");
-			sb.AppendLine($"{indent}\t\tvar fb = new {FieldBuilderFqn}();");
-			sb.AppendLine($"{indent}\t\t_ = configure(fb.{factoryMethod}());");
-			sb.AppendLine($"{indent}\t\t_fields.Add(($\"{{_parentPath}}.{prop.FieldName}\", fb.GetDefinition()));");
-			sb.AppendLine($"{indent}\t\treturn this;");
-			sb.AppendLine($"{indent}\t}}");
+			sb.AppendLine($"\t/// <summary>Configure the {prop.PropertyName} sub-field (maps to \"{{parentPath}}.{prop.FieldName}\").</summary>");
+			sb.AppendLine($"\tpublic {nestedBuilderClassName} {prop.PropertyName}(global::System.Func<{inputBuilder}, {FieldBuilderFqn}> configure)");
+			sb.AppendLine("\t{");
+			sb.AppendLine($"\t\tvar fb = new {FieldBuilderFqn}();");
+			sb.AppendLine($"\t\t_ = configure(fb.{factoryMethod}());");
+			sb.AppendLine($"\t\t_fields.Add(($\"{{_parentPath}}.{prop.FieldName}\", fb.GetDefinition()));");
+			sb.AppendLine("\t\treturn this;");
+			sb.AppendLine("\t}");
 		}
 		else
 		{
-			sb.AppendLine($"{indent}\t/// <summary>Configure the {prop.PropertyName} sub-field (maps to \"{{parentPath}}.{prop.FieldName}\").</summary>");
-			sb.AppendLine($"{indent}\tpublic {nestedBuilderClassName} {prop.PropertyName}(global::System.Func<{FieldBuilderFqn}, {FieldBuilderFqn}> configure)");
-			sb.AppendLine($"{indent}\t{{");
-			sb.AppendLine($"{indent}\t\tvar fb = new {FieldBuilderFqn}();");
-			sb.AppendLine($"{indent}\t\t_ = configure(fb);");
-			sb.AppendLine($"{indent}\t\t_fields.Add(($\"{{_parentPath}}.{prop.FieldName}\", fb.GetDefinition()));");
-			sb.AppendLine($"{indent}\t\treturn this;");
-			sb.AppendLine($"{indent}\t}}");
-		}
-	}
-
-	private static void EmitPropertyMethod(StringBuilder sb, string indent, string builderClassName, PropertyMappingModel prop)
-	{
-		var inputBuilder = GetBuilderTypeForFieldType(prop.FieldType);
-		var factoryMethod = GetFactoryMethodForFieldType(prop.FieldType);
-
-		if (factoryMethod != null)
-		{
-			sb.AppendLine($"{indent}\t/// <summary>Configure the {prop.PropertyName} field (maps to \"{prop.FieldName}\").</summary>");
-			sb.AppendLine($"{indent}\tpublic {builderClassName} {prop.PropertyName}(global::System.Func<{inputBuilder}, {FieldBuilderFqn}> configure)");
-			sb.AppendLine($"{indent}\t{{");
-			sb.AppendLine($"{indent}\t\tvar fb = new {FieldBuilderFqn}();");
-			sb.AppendLine($"{indent}\t\t_ = configure(fb.{factoryMethod}());");
-			sb.AppendLine($"{indent}\t\tAddFieldDirect(\"{prop.FieldName}\", fb.GetDefinition());");
-			sb.AppendLine($"{indent}\t\treturn this;");
-			sb.AppendLine($"{indent}\t}}");
-		}
-		else
-		{
-			sb.AppendLine($"{indent}\t/// <summary>Configure the {prop.PropertyName} field (maps to \"{prop.FieldName}\").</summary>");
-			sb.AppendLine($"{indent}\tpublic {builderClassName} {prop.PropertyName}(global::System.Func<{FieldBuilderFqn}, {FieldBuilderFqn}> configure)");
-			sb.AppendLine($"{indent}\t{{");
-			sb.AppendLine($"{indent}\t\tAddPropertyField(\"{prop.FieldName}\", configure);");
-			sb.AppendLine($"{indent}\t\treturn this;");
-			sb.AppendLine($"{indent}\t}}");
+			sb.AppendLine($"\t/// <summary>Configure the {prop.PropertyName} sub-field (maps to \"{{parentPath}}.{prop.FieldName}\").</summary>");
+			sb.AppendLine($"\tpublic {nestedBuilderClassName} {prop.PropertyName}(global::System.Func<{FieldBuilderFqn}, {FieldBuilderFqn}> configure)");
+			sb.AppendLine("\t{");
+			sb.AppendLine($"\t\tvar fb = new {FieldBuilderFqn}();");
+			sb.AppendLine($"\t\t_ = configure(fb);");
+			sb.AppendLine($"\t\t_fields.Add(($\"{{_parentPath}}.{prop.FieldName}\", fb.GetDefinition()));");
+			sb.AppendLine("\t\treturn this;");
+			sb.AppendLine("\t}");
 		}
 	}
 }

@@ -43,21 +43,17 @@ Define two index configurations -- lexical and semantic -- using the `Variant` p
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<Article>(
-    Target = EntityTarget.Index,
+[Index<Article>(
     Name = "articles-lexical",
     WriteAlias = "articles-lexical",
     ReadAlias = "articles-lexical-search",
-    SearchPattern = "articles-lexical-*",
     DatePattern = "yyyy.MM.dd.HHmmss"
 )]
-[Entity<Article>(
-    Target = EntityTarget.Index,
+[Index<Article>(
     Name = "articles-semantic",
     Variant = "Semantic",
     WriteAlias = "articles-semantic",
     ReadAlias = "articles-semantic-search",
-    SearchPattern = "articles-semantic-*",
     DatePattern = "yyyy.MM.dd.HHmmss"
 )]
 public static partial class ArticleContext;

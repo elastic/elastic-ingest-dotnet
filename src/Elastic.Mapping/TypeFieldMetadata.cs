@@ -22,7 +22,6 @@ public enum MetadataSource
 public sealed record TypeFieldMetadata(
 	IReadOnlyDictionary<string, string> PropertyToField,
 	IReadOnlyCollection<string> IgnoredProperties,
-	string? SearchPattern,
 	Func<Dictionary<string, PropertyInfo>>? GetPropertyMapFunc,
 	MetadataSource Source = MetadataSource.Context,
 	IReadOnlyCollection<string>? TextFields = null

@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using Elastic.Mapping.Analysis;
+using Elastic.Mapping.Mappings;
 
 namespace Elastic.Mapping.Tests;
 
@@ -11,22 +12,19 @@ namespace Elastic.Mapping.Tests;
 // ============================================================================
 
 [ElasticsearchMappingContext]
-[Entity<LogEntry>(
-	Target = EntityTarget.Index,
+[Index<LogEntry>(
 	WriteAlias = "logs-write",
 	ReadAlias = "logs-read",
-	SearchPattern = "logs-*",
 	Shards = 3,
 	Replicas = 2
 )]
-[Entity<NginxAccessLog>(
-	Target = EntityTarget.DataStream,
+[DataStream<NginxAccessLog>(
 	Type = "logs",
 	Dataset = "nginx.access",
 	Namespace = "production"
 )]
-[Entity<SimpleDocument>(Target = EntityTarget.Index, Name = "simple-docs")]
-[Entity<AdvancedDocument>(Target = EntityTarget.Index, Name = "advanced-docs")]
+[Index<SimpleDocument>(Name = "simple-docs")]
+[Index<AdvancedDocument>(Name = "advanced-docs")]
 public static partial class TestMappingContext
 {
 	/// <summary>Configures LogEntry-specific analysis settings (context-level).</summary>
@@ -140,22 +138,61 @@ public class Tag
 }
 
 // ============================================================================
-// EXTENDED MAPPING CONTEXT: tests Entity attribute options not covered above
+// EXTENDED MAPPING CONTEXT: tests attribute options not covered above
 // ============================================================================
 
 [ElasticsearchMappingContext]
-[Entity<RollingIndex>(
-	Target = EntityTarget.Index,
+[Index<RollingIndex>(
 	Name = "rolling",
 	WriteAlias = "rolling-write",
-	SearchPattern = "rolling-*",
 	DatePattern = "yyyy.MM",
 	RefreshInterval = "5s",
 	Dynamic = false
 )]
-[Entity<GeoDocument>(Target = EntityTarget.Index, Name = "geo-docs")]
-[Entity<SimpleDocument>(Target = EntityTarget.Index, Name = "simple-semantic", Variant = "Semantic")]
+[Index<GeoDocument>(Name = "geo-docs")]
+[Index<SimpleDocument>(Name = "simple-semantic", Variant = "Semantic")]
 public static partial class ExtendedTestMappingContext;
+
+// ============================================================================
+// TEMPLATED MAPPING CONTEXT: tests NameTemplate + CreateContext generation
+// ============================================================================
+
+[ElasticsearchMappingContext]
+[Index<KnowledgeArticle>(
+	NameTemplate = "docs-{searchType}-{env}",
+	DatePattern = "yyyy.MM.dd.HHmmss"
+)]
+[Index<KnowledgeArticle>(
+	NameTemplate = "articles-{team}-{component}",
+	Variant = "Multi"
+)]
+[Index<LocationRecord>(
+	NameTemplate = "geo-{namespace}"
+)]
+public static partial class TemplatedMappingContext;
+
+/// <summary>Test model for templated index with custom + well-known placeholders.</summary>
+public class KnowledgeArticle
+{
+	[Id]
+	public string ArticleId { get; set; } = string.Empty;
+
+	[Timestamp]
+	public DateTimeOffset PublishedAt { get; set; }
+
+	[Text]
+	public string Title { get; set; } = string.Empty;
+}
+
+/// <summary>Test model for templated index with only a well-known namespace placeholder.</summary>
+public class LocationRecord
+{
+	[Id]
+	public string RecordId { get; set; } = string.Empty;
+
+	public double Latitude { get; set; }
+	public double Longitude { get; set; }
+}
 
 /// <summary>
 /// Test model for rolling index with date pattern, refresh interval, and dynamic=false.
@@ -197,6 +234,115 @@ public class GeoDocument
 }
 
 // ============================================================================
+// INTERFACE CONFIGURATION CONTEXT: tests IConfigureElasticsearch<T>
+// ============================================================================
+
+[ElasticsearchMappingContext]
+[Index<SelfConfiguredDocument>(Name = "self-configured")]
+[Index<ExternallyConfiguredDocument>(Name = "ext-configured", Configuration = typeof(ExternalDocumentConfig))]
+[Index<PartiallyConfiguredDocument>(Name = "partial-configured", Configuration = typeof(PartialDocumentConfig))]
+public static partial class InterfaceTestMappingContext;
+
+/// <summary>
+/// Entity that implements IConfigureElasticsearch on itself (no separate Configuration class).
+/// </summary>
+public class SelfConfiguredDocument : IConfigureElasticsearch<SelfConfiguredDocument>
+{
+	[Id]
+	[Keyword]
+	public string Name { get; set; } = string.Empty;
+
+	[Text(Analyzer = "self_analyzer")]
+	public string Body { get; set; } = string.Empty;
+
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+		analysis.Analyzer("self_analyzer", a => a.Custom()
+			.Tokenizer(BuiltInAnalysis.Tokenizers.Standard)
+			.Filters(BuiltInAnalysis.TokenFilters.Lowercase));
+
+	public MappingsBuilder<SelfConfiguredDocument> ConfigureMappings(MappingsBuilder<SelfConfiguredDocument> mappings) =>
+		mappings.AddRuntimeField("name_length", f => f.Long().Script("emit(doc['name'].value.length())"));
+}
+
+/// <summary>
+/// Entity configured via a dedicated Configuration class implementing the interface.
+/// </summary>
+public class ExternallyConfiguredDocument
+{
+	[Id]
+	[Keyword]
+	public string Code { get; set; } = string.Empty;
+
+	[Text(Analyzer = "ext_analyzer")]
+	public string Content { get; set; } = string.Empty;
+
+	[Double]
+	public double Score { get; set; }
+}
+
+public class ExternalDocumentConfig : IConfigureElasticsearch<ExternallyConfiguredDocument>
+{
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+		analysis.Analyzer("ext_analyzer", a => a.Custom()
+			.Tokenizer(BuiltInAnalysis.Tokenizers.Standard)
+			.Filters(BuiltInAnalysis.TokenFilters.Lowercase, BuiltInAnalysis.TokenFilters.AsciiFolding));
+
+	public MappingsBuilder<ExternallyConfiguredDocument> ConfigureMappings(MappingsBuilder<ExternallyConfiguredDocument> mappings) =>
+		mappings.AddRuntimeField("score_tier", f => f.Keyword()
+			.Script("if (doc['score'].value < 5) emit('low'); else emit('high')"));
+
+	public IReadOnlyDictionary<string, string> IndexSettings => new Dictionary<string, string>
+	{
+		["index.default_pipeline"] = "ext-pipeline"
+	};
+}
+
+/// <summary>
+/// Configuration that only overrides ConfigureMappings, relying on defaults for the rest.
+/// </summary>
+public class PartiallyConfiguredDocument
+{
+	[Id]
+	[Keyword]
+	public string Id { get; set; } = string.Empty;
+
+	[Text]
+	public string Title { get; set; } = string.Empty;
+}
+
+public class PartialDocumentConfig : IConfigureElasticsearch<PartiallyConfiguredDocument>
+{
+	public MappingsBuilder<PartiallyConfiguredDocument> ConfigureMappings(MappingsBuilder<PartiallyConfiguredDocument> mappings) =>
+		mappings.Title(f => f.Analyzer("standard").MultiField("keyword", mf => mf.Keyword().IgnoreAbove(256)));
+}
+
+// ============================================================================
+// DI CONTEXT: isolated context for testing RegisterServiceProvider
+// ============================================================================
+
+[ElasticsearchMappingContext]
+[Index<DiTestDocument>(Name = "di-test", Configuration = typeof(DiTestDocumentConfig))]
+public static partial class DiTestMappingContext;
+
+public class DiTestDocument
+{
+	[Id]
+	[Keyword]
+	public string Id { get; set; } = string.Empty;
+
+	[Text(Analyzer = "di_analyzer")]
+	public string Content { get; set; } = string.Empty;
+}
+
+public class DiTestDocumentConfig : IConfigureElasticsearch<DiTestDocument>
+{
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+		analysis.Analyzer("di_analyzer", a => a.Custom()
+			.Tokenizer(BuiltInAnalysis.Tokenizers.Standard)
+			.Filters(BuiltInAnalysis.TokenFilters.Lowercase));
+}
+
+// ============================================================================
 // STJ CONTEXT: tests JsonContext integration with naming policies
 // ============================================================================
 
@@ -205,7 +351,7 @@ public class GeoDocument
 public partial class TestJsonContext : JsonSerializerContext;
 
 [ElasticsearchMappingContext(JsonContext = typeof(TestJsonContext))]
-[Entity<SnakeCaseDocument>(Target = EntityTarget.Index, Name = "snake-docs")]
+[Index<SnakeCaseDocument>(Name = "snake-docs")]
 public static partial class StjTestMappingContext;
 
 /// <summary>
