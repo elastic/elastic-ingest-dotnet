@@ -13,7 +13,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_PropertyMethod_ConfiguresField()
 	{
-		var builder = new LogEntryMappingsBuilder();
+		var builder = new MappingsBuilder<LogEntry>();
 
 		builder.Message(f => f.Analyzer("custom_analyzer"));
 
@@ -23,7 +23,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_AddField_AppearsInMergedJson()
 	{
-		var builder = new LogEntryMappingsBuilder();
+		var builder = new MappingsBuilder<LogEntry>();
 		builder.AddField("all_text", f => f.Text().Analyzer("standard"));
 
 		var overrides = builder.Build();
@@ -36,7 +36,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_AddRuntimeField_AppearsInMergedJson()
 	{
-		var builder = new LogEntryMappingsBuilder();
+		var builder = new MappingsBuilder<LogEntry>();
 		builder.AddRuntimeField("day_of_week", r => r
 			.Keyword()
 			.Script("emit(doc['@timestamp'].value.dayOfWeekEnum.getDisplayName(TextStyle.FULL, Locale.ROOT))")
@@ -54,7 +54,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_AddDynamicTemplate_AppearsInMergedJson()
 	{
-		var builder = new LogEntryMappingsBuilder();
+		var builder = new MappingsBuilder<LogEntry>();
 		builder.AddDynamicTemplate("strings_as_keywords", t => t
 			.MatchMappingType("string")
 			.Mapping(f => f.Keyword())
@@ -71,7 +71,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_HasConfiguration_FalseWhenEmpty()
 	{
-		var builder = new LogEntryMappingsBuilder();
+		var builder = new MappingsBuilder<LogEntry>();
 
 		builder.HasConfiguration.Should().BeFalse();
 	}
@@ -79,7 +79,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_ChainsMultipleOperations()
 	{
-		var builder = new LogEntryMappingsBuilder()
+		var builder = new MappingsBuilder<LogEntry>()
 			.Message(f => f.Analyzer("custom"))
 			.AddField("extra", f => f.Keyword())
 			.AddRuntimeField("computed", r => r.Long().Script("emit(1)"));
@@ -90,7 +90,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_Override_LastDefinitionWins()
 	{
-		var builder = new LogEntryMappingsBuilder()
+		var builder = new MappingsBuilder<LogEntry>()
 			.Message(f => f.Analyzer("first_analyzer"))
 			.Message(f => f.Analyzer("second_analyzer"));
 
@@ -106,7 +106,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_Override_AddFieldSamePathDoesNotThrow()
 	{
-		var builder = new LogEntryMappingsBuilder()
+		var builder = new MappingsBuilder<LogEntry>()
 			.AddField("custom_field", f => f.Text().Analyzer("first"))
 			.AddField("custom_field", f => f.Text().Analyzer("second").SearchAnalyzer("search_v2"));
 
@@ -125,7 +125,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_DottedPath_ObjectParent_UsesProperties()
 	{
-		var builder = new LogEntryMappingsBuilder()
+		var builder = new MappingsBuilder<LogEntry>()
 			.AddField("metadata", f => f.Object())
 			.AddField("metadata.inner", f => f.Keyword());
 
@@ -143,7 +143,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_DottedPath_TextParent_UsesFields()
 	{
-		var builder = new LogEntryMappingsBuilder()
+		var builder = new MappingsBuilder<LogEntry>()
 			.AddField("summary", f => f.Text().Analyzer("standard"))
 			.AddField("summary.raw", f => f.Keyword());
 
@@ -165,7 +165,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_DottedPath_KeywordParent_UsesFields()
 	{
-		var builder = new LogEntryMappingsBuilder()
+		var builder = new MappingsBuilder<LogEntry>()
 			.AddField("tag", f => f.Keyword())
 			.AddField("tag.text", f => f.Text().Analyzer("standard"));
 
@@ -184,7 +184,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_DottedPath_MergesIntoExistingBaseField()
 	{
-		var builder = new LogEntryMappingsBuilder()
+		var builder = new MappingsBuilder<LogEntry>()
 			.AddField("message.keyword", f => f.Keyword());
 
 		var overrides = builder.Build();
@@ -202,7 +202,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_TextMultiField_AppearsInFields()
 	{
-		var builder = new LogEntryMappingsBuilder()
+		var builder = new MappingsBuilder<LogEntry>()
 			.Message(f => f
 				.Analyzer("custom")
 				.MultiField("keyword", mf => mf.Keyword())
@@ -222,7 +222,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_SemanticTextMultiField_AppearsInFields()
 	{
-		var builder = new LogEntryMappingsBuilder()
+		var builder = new MappingsBuilder<LogEntry>()
 			.Message(f => f
 				.Analyzer("custom")
 				.MultiField("semantic", mf => mf.SemanticText().InferenceId("my-inference")));
@@ -241,7 +241,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_Raw_WithSetProperties()
 	{
-		var builder = new LogEntryMappingsBuilder()
+		var builder = new MappingsBuilder<LogEntry>()
 			.AddField("custom", f => f.Raw("dense_vector")
 				.Set("dims", 768)
 				.Set("similarity", "cosine")
@@ -268,7 +268,7 @@ public class MappingsBuilderTests
 			["search_inference_id"] = "my-search-elser"
 		};
 
-		var builder = new LogEntryMappingsBuilder()
+		var builder = new MappingsBuilder<LogEntry>()
 			.AddField("semantic_body", f => f.Raw("semantic_text").Properties(props));
 
 		var overrides = builder.Build();
@@ -285,7 +285,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_Raw_MultiField()
 	{
-		var builder = new LogEntryMappingsBuilder()
+		var builder = new MappingsBuilder<LogEntry>()
 			.Message(f => f
 				.Analyzer("custom")
 				.MultiField("raw_sub", mf => mf.Raw("token_count").Set("analyzer", "standard")));
@@ -304,7 +304,7 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_Raw_WithMultiFields()
 	{
-		var builder = new LogEntryMappingsBuilder()
+		var builder = new MappingsBuilder<LogEntry>()
 			.AddField("body", f => f.Raw("text")
 				.Set("analyzer", "standard")
 				.MultiField("keyword", mf => mf.Keyword())

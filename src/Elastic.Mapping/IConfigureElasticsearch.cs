@@ -10,24 +10,24 @@ using Elastic.Mapping.Mappings;
 namespace Elastic.Mapping;
 
 /// <summary>
-/// Static interface for configuring Elasticsearch analysis and mappings on a domain type.
-/// Types implementing this interface can provide ConfigureAnalysis and/or ConfigureMappings
-/// methods that the source generator will detect and wire up automatically.
+/// Interface for configuring Elasticsearch analysis, mappings, and index settings for a document type.
+/// Implement this on a configuration class referenced via <c>Configuration = typeof(...)</c> on the
+/// <see cref="EntityAttribute{T}"/>, or directly on the entity type as a fallback.
+/// Uses default interface methods so implementors only need to override what they customize.
 /// </summary>
-/// <typeparam name="TBuilder">The type-specific mappings builder.</typeparam>
-public interface IConfigureElasticsearch<TBuilder>
-	where TBuilder : MappingsBuilderBase<TBuilder>
+/// <typeparam name="TDocument">The document type being configured.</typeparam>
+public interface IConfigureElasticsearch<TDocument> where TDocument : class
 {
 	/// <summary>Configures custom analysis components (analyzers, tokenizers, filters).</summary>
-	static virtual AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) => analysis;
+	AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) => analysis;
 
 	/// <summary>Configures custom field mappings, runtime fields, and dynamic templates.</summary>
-	static virtual TBuilder ConfigureMappings(TBuilder mappings) => mappings;
+	MappingsBuilder<TDocument> ConfigureMappings(MappingsBuilder<TDocument> mappings) => mappings;
 
 	/// <summary>
 	/// Additional index settings to include in the settings component template
 	/// (e.g. <c>index.default_pipeline</c>).
 	/// </summary>
-	static virtual IReadOnlyDictionary<string, string>? IndexSettings => null;
+	IReadOnlyDictionary<string, string>? IndexSettings => null;
 }
 #endif

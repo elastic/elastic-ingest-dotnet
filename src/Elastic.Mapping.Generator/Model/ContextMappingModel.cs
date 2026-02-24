@@ -29,8 +29,12 @@ internal sealed record TypeRegistration(
 	IngestPropertyModel IngestProperties,
 	string? ConfigurationClassName,
 	string? ConfigureAnalysisReference,
-	string? ConfigureMappingsReference,
-	string? ConfigureMappingsBuilderType,
+	bool HasConfigureMappings,
+	/// <summary>
+	/// When set, a context-level static method reference for ConfigureMappings (legacy path).
+	/// When null and <see cref="HasConfigureMappings"/> is true, the interface path is used.
+	/// </summary>
+	string? ContextConfigureMappingsReference,
 	AnalysisComponentsModel AnalysisComponents,
 	string? Variant = null,
 	string? IndexSettingsReference = null

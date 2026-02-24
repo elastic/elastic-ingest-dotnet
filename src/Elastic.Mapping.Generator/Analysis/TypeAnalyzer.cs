@@ -463,20 +463,28 @@ internal static class TypeAnalyzer
 
 	internal static string ToKebabCaseUpper(string name) => ToKebabCaseLower(name).ToUpperInvariant();
 
+	private const string ConfigureElasticsearchInterfacePrefix = "Elastic.Mapping.IConfigureElasticsearch<";
+
 	private static (bool HasConfigureAnalysis, bool HasConfigureMappings, string? MappingsBuilderTypeName) DetectConfigureMethods(INamedTypeSymbol typeSymbol)
 	{
-		var hasConfigureAnalysis = typeSymbol.GetMembers("ConfigureAnalysis")
-			.OfType<IMethodSymbol>()
-			.Any(m => m.IsStatic && m.Parameters.Length == 1);
+		// Check if the type implements IConfigureElasticsearch<T>
+		var implementsInterface = typeSymbol.AllInterfaces
+			.Any(i => i.ToDisplayString().StartsWith(ConfigureElasticsearchInterfacePrefix, StringComparison.Ordinal));
+
+		// Check for static methods (legacy) or instance methods (interface)
+		var hasConfigureAnalysis = implementsInterface ||
+			typeSymbol.GetMembers("ConfigureAnalysis")
+				.OfType<IMethodSymbol>()
+				.Any(m => m.IsStatic && m.Parameters.Length == 1);
 
 		var configureMappingsMethod = typeSymbol.GetMembers("ConfigureMappings")
 			.OfType<IMethodSymbol>()
-			.FirstOrDefault(m => m.IsStatic && m.Parameters.Length == 1);
+			.FirstOrDefault(m => m.Parameters.Length == 1);
 
-		var hasConfigureMappings = configureMappingsMethod != null;
+		var hasConfigureMappings = implementsInterface || configureMappingsMethod != null;
 		string? mappingsBuilderTypeName = null;
 
-		if (hasConfigureMappings && configureMappingsMethod != null)
+		if (configureMappingsMethod != null)
 		{
 			var parameterType = configureMappingsMethod.Parameters[0].Type;
 			mappingsBuilderTypeName = parameterType.Name;

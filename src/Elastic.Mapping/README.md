@@ -123,30 +123,79 @@ Control how properties map to Elasticsearch field types:
 
 Properties without attributes are inferred from their CLR type (`string` -> `keyword`, `int` -> `integer`, `DateTime` -> `date`, etc.).
 
-## Analysis Configuration
+## Custom Configuration with `IConfigureElasticsearch<T>`
 
-Build custom analyzers, tokenizers, and filters with a fluent API:
+Implement `IConfigureElasticsearch<T>` to configure analysis, mappings, and index settings for a document type. There are two ways to wire this up:
+
+### Option A: Dedicated configuration class
+
+Create a separate class that implements the interface and reference it via `Configuration = typeof(...)`:
 
 ```csharp
-public static class ProductConfig
+public class ProductConfig : IConfigureElasticsearch<Product>
 {
-    public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) => analysis
+    public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) => analysis
         .Analyzer("product_search", a => a.Custom()
             .Tokenizer(BuiltIn.Tokenizers.Standard)
-            .Filter(BuiltIn.TokenFilters.Lowercase, "english_stemmer", "edge_ngram_3_8"))
+            .Filters(BuiltIn.TokenFilters.Lowercase, "english_stemmer", "edge_ngram_3_8"))
         .TokenFilter("english_stemmer", f => f.Stemmer()
             .Language(BuiltIn.StemmerLanguages.English))
         .TokenFilter("edge_ngram_3_8", f => f.EdgeNGram()
             .MinGram(3).MaxGram(8));
 
-    public static ProductMappingsBuilder ConfigureMappings(ProductMappingsBuilder m) => m
+    public MappingsBuilder<Product> ConfigureMappings(MappingsBuilder<Product> mappings) => mappings
+        .Name(f => f.Analyzer("product_search")
+            .MultiField("keyword", mf => mf.Keyword().IgnoreAbove(256)));
+
+    public IReadOnlyDictionary<string, string> IndexSettings => new Dictionary<string, string>
+    {
+        ["index.default_pipeline"] = "product-enrichment"
+    };
+}
+
+[ElasticsearchMappingContext]
+[Index<Product>(Name = "products", Configuration = typeof(ProductConfig))]
+public static partial class MyContext;
+```
+
+### Option B: Self-configuring entity
+
+If you prefer to keep configuration on the entity itself, implement the interface directly:
+
+```csharp
+public class Product : IConfigureElasticsearch<Product>
+{
+    [Keyword]
+    public string Id { get; set; }
+
+    [Text(Analyzer = "product_search")]
+    public string Name { get; set; }
+
+    public double Price { get; set; }
+
+    public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) => analysis
+        .Analyzer("product_search", a => a.Custom()
+            .Tokenizer(BuiltIn.Tokenizers.Standard)
+            .Filters(BuiltIn.TokenFilters.Lowercase));
+
+    public MappingsBuilder<Product> ConfigureMappings(MappingsBuilder<Product> mappings) => mappings
         .Name(f => f.Analyzer("product_search")
             .MultiField("keyword", mf => mf.Keyword().IgnoreAbove(256)));
 }
 
-// Reference it from the context attribute:
-[Index<Product>(Name = "products", Configuration = typeof(ProductConfig))]
+// No Configuration needed -- the generator detects the interface on the entity itself
+[ElasticsearchMappingContext]
+[Index<Product>(Name = "products")]
+public static partial class MyContext;
 ```
+
+All three interface members use default implementations, so you only need to override what you customize:
+
+| Member               | Default    | Purpose                                            |
+|----------------------|------------|----------------------------------------------------|
+| `ConfigureAnalysis`  | no-op      | Custom analyzers, tokenizers, filters              |
+| `ConfigureMappings`  | no-op      | Field overrides, runtime fields, dynamic templates |
+| `IndexSettings`      | `null`     | Additional index settings (e.g. `default_pipeline`)|
 
 The generated `ProductAnalysis` class gives you type-safe constants for your custom components:
 
@@ -154,6 +203,20 @@ The generated `ProductAnalysis` class gives you type-safe constants for your cus
 MyContext.Product.Analysis.Analyzers.ProductSearch     // "product_search"
 MyContext.Product.Analysis.TokenFilters.EnglishStemmer  // "english_stemmer"
 ```
+
+### Dependency Injection
+
+If your configuration class needs services (e.g. to read settings from `IConfiguration`), call `RegisterServiceProvider` before first access to mapping JSON:
+
+```csharp
+// In your startup / Program.cs
+services.AddSingleton<IConfigureElasticsearch<Product>, ProductConfig>();
+
+var sp = services.BuildServiceProvider();
+MyContext.RegisterServiceProvider(sp);
+```
+
+When no `IServiceProvider` is registered (or the service isn't found), the generator falls back to `new ProductConfig()` (parameterless constructor).
 
 ## Index Strategies
 
@@ -187,10 +250,10 @@ MyContext.Product.Analysis.TokenFilters.EnglishStemmer  // "english_stemmer"
 
 ## Mappings Builder
 
-The source generator creates a typed builder for each registered type. Customize mappings at the property level with full IntelliSense:
+The source generator creates extension methods on `MappingsBuilder<T>` for each property on your registered types. Customize mappings at the property level with full IntelliSense:
 
 ```csharp
-public static ProductMappingsBuilder ConfigureMappings(ProductMappingsBuilder m) => m
+public MappingsBuilder<Product> ConfigureMappings(MappingsBuilder<Product> mappings) => mappings
     .Name(f => f.Analyzer("product_search"))
     .Price(f => f.DocValues(true))
     .AddRuntimeField("discount_pct", r => r.Double()
@@ -210,6 +273,6 @@ For each registered type, the source generator produces:
 - **Settings + mappings JSON** -- pre-computed, ready for index creation
 - **Content hashes** -- detect when mappings change
 - **Analysis accessors** -- type-safe constants for custom analyzers/filters
-- **Mappings builder** -- per-property fluent API for customization
+- **Mappings builder extensions** -- per-property fluent API on `MappingsBuilder<T>` for customization
 
 All generated at compile time. Zero reflection at runtime. AOT compatible. Aligned with your `System.Text.Json` configuration.

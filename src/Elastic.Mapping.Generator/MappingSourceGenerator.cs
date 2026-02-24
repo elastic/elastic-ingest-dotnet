@@ -23,6 +23,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 	private const string IndexAttributePrefix = "Elastic.Mapping.IndexAttribute<";
 	private const string DataStreamAttributePrefix = "Elastic.Mapping.DataStreamAttribute<";
 	private const string WiredStreamAttributePrefix = "Elastic.Mapping.WiredStreamAttribute<";
+	private const string ConfigureElasticsearchInterfacePrefix = "Elastic.Mapping.IConfigureElasticsearch<";
 
 	// Ingest property attribute names
 	private const string IdAttributeName = "Elastic.Mapping.IdAttribute";
@@ -41,7 +42,10 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			.Where(static model => model != null)
 			.Select(static (model, _) => model!);
 
-		context.RegisterSourceOutput(contextDeclarations, static (ctx, model) => ExecuteContext(ctx, model));
+		// Collect all contexts so we can deduplicate extension method generation
+		// across contexts that register the same document type in the same namespace.
+		var allContexts = contextDeclarations.Collect();
+		context.RegisterSourceOutput(allContexts, static (ctx, models) => ExecuteAll(ctx, models));
 	}
 
 	private static bool IsCandidateContextClass(SyntaxNode node)
@@ -49,15 +53,12 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		if (node is not TypeDeclarationSyntax typeDecl)
 			return false;
 
-		// Must be partial
 		if (!typeDecl.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)))
 			return false;
 
-		// Must have at least one attribute
 		if (typeDecl.AttributeLists.Count == 0)
 			return false;
 
-		// Quick check for the mapping context attribute
 		foreach (var attrList in typeDecl.AttributeLists)
 		{
 			foreach (var attr in attrList.Attributes)
@@ -79,21 +80,18 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		if (symbol is not INamedTypeSymbol contextSymbol)
 			return null;
 
-		// Verify it has [ElasticsearchMappingContext]
 		var contextAttr = contextSymbol.GetAttributes()
 			.FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == ElasticsearchMappingContextAttributeName);
 
 		if (contextAttr == null)
 			return null;
 
-		// Extract JsonContext type from the attribute
 		INamedTypeSymbol? jsonContextSymbol = null;
 		var jsonContextArg = contextAttr.NamedArguments
 			.FirstOrDefault(a => a.Key == "JsonContext");
 		if (jsonContextArg.Key != null && jsonContextArg.Value.Value is INamedTypeSymbol jcs)
 			jsonContextSymbol = jcs;
 
-		// Analyze STJ context if provided
 		var stjConfig = StjContextAnalyzer.Analyze(jsonContextSymbol);
 
 		var registrations = ImmutableArray.CreateBuilder<TypeRegistration>();
@@ -275,6 +273,16 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			prop.Name,
 			stjConfig?.PropertyNamingPolicy ?? Model.NamingPolicy.Unspecified);
 
+	/// <summary>
+	/// Checks whether the given type implements IConfigureElasticsearch&lt;TDocument&gt;
+	/// for the specified document type.
+	/// </summary>
+	private static bool ImplementsConfigureElasticsearch(INamedTypeSymbol typeSymbol, INamedTypeSymbol documentType)
+	{
+		var expectedInterface = $"{ConfigureElasticsearchInterfacePrefix}{documentType.ToDisplayString()}>";
+		return typeSymbol.AllInterfaces.Any(i => i.ToDisplayString() == expectedInterface);
+	}
+
 	private static TypeRegistration? BuildTypeRegistration(
 		INamedTypeSymbol targetType,
 		INamedTypeSymbol contextSymbol,
@@ -292,24 +300,15 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		if (typeModel == null)
 			return null;
 
-		// Check configuration class for methods (priority 2)
-		IMethodSymbol? configClassAnalysis = null;
-		IMethodSymbol? configClassMappings = null;
-		if (configTypeSymbol != null)
-		{
-			configClassAnalysis = configTypeSymbol.GetMembers("ConfigureAnalysis")
-				.OfType<IMethodSymbol>()
-				.FirstOrDefault(m => m.IsStatic && m.Parameters.Length == 1);
+		// Resolve the IConfigureElasticsearch<T> implementation.
+		// Priority:
+		//   1. Context-level methods (Configure{ResolverName}Analysis / Configure{ResolverName}Mappings)
+		//   2. Configuration class (from attribute) implementing IConfigureElasticsearch<T>
+		//   3. Entity type itself implementing IConfigureElasticsearch<T>
 
-			configClassMappings = configTypeSymbol.GetMembers("ConfigureMappings")
-				.OfType<IMethodSymbol>()
-				.FirstOrDefault(m => m.IsStatic && m.Parameters.Length == 1);
-		}
-
-		// Check for Configure{ResolverName}Analysis/Configure{ResolverName}Mappings on the context class (priority 1)
-		// When a Variant is set, try the variant-suffixed name first, then fall back to TypeName
 		var resolverName = string.IsNullOrEmpty(variant) ? targetType.Name : $"{targetType.Name}{variant}";
 
+		// --- Priority 1: Context-level methods ---
 		var contextConfigureAnalysis = contextSymbol
 			.GetMembers($"Configure{resolverName}Analysis")
 			.OfType<IMethodSymbol>()
@@ -336,12 +335,34 @@ public class MappingSourceGenerator : IIncrementalGenerator
 				.FirstOrDefault(m => m.IsStatic && m.Parameters.Length == 1);
 		}
 
-		// Check for ConfigureAnalysis/ConfigureMappings on the target type itself (priority 3 / fallback)
+		// --- Priority 2: Configuration class implementing IConfigureElasticsearch<T> ---
+		bool configClassImplementsInterface = false;
+		if (configTypeSymbol != null)
+			configClassImplementsInterface = ImplementsConfigureElasticsearch(configTypeSymbol, targetType);
+
+		// Legacy fallback: static methods on the config class (for backward compat)
+		IMethodSymbol? configClassAnalysis = null;
+		IMethodSymbol? configClassMappings = null;
+		if (configTypeSymbol != null && !configClassImplementsInterface)
+		{
+			configClassAnalysis = configTypeSymbol.GetMembers("ConfigureAnalysis")
+				.OfType<IMethodSymbol>()
+				.FirstOrDefault(m => m.IsStatic && m.Parameters.Length == 1);
+
+			configClassMappings = configTypeSymbol.GetMembers("ConfigureMappings")
+				.OfType<IMethodSymbol>()
+				.FirstOrDefault(m => m.IsStatic && m.Parameters.Length == 1);
+		}
+
+		// --- Priority 3: Entity type itself implementing IConfigureElasticsearch<T> ---
+		var entityImplementsInterface = ImplementsConfigureElasticsearch(targetType, targetType);
+
+		// --- Detect Configure* methods on the type itself (legacy fallback) ---
 		var hasConfigureAnalysisOnType = typeModel.HasConfigureAnalysis;
 		var hasConfigureMappingsOnType = typeModel.HasConfigureMappings;
 
-		// Build ConfigureAnalysis reference and parse analysis components
-		// Priority: context > configuration class > type
+		// --- Build ConfigureAnalysis reference ---
+		// Priority: context > config class (interface) > config class (legacy static) > entity (interface) > entity (legacy static)
 		string? configureAnalysisRef = null;
 		AnalysisComponentsModel analysisComponents;
 
@@ -350,10 +371,22 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			configureAnalysisRef = $"global::{contextSymbol.ToDisplayString()}.{contextConfigureAnalysis.Name}";
 			analysisComponents = ConfigureAnalysisParser.ParseFromMethod(contextConfigureAnalysis, ct);
 		}
+		else if (configClassImplementsInterface)
+		{
+			configureAnalysisRef = $"_configureElasticsearch_ConfigureAnalysis";
+			analysisComponents = configTypeSymbol != null
+				? ParseAnalysisFromConfigureMethod(configTypeSymbol, ct)
+				: AnalysisComponentsModel.Empty;
+		}
 		else if (configClassAnalysis != null)
 		{
 			configureAnalysisRef = $"global::{configTypeSymbol!.ToDisplayString()}.ConfigureAnalysis";
 			analysisComponents = ConfigureAnalysisParser.ParseFromMethod(configClassAnalysis, ct);
+		}
+		else if (entityImplementsInterface)
+		{
+			configureAnalysisRef = $"_configureElasticsearch_ConfigureAnalysis";
+			analysisComponents = ParseAnalysisFromConfigureMethod(targetType, ct);
 		}
 		else if (hasConfigureAnalysisOnType)
 		{
@@ -365,33 +398,21 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			analysisComponents = AnalysisComponentsModel.Empty;
 		}
 
-		// Build ConfigureMappings reference
-		// Priority: context > configuration class > type
-		string? configureMappingsRef = null;
-		string? configureMappingsBuilderType = null;
-		var contextNamespace = contextSymbol.ContainingNamespace.ToDisplayString();
+		// --- Build ConfigureMappings info ---
+		bool hasConfigureMappings =
+			contextConfigureMappings != null ||
+			configClassImplementsInterface ||
+			configClassMappings != null ||
+			entityImplementsInterface ||
+			hasConfigureMappingsOnType;
 
-		if (contextConfigureMappings != null)
-		{
-			configureMappingsRef = $"global::{contextSymbol.ToDisplayString()}.{contextConfigureMappings.Name}";
-			configureMappingsBuilderType = QualifyBuilderType(contextConfigureMappings.Parameters[0].Type, contextNamespace);
-		}
-		else if (configClassMappings != null)
-		{
-			configureMappingsRef = $"global::{configTypeSymbol!.ToDisplayString()}.ConfigureMappings";
-			configureMappingsBuilderType = QualifyBuilderType(configClassMappings.Parameters[0].Type, contextNamespace);
-		}
-		else if (hasConfigureMappingsOnType)
-		{
-			configureMappingsRef = $"global::{targetType.ToDisplayString()}.ConfigureMappings";
-			var configureMappingsOnType = targetType.GetMembers("ConfigureMappings")
-				.OfType<IMethodSymbol>()
-				.First(m => m.IsStatic && m.Parameters.Length == 1);
-			configureMappingsBuilderType = QualifyBuilderType(configureMappingsOnType.Parameters[0].Type, contextNamespace);
-		}
+		// Context-level static method reference (only set for context-level methods)
+		string? contextConfigureMappingsRef = contextConfigureMappings != null
+			? $"global::{contextSymbol.ToDisplayString()}.{contextConfigureMappings.Name}"
+			: null;
 
-		// Detect IndexSettings property
-		// Priority: context > configuration class > type
+		// --- Detect IndexSettings ---
+		// Priority: context > configuration class (interface) > configuration class (legacy) > entity
 		string? indexSettingsRef = null;
 
 		var contextIndexSettings = contextSymbol
@@ -411,6 +432,10 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		{
 			indexSettingsRef = $"global::{contextSymbol.ToDisplayString()}.{contextIndexSettings.Name}";
 		}
+		else if (configClassImplementsInterface || entityImplementsInterface)
+		{
+			indexSettingsRef = "_configureElasticsearch_IndexSettings";
+		}
 		else if (configTypeSymbol != null)
 		{
 			var configIndexSettings = configTypeSymbol.GetMembers("IndexSettings")
@@ -429,6 +454,13 @@ public class MappingSourceGenerator : IIncrementalGenerator
 				indexSettingsRef = $"global::{targetType.ToDisplayString()}.IndexSettings";
 		}
 
+		// Determine the actual configuration class name for the interface path.
+		// When the entity itself implements the interface and no explicit Configuration is set,
+		// use the entity type as the configuration class.
+		var resolvedConfigClassName = configClassName;
+		if (resolvedConfigClassName == null && entityImplementsInterface)
+			resolvedConfigClassName = targetType.ToDisplayString();
+
 		return new TypeRegistration(
 			targetType.Name,
 			targetType.ToDisplayString(),
@@ -437,47 +469,53 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			dataStreamConfig,
 			entityConfig,
 			ingestProperties,
-			configClassName,
+			resolvedConfigClassName,
 			configureAnalysisRef,
-			configureMappingsRef,
-			configureMappingsBuilderType,
+			hasConfigureMappings,
+			contextConfigureMappingsRef,
 			analysisComponents,
 			variant,
 			indexSettingsRef
 		);
 	}
 
-	private static void ExecuteContext(SourceProductionContext context, ContextMappingModel model)
+	private static AnalysisComponentsModel ParseAnalysisFromConfigureMethod(INamedTypeSymbol typeSymbol, CancellationToken ct)
 	{
-		// Generate the context class with nested resolvers
-		var contextSource = ContextEmitter.Emit(model);
-		context.AddSource($"{model.ContextTypeName}.g.cs", contextSource);
-
-		// Generate per-type MappingsBuilder classes
-		foreach (var reg in model.TypeRegistrations)
-		{
-			var mappingsBuilderSource = MappingsBuilderEmitter.EmitForContext(model, reg);
-			context.AddSource($"{model.ContextTypeName}.{reg.ResolverName}MappingsBuilder.g.cs", mappingsBuilderSource);
-
-			// Generate analysis names if there are analysis components
-			var analysisNamesSource = AnalysisNamesEmitter.EmitForContext(model, reg);
-			if (analysisNamesSource != null)
-				context.AddSource($"{model.ContextTypeName}.{reg.ResolverName}Analysis.g.cs", analysisNamesSource);
-		}
+		var method = typeSymbol.GetMembers("ConfigureAnalysis")
+			.OfType<IMethodSymbol>()
+			.FirstOrDefault(m => m.Parameters.Length == 1);
+		return method != null
+			? ConfigureAnalysisParser.ParseFromMethod(method, ct)
+			: AnalysisComponentsModel.Empty;
 	}
 
-	/// <summary>
-	/// Builder types are source-generated in the context namespace. When the compiler can't
-	/// resolve them (error type), ToDisplayString returns just the simple name without namespace.
-	/// This method qualifies the type with the context namespace in that case.
-	/// </summary>
-	private static string QualifyBuilderType(ITypeSymbol paramType, string contextNamespace)
+	private static void ExecuteAll(SourceProductionContext context, ImmutableArray<ContextMappingModel> models)
 	{
-		var display = paramType.ToDisplayString();
-		// Error types (generated by this generator) won't have a containing namespace
-		if (paramType.TypeKind == TypeKind.Error || !display.Contains('.'))
-			return $"global::{contextNamespace}.{display}";
-		return $"global::{display}";
+		// Track emitted extension classes globally across all contexts to avoid
+		// duplicate definitions when the same document type is registered in
+		// multiple contexts within the same namespace.
+		var emittedExtensionKeys = new HashSet<string>();
+
+		foreach (var model in models)
+		{
+			var contextSource = ContextEmitter.Emit(model);
+			context.AddSource($"{model.ContextTypeName}.g.cs", contextSource);
+
+			foreach (var reg in model.TypeRegistrations)
+			{
+				// Key by namespace + type FQN to deduplicate across contexts in the same namespace
+				var extensionKey = $"{model.Namespace}.{reg.TypeFullyQualifiedName}";
+				if (emittedExtensionKeys.Add(extensionKey))
+				{
+					var mappingsExtensionsSource = MappingsBuilderEmitter.EmitForContext(model, reg);
+					context.AddSource($"{model.ContextTypeName}.{reg.TypeName}MappingsExtensions.g.cs", mappingsExtensionsSource);
+				}
+
+				var analysisNamesSource = AnalysisNamesEmitter.EmitForContext(model, reg);
+				if (analysisNamesSource != null)
+					context.AddSource($"{model.ContextTypeName}.{reg.ResolverName}Analysis.g.cs", analysisNamesSource);
+			}
+		}
 	}
 
 	private static T? GetNamedArg<T>(AttributeData attr, string name, T? defaultValue = default)
@@ -495,7 +533,6 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		if (arg.Key == null)
 			return defaultValue;
 
-		// Enum values come as int, need to get the field name
 		if (arg.Value.Value is int intValue)
 		{
 			var enumType = arg.Value.Type;

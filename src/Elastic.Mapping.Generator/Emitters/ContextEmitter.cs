@@ -13,6 +13,9 @@ namespace Elastic.Mapping.Generator.Emitters;
 /// </summary>
 internal static class ContextEmitter
 {
+	private const string MappingsBuilderFqn = "global::Elastic.Mapping.Mappings.MappingsBuilder";
+	private const string IConfigureElasticsearchFqn = "global::Elastic.Mapping.IConfigureElasticsearch";
+
 	private static readonly HashSet<string> WellKnownPlaceholders = new(StringComparer.OrdinalIgnoreCase)
 	{
 		"env", "environment", "namespace"
@@ -97,16 +100,47 @@ internal static class ContextEmitter
 		sb.AppendLine("\tpublic static global::Elastic.Mapping.IElasticsearchMappingContext Instance { get; } = new _MappingContext();");
 		sb.AppendLine();
 
+		// Emit RegisterServiceProvider
+		EmitRegisterServiceProvider(sb, model, "\t");
+		sb.AppendLine();
+
 		// Emit _MappingContext nested class
 		EmitMappingContextClass(sb, model, "\t");
 
 		sb.AppendLine("}");
 	}
 
+	private static void EmitRegisterServiceProvider(StringBuilder sb, ContextMappingModel model, string indent)
+	{
+		var registrationsWithConfig = model.TypeRegistrations
+			.Where(r => r.ConfigurationClassName != null)
+			.ToList();
+
+		if (registrationsWithConfig.Count == 0)
+			return;
+
+		sb.AppendLine($"{indent}/// <summary>");
+		sb.AppendLine($"{indent}/// Registers an <see cref=\"global::System.IServiceProvider\"/> to resolve");
+		sb.AppendLine($"{indent}/// <see cref=\"{IConfigureElasticsearchFqn}{{TDocument}}\"/> implementations from DI.");
+		sb.AppendLine($"{indent}/// Call before first access to mapping JSON for DI-based configuration to take effect.");
+		sb.AppendLine($"{indent}/// </summary>");
+		sb.AppendLine($"{indent}public static void RegisterServiceProvider(global::System.IServiceProvider serviceProvider)");
+		sb.AppendLine($"{indent}{{");
+
+		foreach (var reg in registrationsWithConfig)
+		{
+			var typeFqn = reg.TypeFullyQualifiedName;
+			sb.AppendLine($"{indent}\t{reg.ResolverName}Resolver._configOverride = serviceProvider.GetService(typeof({IConfigureElasticsearchFqn}<global::{typeFqn}>)) as {IConfigureElasticsearchFqn}<global::{typeFqn}>;");
+		}
+
+		sb.AppendLine($"{indent}}}");
+	}
+
 	private static void EmitResolverClass(StringBuilder sb, ContextMappingModel model, TypeRegistration reg, string indent)
 	{
 		var typeModel = reg.TypeModel;
 		var typeFqn = reg.TypeFullyQualifiedName;
+		var configInterfaceType = $"{IConfigureElasticsearchFqn}<global::{typeFqn}>";
 
 		var settingsJson = SharedEmitterHelpers.GenerateSettingsJson(typeModel);
 		var mappingsJson = SharedEmitterHelpers.GenerateMappingsJson(typeModel);
@@ -116,6 +150,7 @@ internal static class ContextEmitter
 		var mappingsHash = SharedEmitterHelpers.ComputeHash(mappingsJson);
 		var combinedHash = SharedEmitterHelpers.ComputeHash(indexJson);
 
+		var hasInterfaceConfig = reg.ConfigurationClassName != null;
 		var templated = IsTemplated(reg);
 
 		sb.AppendLine($"{indent}/// <summary>Generated Elasticsearch resolver for {reg.ResolverName}.</summary>");
@@ -125,7 +160,14 @@ internal static class ContextEmitter
 			sb.AppendLine($"{indent}public sealed class {reg.ResolverName}Resolver : global::Elastic.Mapping.IStaticMappingResolver<global::{typeFqn}>");
 		sb.AppendLine($"{indent}{{");
 
-		// Hashes as instance properties backed by constants
+		// Config override field for DI
+		if (hasInterfaceConfig)
+		{
+			sb.AppendLine($"{indent}\tinternal static {configInterfaceType}? _configOverride;");
+			sb.AppendLine();
+		}
+
+		// Hashes
 		sb.AppendLine($"{indent}\tprivate const string _hash = \"{combinedHash}\";");
 		sb.AppendLine($"{indent}\tprivate const string _settingsHash = \"{settingsHash}\";");
 		sb.AppendLine($"{indent}\tprivate const string _mappingsHash = \"{mappingsHash}\";");
@@ -133,6 +175,33 @@ internal static class ContextEmitter
 		var contextFieldName = templated ? "_baseContext" : "Context";
 		var contextVisibility = templated ? "private" : "public";
 
+		// Emit helper to get the config instance
+		if (hasInterfaceConfig)
+		{
+			sb.AppendLine($"{indent}\tprivate static {configInterfaceType} _GetConfig() =>");
+			sb.AppendLine($"{indent}\t\t_configOverride ?? new global::{reg.ConfigurationClassName}();");
+			sb.AppendLine();
+		}
+
+		// Emit _configureElasticsearch_* helper references if using interface path
+		if (hasInterfaceConfig)
+		{
+			if (reg.ConfigureAnalysisReference == "_configureElasticsearch_ConfigureAnalysis")
+			{
+				sb.AppendLine($"{indent}\tprivate static global::Elastic.Mapping.Analysis.AnalysisBuilder _configureElasticsearch_ConfigureAnalysis(global::Elastic.Mapping.Analysis.AnalysisBuilder a) =>");
+				sb.AppendLine($"{indent}\t\t_GetConfig().ConfigureAnalysis(a);");
+				sb.AppendLine();
+			}
+
+			if (reg.IndexSettingsReference == "_configureElasticsearch_IndexSettings")
+			{
+				sb.AppendLine($"{indent}\tprivate static global::System.Collections.Generic.IReadOnlyDictionary<string, string>? _configureElasticsearch_IndexSettings =>");
+				sb.AppendLine($"{indent}\t\t_GetConfig().IndexSettings;");
+				sb.AppendLine();
+			}
+		}
+
+		// Context instance
 		if (templated)
 			sb.AppendLine($"{indent}\t/// <summary>Base context with mappings and settings. Use <see cref=\"CreateContext\"/> to resolve the name template.</summary>");
 		else
@@ -151,17 +220,12 @@ internal static class ContextEmitter
 		EmitSearchStrategyInit(sb, reg, indent + "\t\t");
 		sb.AppendLine(",");
 
-		// EntityTarget (required)
 		sb.AppendLine($"{indent}\t\tglobal::Elastic.Mapping.EntityTarget.{reg.EntityConfig.EntityTarget},");
-
-		// DataStreamMode
 		sb.AppendLine($"{indent}\t\tDataStreamMode: global::Elastic.Mapping.DataStreamMode.{reg.EntityConfig.DataStreamMode},");
 
-		// Accessor delegates for [Id], [ContentHash], [Timestamp]
 		EmitAccessorDelegate(sb, reg.IngestProperties.IdPropertyName, typeFqn, "GetId", false, indent + "\t\t");
 		EmitAccessorDelegate(sb, reg.IngestProperties.ContentHashPropertyName, typeFqn, "GetContentHash", false, indent + "\t\t");
 
-		// ContentHashFieldName
 		if (reg.IngestProperties.ContentHashFieldName != null)
 			sb.AppendLine($"{indent}\t\tContentHashFieldName: \"{reg.IngestProperties.ContentHashFieldName}\",");
 		else
@@ -175,7 +239,6 @@ internal static class ContextEmitter
 		else
 			sb.AppendLine($"{indent}\t\tConfigureAnalysis: null,");
 
-		// MappedType
 		sb.AppendLine($"{indent}\t\tMappedType: typeof(global::{typeFqn}),");
 
 		// IndexSettings
@@ -187,7 +250,7 @@ internal static class ContextEmitter
 		sb.AppendLine($"{indent}\t);");
 		sb.AppendLine();
 
-		// Instance accessors for hashes
+		// Hash accessors
 		sb.AppendLine($"{indent}\t/// <summary>Combined hash of settings and mappings.</summary>");
 		sb.AppendLine($"{indent}\tpublic string Hash => _hash;");
 		sb.AppendLine();
@@ -198,14 +261,14 @@ internal static class ContextEmitter
 		sb.AppendLine($"{indent}\tpublic string MappingsHash => _mappingsHash;");
 		sb.AppendLine();
 
-		// Strategies as instance properties
+		// Strategies
 		EmitIndexStrategy(sb, reg, indent + "\t");
 		EmitSearchStrategy(sb, reg, indent + "\t");
 
-		// JSON methods as instance methods (static backing)
+		// JSON methods
 		EmitJsonMethods(sb, settingsJson, mappingsJson, indexJson, reg, indent + "\t");
 
-		// Fields, FieldMapping, IgnoredProperties, GetPropertyMap as instance-accessible
+		// Fields, FieldMapping, IgnoredProperties, GetPropertyMap
 		SharedEmitterHelpers.EmitFieldsClass(sb, typeModel, indent + "\t");
 		SharedEmitterHelpers.EmitFieldMappingClass(sb, typeModel, indent + "\t");
 		SharedEmitterHelpers.EmitIgnoredProperties(sb, typeModel, indent + "\t");
@@ -304,7 +367,6 @@ internal static class ContextEmitter
 		var ingest = reg.IngestProperties;
 		sb.AppendLine();
 
-		// SetBatchIndexDate
 		if (ingest.BatchIndexDatePropertyName != null)
 		{
 			sb.AppendLine($"{indent}/// <inheritdoc />");
@@ -318,7 +380,6 @@ internal static class ContextEmitter
 		}
 		sb.AppendLine();
 
-		// SetLastUpdated
 		if (ingest.LastUpdatedPropertyName != null)
 		{
 			sb.AppendLine($"{indent}/// <inheritdoc />");
@@ -332,14 +393,12 @@ internal static class ContextEmitter
 		}
 		sb.AppendLine();
 
-		// BatchIndexDateFieldName
 		if (ingest.BatchIndexDateFieldName != null)
 			sb.AppendLine($"{indent}/// <inheritdoc />\n{indent}public string? BatchIndexDateFieldName => \"{ingest.BatchIndexDateFieldName}\";");
 		else
 			sb.AppendLine($"{indent}/// <inheritdoc />\n{indent}public string? BatchIndexDateFieldName => null;");
 		sb.AppendLine();
 
-		// LastUpdatedFieldName
 		if (ingest.LastUpdatedFieldName != null)
 			sb.AppendLine($"{indent}/// <inheritdoc />\n{indent}public string? LastUpdatedFieldName => \"{ingest.LastUpdatedFieldName}\";");
 		else
@@ -364,7 +423,6 @@ internal static class ContextEmitter
 	{
 		if (propertyName != null && propertyType != null)
 		{
-			// Handle different timestamp types - convert to DateTimeOffset?
 			if (propertyType == "System.DateTimeOffset" || propertyType == "System.DateTimeOffset?")
 			{
 				sb.AppendLine($"{indent}GetTimestamp: static (obj) => ((global::{typeFqn})obj).{propertyName},");
@@ -399,14 +457,9 @@ internal static class ContextEmitter
 		sb.AppendLine($"{indent}{{");
 
 		if (reg.DataStreamConfig != null)
-		{
-			var ds = reg.DataStreamConfig;
-			EmitDataStreamProperties(sb, ds, indent);
-		}
+			EmitDataStreamProperties(sb, reg.DataStreamConfig, indent);
 		else if (reg.IndexConfig != null)
-		{
 			EmitIndexProperties(sb, reg.IndexConfig, indent);
-		}
 
 		sb.AppendLine($"{indent}}};");
 		sb.AppendLine();
@@ -419,13 +472,9 @@ internal static class ContextEmitter
 		sb.AppendLine($"{indent}{{");
 
 		if (reg.DataStreamConfig != null)
-		{
 			sb.AppendLine($"{indent}\tPattern = \"{reg.DataStreamConfig.SearchPattern}\",");
-		}
 		else if (reg.IndexConfig != null)
-		{
 			EmitSearchProperties(sb, reg.IndexConfig, indent);
-		}
 
 		sb.AppendLine($"{indent}}};");
 		sb.AppendLine();
@@ -436,14 +485,9 @@ internal static class ContextEmitter
 		sb.AppendLine($"{indent}{{");
 
 		if (reg.DataStreamConfig != null)
-		{
-			var ds = reg.DataStreamConfig;
-			EmitDataStreamProperties(sb, ds, indent);
-		}
+			EmitDataStreamProperties(sb, reg.DataStreamConfig, indent);
 		else if (reg.IndexConfig != null)
-		{
 			EmitIndexProperties(sb, reg.IndexConfig, indent);
-		}
 
 		sb.Append($"{indent}}}");
 	}
@@ -453,13 +497,9 @@ internal static class ContextEmitter
 		sb.AppendLine($"{indent}{{");
 
 		if (reg.DataStreamConfig != null)
-		{
 			sb.AppendLine($"{indent}\tPattern = \"{reg.DataStreamConfig.SearchPattern}\",");
-		}
 		else if (reg.IndexConfig != null)
-		{
 			EmitSearchProperties(sb, reg.IndexConfig, indent);
-		}
 
 		sb.Append($"{indent}}}");
 	}
@@ -500,28 +540,45 @@ internal static class ContextEmitter
 
 	private static void EmitJsonMethods(StringBuilder sb, string settingsJson, string mappingsJson, string indexJson, TypeRegistration reg, string indent)
 	{
-		// Static backing methods — referenced by the Context field initializer
+		var typeFqn = reg.TypeFullyQualifiedName;
+		var builderType = $"{MappingsBuilderFqn}<global::{typeFqn}>";
+		var hasInterfaceConfig = reg.ConfigurationClassName != null;
+
+		// Static backing for settings
 		sb.AppendLine($"{indent}private static string _GetSettingsJson() =>");
 		SharedEmitterHelpers.EmitRawStringLiteral(sb, settingsJson, indent + "\t");
 		sb.AppendLine();
 
-		if (reg.ConfigureMappingsReference != null && reg.ConfigureMappingsBuilderType != null)
+		if (reg.HasConfigureMappings)
 		{
-			// Emit base JSON as a static field, then merge overrides from ConfigureMappings at static init
 			sb.AppendLine($"{indent}private static string _GetBaseMappingJson() =>");
 			SharedEmitterHelpers.EmitRawStringLiteral(sb, mappingsJson, indent + "\t");
 			sb.AppendLine();
 
-			sb.AppendLine($"{indent}private static readonly string _mergedMappingJson = _ApplyMappingOverrides();");
+			sb.AppendLine($"{indent}private static readonly global::System.Lazy<string> _mergedMappingJson = new(static () => _ApplyMappingOverrides());");
 			sb.AppendLine();
 			sb.AppendLine($"{indent}private static string _ApplyMappingOverrides()");
 			sb.AppendLine($"{indent}{{");
-			sb.AppendLine($"{indent}\tvar builder = new {reg.ConfigureMappingsBuilderType}();");
-			sb.AppendLine($"{indent}\tbuilder = {reg.ConfigureMappingsReference}(builder);");
+
+			if (reg.ContextConfigureMappingsReference != null)
+			{
+				// Context-level static method takes priority
+				sb.AppendLine($"{indent}\tvar builder = {reg.ContextConfigureMappingsReference}(new {builderType}());");
+			}
+			else if (hasInterfaceConfig)
+			{
+				// IConfigureElasticsearch<T> interface path (config class or entity type)
+				sb.AppendLine($"{indent}\tvar builder = _GetConfig().ConfigureMappings(new {builderType}());");
+			}
+			else
+			{
+				sb.AppendLine($"{indent}\tvar builder = new {builderType}();");
+			}
+
 			sb.AppendLine($"{indent}\treturn builder.Build().MergeIntoMappings(_GetBaseMappingJson());");
 			sb.AppendLine($"{indent}}}");
 			sb.AppendLine();
-			sb.AppendLine($"{indent}private static string _GetMappingJson() => _mergedMappingJson;");
+			sb.AppendLine($"{indent}private static string _GetMappingJson() => _mergedMappingJson.Value;");
 		}
 		else
 		{
@@ -534,7 +591,6 @@ internal static class ContextEmitter
 		SharedEmitterHelpers.EmitRawStringLiteral(sb, indexJson, indent + "\t");
 		sb.AppendLine();
 
-		// Instance accessors for public API
 		sb.AppendLine($"{indent}/// <summary>Returns the index settings JSON.</summary>");
 		sb.AppendLine($"{indent}public string GetSettingsJson() => _GetSettingsJson();");
 		sb.AppendLine();

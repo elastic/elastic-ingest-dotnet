@@ -14,8 +14,9 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 
 // ---------------------------------------------------------------------------
 // Domain POCOs — clean types with field-level Elastic.Mapping attributes only.
-// Analysis and mapping customization live in separate static Configuration
-// classes referenced via Configuration = typeof(...) on the entity attribute.
+// Analysis and mapping customization live in separate Configuration classes
+// implementing IConfigureElasticsearch<T>, referenced via Configuration = typeof(...)
+// on the entity attribute.
 // ---------------------------------------------------------------------------
 
 /// <summary>
@@ -52,20 +53,20 @@ public partial class ServerMetricsEvent
 	public long DurationMs { get; set; }
 }
 
-public static class ServerMetricsEventConfig
+public class ServerMetricsEventConfig : IConfigureElasticsearch<ServerMetricsEvent>
 {
-	public static IReadOnlyDictionary<string, string> IndexSettings => new Dictionary<string, string>
+	public IReadOnlyDictionary<string, string> IndexSettings => new Dictionary<string, string>
 	{
 		["index.default_pipeline"] = "logs-default-pipeline"
 	};
 
-	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
 		analysis
 			.Analyzer("log_message", a => a.Custom()
 				.Tokenizer(Tokenizers.Standard)
 				.Filters(TokenFilters.Lowercase, TokenFilters.AsciiFolding));
 
-	public static ServerMetricsEventMappingsBuilder ConfigureMappings(ServerMetricsEventMappingsBuilder mappings) =>
+	public MappingsBuilder<ServerMetricsEvent> ConfigureMappings(MappingsBuilder<ServerMetricsEvent> mappings) =>
 		mappings
 			.AddRuntimeField("is_slow", f => f.Boolean().Script("emit(doc['duration_ms'].value > 1000)"));
 }
@@ -85,15 +86,15 @@ public partial class ServerMetricsEventV2 : ServerMetricsEvent
 /// V2 configuration — adds a stop-words filter to the log_message analyzer
 /// and replaces is_slow with is_error runtime field.
 /// </summary>
-public static class ServerMetricsEventV2Config
+public class ServerMetricsEventV2Config : IConfigureElasticsearch<ServerMetricsEventV2>
 {
-	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
 		analysis
 			.Analyzer("log_message", a => a.Custom()
 				.Tokenizer(Tokenizers.Standard)
 				.Filters(TokenFilters.Lowercase, TokenFilters.AsciiFolding, TokenFilters.Stop));
 
-	public static ServerMetricsEventV2MappingsBuilder ConfigureMappings(ServerMetricsEventV2MappingsBuilder mappings) =>
+	public MappingsBuilder<ServerMetricsEventV2> ConfigureMappings(MappingsBuilder<ServerMetricsEventV2> mappings) =>
 		mappings
 			.AddRuntimeField("is_error", f => f.Boolean().Script("emit(doc['log_level.keyword'].size() > 0 && doc['log_level.keyword'].value == 'error')"));
 }
@@ -138,14 +139,14 @@ public partial class ProductCatalog
 	public DateTimeOffset UpdatedAt { get; set; }
 }
 
-public static class ProductCatalogConfig
+public class ProductCatalogConfig : IConfigureElasticsearch<ProductCatalog>
 {
-	public static IReadOnlyDictionary<string, string> IndexSettings => new Dictionary<string, string>
+	public IReadOnlyDictionary<string, string> IndexSettings => new Dictionary<string, string>
 	{
 		["index.default_pipeline"] = "products-default-pipeline"
 	};
 
-	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
 		analysis
 			.Normalizer("lowercase_ascii", n => n.Custom()
 				.Filters(TokenFilters.Lowercase, TokenFilters.AsciiFolding))
@@ -156,7 +157,7 @@ public static class ProductCatalogConfig
 				.Tokenizer(Tokenizers.Standard)
 				.Filters(TokenFilters.Lowercase, "edge_ngram_filter"));
 
-	public static ProductCatalogMappingsBuilder ConfigureMappings(ProductCatalogMappingsBuilder mappings) =>
+	public MappingsBuilder<ProductCatalog> ConfigureMappings(MappingsBuilder<ProductCatalog> mappings) =>
 		mappings
 			.AddRuntimeField("price_tier", f => f.Keyword()
 				.Script("if (doc['price'].value < 10) emit('budget'); else if (doc['price'].value < 100) emit('mid'); else emit('premium')"));
@@ -177,9 +178,9 @@ public partial class ProductCatalogV2 : ProductCatalog
 /// V2 configuration — widens the edge_ngram window (3..20), adds a stop-words filter,
 /// and replaces price_tier with discount_eligible runtime field.
 /// </summary>
-public static class ProductCatalogV2Config
+public class ProductCatalogV2Config : IConfigureElasticsearch<ProductCatalogV2>
 {
-	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
 		analysis
 			.Normalizer("lowercase_ascii", n => n.Custom()
 				.Filters(TokenFilters.Lowercase, TokenFilters.AsciiFolding))
@@ -190,7 +191,7 @@ public static class ProductCatalogV2Config
 				.Tokenizer(Tokenizers.Standard)
 				.Filters(TokenFilters.Lowercase, TokenFilters.Stop, "edge_ngram_filter"));
 
-	public static ProductCatalogV2MappingsBuilder ConfigureMappings(ProductCatalogV2MappingsBuilder mappings) =>
+	public MappingsBuilder<ProductCatalogV2> ConfigureMappings(MappingsBuilder<ProductCatalogV2> mappings) =>
 		mappings
 			.AddRuntimeField("discount_eligible", f => f.Boolean()
 				.Script("emit(doc['price'].value < 25)"));
@@ -226,9 +227,9 @@ public partial class HashableArticle
 	public DateTimeOffset LastUpdated { get; set; }
 }
 
-public static class HashableArticleConfig
+public class HashableArticleConfig : IConfigureElasticsearch<HashableArticle>
 {
-	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
 		analysis
 			.CharFilter("html_stripper", c => c.HtmlStrip())
 			.Analyzer("html_content", a => a.Custom()
@@ -236,7 +237,7 @@ public static class HashableArticleConfig
 				.CharFilters("html_stripper")
 				.Filters(TokenFilters.Lowercase, TokenFilters.AsciiFolding));
 
-	public static HashableArticleMappingsBuilder ConfigureMappings(HashableArticleMappingsBuilder mappings) =>
+	public MappingsBuilder<HashableArticle> ConfigureMappings(MappingsBuilder<HashableArticle> mappings) =>
 		mappings.Title(f => f.MultiField("keyword", mf => mf.Keyword().IgnoreAbove(256)));
 }
 
@@ -263,14 +264,14 @@ public partial class SemanticArticle
 	public DateTimeOffset Created { get; set; }
 }
 
-public static class SemanticArticleConfig
+public class SemanticArticleConfig : IConfigureElasticsearch<SemanticArticle>
 {
-	public static AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
 		analysis
 			.Analyzer("semantic_content", a => a.Custom()
 				.Tokenizer(Tokenizers.Standard)
 				.Filters(TokenFilters.Lowercase, TokenFilters.AsciiFolding));
 
-	public static SemanticArticleMappingsBuilder ConfigureMappings(SemanticArticleMappingsBuilder mappings) =>
+	public MappingsBuilder<SemanticArticle> ConfigureMappings(MappingsBuilder<SemanticArticle> mappings) =>
 		mappings.Title(f => f.MultiField("keyword", mf => mf.Keyword().IgnoreAbove(256)));
 }
