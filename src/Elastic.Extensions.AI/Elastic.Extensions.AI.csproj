@@ -6,7 +6,7 @@
     <PackageTags>elastic, kibana, agent-builder, mcp, ai, microsoft-extensions-ai</PackageTags>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <IsPackable>True</IsPackable>
+    <IsPackable>false</IsPackable>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
