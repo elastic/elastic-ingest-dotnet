@@ -88,7 +88,7 @@ public sealed class MappingOverrides
 			}
 
 			foreach (var template in DynamicTemplates)
-				templates.Add(template.ToJson());
+				templates.Add((JsonNode)template.ToJson());
 		}
 
 		return node.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
