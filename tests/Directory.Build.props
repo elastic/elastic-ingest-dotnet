@@ -10,5 +10,6 @@
   <PropertyGroup>
     <NoWarn>ca1816</NoWarn>
     <SignAssembly>false</SignAssembly>
+    <UserSecretsId>elastic-ingest-dotnet-tests</UserSecretsId>
   </PropertyGroup>
 </Project>
