@@ -14,14 +14,11 @@ A single, fixed index is the simplest index management strategy. Use it when you
 
 ## Configuration
 
-Set `EntityTarget.Index` with a fixed `Name` and no `DatePattern`:
+Use `[Index<T>]` with a fixed `Name` and no `DatePattern`:
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<MyDocument>(
-    Target = EntityTarget.Index,
-    Name = "my-index"
-)]
+[Index<MyDocument>(Name = "my-index")]
 public static partial class MyContext;
 ```
 

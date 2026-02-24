@@ -12,22 +12,19 @@ namespace Elastic.Mapping.Tests;
 // ============================================================================
 
 [ElasticsearchMappingContext]
-[Entity<LogEntry>(
-	Target = EntityTarget.Index,
+[Index<LogEntry>(
 	WriteAlias = "logs-write",
 	ReadAlias = "logs-read",
-	SearchPattern = "logs-*",
 	Shards = 3,
 	Replicas = 2
 )]
-[Entity<NginxAccessLog>(
-	Target = EntityTarget.DataStream,
+[DataStream<NginxAccessLog>(
 	Type = "logs",
 	Dataset = "nginx.access",
 	Namespace = "production"
 )]
-[Entity<SimpleDocument>(Target = EntityTarget.Index, Name = "simple-docs")]
-[Entity<AdvancedDocument>(Target = EntityTarget.Index, Name = "advanced-docs")]
+[Index<SimpleDocument>(Name = "simple-docs")]
+[Index<AdvancedDocument>(Name = "advanced-docs")]
 public static partial class TestMappingContext
 {
 	/// <summary>Configures LogEntry-specific analysis settings (context-level).</summary>
@@ -141,22 +138,61 @@ public class Tag
 }
 
 // ============================================================================
-// EXTENDED MAPPING CONTEXT: tests Entity attribute options not covered above
+// EXTENDED MAPPING CONTEXT: tests attribute options not covered above
 // ============================================================================
 
 [ElasticsearchMappingContext]
-[Entity<RollingIndex>(
-	Target = EntityTarget.Index,
+[Index<RollingIndex>(
 	Name = "rolling",
 	WriteAlias = "rolling-write",
-	SearchPattern = "rolling-*",
 	DatePattern = "yyyy.MM",
 	RefreshInterval = "5s",
 	Dynamic = false
 )]
-[Entity<GeoDocument>(Target = EntityTarget.Index, Name = "geo-docs")]
-[Entity<SimpleDocument>(Target = EntityTarget.Index, Name = "simple-semantic", Variant = "Semantic")]
+[Index<GeoDocument>(Name = "geo-docs")]
+[Index<SimpleDocument>(Name = "simple-semantic", Variant = "Semantic")]
 public static partial class ExtendedTestMappingContext;
+
+// ============================================================================
+// TEMPLATED MAPPING CONTEXT: tests NameTemplate + CreateContext generation
+// ============================================================================
+
+[ElasticsearchMappingContext]
+[Index<KnowledgeArticle>(
+	NameTemplate = "docs-{searchType}-{env}",
+	DatePattern = "yyyy.MM.dd.HHmmss"
+)]
+[Index<KnowledgeArticle>(
+	NameTemplate = "articles-{team}-{component}",
+	Variant = "Multi"
+)]
+[Index<LocationRecord>(
+	NameTemplate = "geo-{namespace}"
+)]
+public static partial class TemplatedMappingContext;
+
+/// <summary>Test model for templated index with custom + well-known placeholders.</summary>
+public class KnowledgeArticle
+{
+	[Id]
+	public string ArticleId { get; set; } = string.Empty;
+
+	[Timestamp]
+	public DateTimeOffset PublishedAt { get; set; }
+
+	[Text]
+	public string Title { get; set; } = string.Empty;
+}
+
+/// <summary>Test model for templated index with only a well-known namespace placeholder.</summary>
+public class LocationRecord
+{
+	[Id]
+	public string RecordId { get; set; } = string.Empty;
+
+	public double Latitude { get; set; }
+	public double Longitude { get; set; }
+}
 
 /// <summary>
 /// Test model for rolling index with date pattern, refresh interval, and dynamic=false.
@@ -202,9 +238,9 @@ public class GeoDocument
 // ============================================================================
 
 [ElasticsearchMappingContext]
-[Entity<SelfConfiguredDocument>(Target = EntityTarget.Index, Name = "self-configured")]
-[Entity<ExternallyConfiguredDocument>(Target = EntityTarget.Index, Name = "ext-configured", Configuration = typeof(ExternalDocumentConfig))]
-[Entity<PartiallyConfiguredDocument>(Target = EntityTarget.Index, Name = "partial-configured", Configuration = typeof(PartialDocumentConfig))]
+[Index<SelfConfiguredDocument>(Name = "self-configured")]
+[Index<ExternallyConfiguredDocument>(Name = "ext-configured", Configuration = typeof(ExternalDocumentConfig))]
+[Index<PartiallyConfiguredDocument>(Name = "partial-configured", Configuration = typeof(PartialDocumentConfig))]
 public static partial class InterfaceTestMappingContext;
 
 /// <summary>
@@ -285,7 +321,7 @@ public class PartialDocumentConfig : IConfigureElasticsearch<PartiallyConfigured
 // ============================================================================
 
 [ElasticsearchMappingContext]
-[Entity<DiTestDocument>(Target = EntityTarget.Index, Name = "di-test", Configuration = typeof(DiTestDocumentConfig))]
+[Index<DiTestDocument>(Name = "di-test", Configuration = typeof(DiTestDocumentConfig))]
 public static partial class DiTestMappingContext;
 
 public class DiTestDocument
@@ -315,7 +351,7 @@ public class DiTestDocumentConfig : IConfigureElasticsearch<DiTestDocument>
 public partial class TestJsonContext : JsonSerializerContext;
 
 [ElasticsearchMappingContext(JsonContext = typeof(TestJsonContext))]
-[Entity<SnakeCaseDocument>(Target = EntityTarget.Index, Name = "snake-docs")]
+[Index<SnakeCaseDocument>(Name = "snake-docs")]
 public static partial class StjTestMappingContext;
 
 /// <summary>

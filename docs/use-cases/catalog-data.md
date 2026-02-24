@@ -24,12 +24,10 @@ Start with a single index before adding orchestration complexity:
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<KnowledgeArticle>(
-    Target = EntityTarget.Index,
+[Index<KnowledgeArticle>(
     Name = "knowledge",
     WriteAlias = "knowledge",
     ReadAlias = "knowledge-search",
-    SearchPattern = "knowledge-*",
     DatePattern = "yyyy.MM.dd.HHmmss"
 )]
 public static partial class KnowledgeContext;
@@ -46,7 +44,7 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), ctx);
 await channel.ApplyAliasesAsync(string.Empty, ctx);
 ```
 
-This gives you hash-based index reuse, alias swapping, and upserts -- all from the entity declaration.
+This gives you hash-based index reuse, alias swapping, and upserts -- all from the index declaration.
 
 ## Document type
 
@@ -83,21 +81,17 @@ Use the `Variant` parameter to define multiple index configurations for the same
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<KnowledgeArticle>(
-    Target = EntityTarget.Index,
+[Index<KnowledgeArticle>(
     Name = "knowledge-lexical",
     WriteAlias = "knowledge-lexical",
     ReadAlias = "knowledge-lexical-search",
-    SearchPattern = "knowledge-lexical-*",
     DatePattern = "yyyy.MM.dd.HHmmss"
 )]
-[Entity<KnowledgeArticle>(
-    Target = EntityTarget.Index,
+[Index<KnowledgeArticle>(
     Name = "knowledge-semantic",
     Variant = "Semantic",
     WriteAlias = "knowledge-semantic",
     ReadAlias = "knowledge-semantic-search",
-    SearchPattern = "knowledge-semantic-*",
     DatePattern = "yyyy.MM.dd.HHmmss"
 )]
 public static partial class ExampleMappingContext;
@@ -163,7 +157,7 @@ orchestrator.OnPostComplete = async (context, ctx) =>
 
 ## What auto-configures
 
-Because the entity declarations include `WriteAlias`, `ReadAlias`, `SearchPattern`, `DatePattern`, and `[ContentHash]`, the channels automatically use:
+Because the index declarations include `WriteAlias`, `ReadAlias`, `DatePattern`, and `[ContentHash]`, the channels automatically use:
 
 | Behavior | Strategy |
 |----------|----------|

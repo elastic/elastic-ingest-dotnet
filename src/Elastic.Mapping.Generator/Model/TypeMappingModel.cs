@@ -36,14 +36,14 @@ internal sealed record TypeMappingModel(
 }
 
 /// <summary>
-/// Represents [Entity] attribute configuration for Index targets.
+/// Represents [Index] attribute configuration.
 /// </summary>
 internal sealed record IndexConfigModel(
 	string? Name,
+	string? NameTemplate,
 	string? WriteAlias,
 	string? ReadAlias,
 	string? DatePattern,
-	string? SearchPattern,
 	int Shards,
 	int Replicas,
 	string? RefreshInterval,
@@ -51,7 +51,7 @@ internal sealed record IndexConfigModel(
 );
 
 /// <summary>
-/// Represents [Entity] attribute configuration for DataStream targets.
+/// Represents [DataStream] or [WiredStream] attribute configuration.
 /// </summary>
 internal sealed record DataStreamConfigModel(
 	string Type,
@@ -64,7 +64,7 @@ internal sealed record DataStreamConfigModel(
 }
 
 /// <summary>
-/// Represents the entity target and data stream mode from [Entity&lt;T&gt;].
+/// Represents the entity target and data stream mode inferred from the attribute type.
 /// </summary>
 internal sealed record EntityConfigModel(
 	string EntityTarget,

@@ -34,7 +34,7 @@ public class Product
 
 ```csharp
 [ElasticsearchMappingContext]
-[Index<Product>(Name = "products", SearchPattern = "products*")]
+[Index<Product>(Name = "products")]
 [DataStream<ApplicationLog>(Type = "logs", Dataset = "myapp", Namespace = "production")]
 public static partial class MyContext;
 ```
@@ -49,7 +49,6 @@ MyContext.Product.Fields.InStock   // "inStock"
 
 // Index targets
 MyContext.Product.IndexStrategy.WriteTarget   // "products"
-MyContext.Product.SearchStrategy.Pattern      // "products*"
 
 // Data stream naming follows Elastic conventions
 MyContext.ApplicationLog.IndexStrategy.DataStreamName  // "logs-myapp-production"
@@ -155,7 +154,7 @@ public class ProductConfig : IConfigureElasticsearch<Product>
 }
 
 [ElasticsearchMappingContext]
-[Entity<Product>(Target = EntityTarget.Index, Name = "products", Configuration = typeof(ProductConfig))]
+[Index<Product>(Name = "products", Configuration = typeof(ProductConfig))]
 public static partial class MyContext;
 ```
 
@@ -186,7 +185,7 @@ public class Product : IConfigureElasticsearch<Product>
 
 // No Configuration needed -- the generator detects the interface on the entity itself
 [ElasticsearchMappingContext]
-[Entity<Product>(Target = EntityTarget.Index, Name = "products")]
+[Index<Product>(Name = "products")]
 public static partial class MyContext;
 ```
 
@@ -228,7 +227,6 @@ When no `IServiceProvider` is registered (or the service isn't found), the gener
     Name = "products",
     WriteAlias = "products-write",
     ReadAlias = "products-read",
-    SearchPattern = "products*",
     Shards = 3,
     RefreshInterval = "5s"
 )]

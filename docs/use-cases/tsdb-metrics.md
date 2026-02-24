@@ -44,11 +44,10 @@ The combination of dimension fields and timestamp uniquely identifies a data poi
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<MetricEvent>(
-    Target = EntityTarget.DataStream,
-    DataStreamType = "metrics",
-    DataStreamDataset = "myapp",
-    DataStreamNamespace = "production",
+[DataStream<MetricEvent>(
+    Type = "metrics",
+    Dataset = "myapp",
+    Namespace = "production",
     DataStreamMode = DataStreamMode.Tsdb
 )]
 public static partial class MetricsContext;

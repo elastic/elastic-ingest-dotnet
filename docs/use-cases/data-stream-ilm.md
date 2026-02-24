@@ -41,11 +41,10 @@ public class AuditEvent
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<AuditEvent>(
-    Target = EntityTarget.DataStream,
-    DataStreamType = "logs",
-    DataStreamDataset = "audit",
-    DataStreamNamespace = "production"
+[DataStream<AuditEvent>(
+    Type = "logs",
+    Dataset = "audit",
+    Namespace = "production"
 )]
 public static partial class AuditContext;
 ```

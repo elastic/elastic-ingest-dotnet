@@ -4,36 +4,34 @@ navigation_title: Mapping context
 
 # Mapping context and strategy resolution
 
-The `[Entity<>]` attribute on your mapping context drives everything the channel does: what kind of Elasticsearch target to create, which templates to put in place, how to format bulk operations, and how to manage aliases. This page is the complete reference for how `[Entity<>]` parameters map to channel behavior.
+The target-specific attributes -- `[Index<T>]`, `[DataStream<T>]`, and `[WiredStream<T>]` -- on your mapping context drive everything the channel does: what kind of Elasticsearch target to create, which templates to put in place, how to format bulk operations, and how to manage aliases. This page is the complete reference for how attribute parameters map to channel behavior.
 
 ## Simplest form
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<Product>]
+[Index<Product>(Name = "products")]
 public static partial class MyContext;
 ```
 
-With no parameters, `[Entity<Product>]` defaults to:
-- **Target**: `EntityTarget.Index`
-- **Name**: `product` (type name, lowercased)
-- No aliases, no date pattern, no data stream settings
+This targets an index named `products`. The source generator produces `MyContext.Product.Context` -- an `ElasticsearchTypeContext` containing mappings JSON, settings, and accessor delegates.
 
-## Entity targets
+## Target-specific attributes
 
-The `Target` parameter determines the fundamental ingestion strategy:
+Each Elasticsearch target type has its own attribute with properties that make sense for that target:
 
 ```csharp
-// Index (default) -- mutable documents, upserts, aliases
-[Entity<Product>]
-[Entity<Product>(Target = EntityTarget.Index)]
+// Index -- mutable documents, upserts, aliases
+[Index<Product>(Name = "products")]
+
+// Index with templated name -- resolved at runtime
+[Index<Product>(NameTemplate = "products-{env}")]
 
 // Data stream -- append-only, automatic rollover
-[Entity<LogEntry>(Target = EntityTarget.DataStream,
-    DataStreamType = "logs", DataStreamDataset = "myapp")]
+[DataStream<LogEntry>(Type = "logs", Dataset = "myapp")]
 
 // Wired stream -- serverless managed, no local bootstrap
-[Entity<LogEntry>(Target = EntityTarget.WiredStream)]
+[WiredStream<LogEntry>(Type = "logs", Dataset = "myapp")]
 ```
 
 ### Strategy resolution by target
@@ -61,29 +59,34 @@ Attributes on your document class further refine the resolved strategy:
 
 ## Index parameters
 
-For `EntityTarget.Index`, these parameters control index naming and alias management:
+`[Index<T>]` supports the following properties:
 
 ```csharp
-[Entity<Product>(
-    Target = EntityTarget.Index,
-    Name = "products",                    // Index name (default: type name lowercased)
-    WriteAlias = "products",              // Write alias for zero-downtime rotation
+[Index<Product>(
+    Name = "products",                    // Fixed index name
+    WriteAlias = "products-write",        // Write alias for zero-downtime rotation
     ReadAlias = "products-search",        // Search alias spanning all indices
-    SearchPattern = "products-*",         // Glob pattern matching all indices
-    DatePattern = "yyyy.MM.dd.HHmmss"    // Time-stamped index names
+    DatePattern = "yyyy.MM.dd.HHmmss",   // Time-stamped index names
+    Shards = 3,
+    Replicas = 2,
+    RefreshInterval = "5s",
+    Dynamic = false
 )]
 ```
 
 | Parameter | Default | Effect |
 |-----------|---------|--------|
-| `Name` | Type name lowercased | Base index name |
+| `Name` | Type name lowercased | Fixed index name (mutually exclusive with `NameTemplate`) |
+| `NameTemplate` | None | Runtime-parameterized index name (see [templated index names](templated-index-names.md)) |
 | `WriteAlias` | None | Enables `LatestAndSearchAliasStrategy` |
 | `ReadAlias` | None | Search alias spanning all matching indices |
-| `SearchPattern` | None | Glob for matching indices in alias operations |
-| `DatePattern` | None | Creates time-stamped index names (e.g. `products-2026.02.15.120000`) |
+| `DatePattern` | None | Creates time-stamped index names (e.g. `products-2026.02.15.120000`) and auto-derives search pattern |
 | `Shards` | -1 (omitted) | Number of primary shards |
 | `Replicas` | -1 (omitted) | Number of replica shards |
 | `RefreshInterval` | None | Index refresh interval |
+| `Dynamic` | `true` | When `false`, unmapped fields are silently ignored |
+| `Configuration` | None | Static class with `ConfigureAnalysis`/`ConfigureMappings` methods |
+| `Variant` | None | Registers multiple configurations for the same type |
 
 ### Alias strategy resolution
 
@@ -92,28 +95,67 @@ For `EntityTarget.Index`, these parameters control index naming and alias manage
 | Not set | Not set | `NoAliasStrategy` |
 | Set | Set | `LatestAndSearchAliasStrategy` -- swaps write alias to latest index, search alias spans all |
 
-## Data stream parameters
+### SearchPattern auto-derivation
 
-For `EntityTarget.DataStream`, these parameters control the data stream naming convention `{type}-{dataset}-{namespace}`:
+`SearchPattern` is no longer a manual parameter. When `DatePattern` is set, the search pattern is auto-derived as `"{writeTarget}-*"`. When `DatePattern` is not set, no search pattern is generated.
+
+## Templated index names
+
+Use `NameTemplate` for index names that depend on runtime parameters:
 
 ```csharp
-[Entity<LogEntry>(
-    Target = EntityTarget.DataStream,
-    DataStreamType = "logs",              // Required: logs, metrics, traces, etc.
-    DataStreamDataset = "myapp",          // Required: source identifier
-    DataStreamNamespace = "production",   // Default: "default"
-    DataStreamMode = DataStreamMode.Tsdb  // Default: DataStreamMode.Default
+[Index<KnowledgeArticle>(
+    NameTemplate = "docs-{searchType}-{env}",
+    DatePattern = "yyyy.MM.dd.HHmmss"
+)]
+```
+
+This generates `CreateContext(string searchType, string? env = null)` instead of a static `Context` property. The `{env}`, `{environment}`, and `{namespace}` placeholders are optional and resolve from environment variables when omitted.
+
+See [templated index names](templated-index-names.md) for the full reference.
+
+## Data stream parameters
+
+`[DataStream<T>]` controls the data stream naming convention `{type}-{dataset}-{namespace}`:
+
+```csharp
+[DataStream<LogEntry>(
+    Type = "logs",                        // Required: logs, metrics, traces, etc.
+    Dataset = "myapp",                    // Required: source identifier
+    Namespace = "production",             // Optional: defaults from environment variables
+    DataStreamMode = DataStreamMode.Tsdb  // Optional: Default, LogsDb, or Tsdb
 )]
 ```
 
 | Parameter | Default | Effect |
 |-----------|---------|--------|
-| `DataStreamType` | Required | Data category (`logs`, `metrics`, `traces`) |
-| `DataStreamDataset` | Required | Source identifier |
-| `DataStreamNamespace` | `"default"` | Environment (`production`, `staging`) |
+| `Type` | Required | Data category (`logs`, `metrics`, `traces`) |
+| `Dataset` | Required | Source identifier |
+| `Namespace` | Environment variable | Environment (`production`, `staging`). Resolves from `DOTNET_ENVIRONMENT` > `ASPNETCORE_ENVIRONMENT` > `ENVIRONMENT` > `"development"` when omitted |
 | `DataStreamMode` | `Default` | `Default`, `LogsDb`, or `Tsdb` |
+| `Configuration` | None | Static class with `ConfigureAnalysis`/`ConfigureMappings` methods |
+| `Variant` | None | Registers multiple configurations for the same type |
 
 Data stream name: `{type}-{dataset}-{namespace}` (e.g. `logs-myapp-production`)
+
+## Wired stream parameters
+
+`[WiredStream<T>]` is similar to `[DataStream<T>]` but bootstrap is fully managed by Elasticsearch:
+
+```csharp
+[WiredStream<LogEntry>(
+    Type = "logs",
+    Dataset = "myapp"
+)]
+```
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `Type` | Required | Data category |
+| `Dataset` | Required | Source identifier |
+| `Namespace` | Environment variable | Resolved from environment when omitted |
+| `Configuration` | None | Static class with configuration methods |
+| `Variant` | None | Registers multiple configurations for the same type |
 
 ## Variants
 
@@ -121,21 +163,17 @@ Use `Variant` to define multiple index configurations for the same document type
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<Article>(
-    Target = EntityTarget.Index,
+[Index<Article>(
     Name = "articles-lexical",
     WriteAlias = "articles-lexical",
     ReadAlias = "articles-lexical-search",
-    SearchPattern = "articles-lexical-*",
     DatePattern = "yyyy.MM.dd.HHmmss"
 )]
-[Entity<Article>(
-    Target = EntityTarget.Index,
+[Index<Article>(
     Name = "articles-semantic",
     Variant = "Semantic",
     WriteAlias = "articles-semantic",
     ReadAlias = "articles-semantic-search",
-    SearchPattern = "articles-semantic-*",
     DatePattern = "yyyy.MM.dd.HHmmss"
 )]
 public static partial class ArticleContext;

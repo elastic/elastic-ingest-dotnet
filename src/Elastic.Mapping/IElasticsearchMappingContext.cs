@@ -5,13 +5,10 @@
 namespace Elastic.Mapping;
 
 /// <summary>
-/// Provides access to type metadata from a generated mapping context.
+/// Provides access to type field metadata from a generated mapping context.
 /// </summary>
 public interface IElasticsearchMappingContext
 {
-	/// <summary>All registered Elasticsearch type contexts.</summary>
-	IReadOnlyList<ElasticsearchTypeContext> All { get; }
-
-	/// <summary>Gets field metadata for a mapped type, or null if not registered.</summary>
-	TypeFieldMetadata? GetTypeMetadata(Type type);
+	/// <summary>Type field metadata for all registered document types, keyed by CLR type.</summary>
+	IReadOnlyDictionary<Type, TypeFieldMetadata> All { get; }
 }

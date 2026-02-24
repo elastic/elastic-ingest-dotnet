@@ -18,80 +18,66 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 [ElasticsearchMappingContext]
 
 // ── Data stream: logs-srvmetrics-default ────────────────────────────────
-[Entity<ServerMetricsEvent>(
-	Target = EntityTarget.DataStream,
+[DataStream<ServerMetricsEvent>(
 	Type = "logs",
 	Dataset = "srvmetrics",
 	Namespace = "default",
 	Configuration = typeof(ServerMetricsEventConfig))]
-[Entity<ServerMetricsEventV2>(
-	Target = EntityTarget.DataStream,
+[DataStream<ServerMetricsEventV2>(
 	Type = "logs",
 	Dataset = "srvmetrics",
 	Namespace = "default",
 	Configuration = typeof(ServerMetricsEventV2Config))]
 
 // ── Single index: idx-products ──────────────────────────────────────────
-[Entity<ProductCatalog>(
-	Target = EntityTarget.Index,
+[Index<ProductCatalog>(
 	Name = "idx-products",
 	RefreshInterval = "5s",
 	Configuration = typeof(ProductCatalogConfig))]
-[Entity<ProductCatalogV2>(
-	Target = EntityTarget.Index,
+[Index<ProductCatalogV2>(
 	Name = "idx-products",
 	RefreshInterval = "5s",
 	Configuration = typeof(ProductCatalogV2Config))]
 
 // ── Manual alias: cat-products ──────────────────────────────────────────
-[Entity<ProductCatalog>(
-	Target = EntityTarget.Index,
+[Index<ProductCatalog>(
 	Name = "cat-products",
 	Variant = "Catalog",
 	WriteAlias = "cat-products",
 	ReadAlias = "cat-products-search",
-	SearchPattern = "cat-products-*",
 	DatePattern = "yyyy.MM.dd.HHmmss",
 	Configuration = typeof(ProductCatalogConfig))]
-[Entity<ProductCatalogV2>(
-	Target = EntityTarget.Index,
+[Index<ProductCatalogV2>(
 	Name = "cat-products",
 	Variant = "Catalog",
 	WriteAlias = "cat-products",
 	ReadAlias = "cat-products-search",
-	SearchPattern = "cat-products-*",
 	DatePattern = "yyyy.MM.dd.HHmmss",
 	Configuration = typeof(ProductCatalogV2Config))]
 
 // ── Scripted hash upserts: hashable-articles ────────────────────────────
-[Entity<HashableArticle>(
-	Target = EntityTarget.Index,
+[Index<HashableArticle>(
 	Name = "hashable-articles",
 	Configuration = typeof(HashableArticleConfig))]
 
 // ── Orchestrator primary/secondary pair for HashableArticle ─────────────
-[Entity<HashableArticle>(
-	Target = EntityTarget.Index,
+[Index<HashableArticle>(
 	Name = "orch-primary",
 	Variant = "Primary",
 	WriteAlias = "orch-primary",
 	ReadAlias = "orch-primary-search",
-	SearchPattern = "orch-primary-*",
 	DatePattern = "yyyy.MM.dd.HHmmss",
 	Configuration = typeof(HashableArticleConfig))]
-[Entity<HashableArticle>(
-	Target = EntityTarget.Index,
+[Index<HashableArticle>(
 	Name = "orch-secondary",
 	Variant = "Secondary",
 	WriteAlias = "orch-secondary",
 	ReadAlias = "orch-secondary-search",
-	SearchPattern = "orch-secondary-*",
 	DatePattern = "yyyy.MM.dd.HHmmss",
 	Configuration = typeof(HashableArticleConfig))]
 
 // ── Semantic search: semantic-articles ──────────────────────────────────
-[Entity<SemanticArticle>(
-	Target = EntityTarget.Index,
+[Index<SemanticArticle>(
 	Name = "semantic-articles",
 	Configuration = typeof(SemanticArticleConfig))]
 public static partial class TestMappingContext;

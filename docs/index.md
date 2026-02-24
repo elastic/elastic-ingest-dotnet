@@ -28,7 +28,7 @@ public class Product
 
 ```csharp
 [ElasticsearchMappingContext]
-[Entity<Product>]
+[Index<Product>(Name = "products")]
 public static partial class MyContext;
 ```
 
@@ -50,7 +50,7 @@ foreach (var product in products)
 await channel.WaitForDrainAsync(TimeSpan.FromSeconds(10), ctx);
 ```
 
-That's it. No strategy configuration, no template JSON, no bulk request assembly. From `[Entity<Product>]`, the channel inferred: target an index named `product`, create component and index templates, use `index` operations for the bulk API, and create a new index on each bootstrap.
+That's it. No strategy configuration, no template JSON, no bulk request assembly. From `[Index<Product>]`, the channel inferred: target an index named `products`, create component and index templates, use `index` operations for the bulk API, and create a new index on each bootstrap.
 
 ## How the pieces connect
 
@@ -58,20 +58,20 @@ That's it. No strategy configuration, no template JSON, no bulk request assembly
   Elastic.Mapping                Elastic.Ingest.Elasticsearch          Elasticsearch
   ──────────────                 ────────────────────────────          ──────────────
   Document attributes     →     IngestChannelOptions               →  Component templates
-  [Entity<>] declaration          ↓                                    Index templates
-                                IngestChannel                       →  _bulk API
-                                  ↓
-                                Auto-resolved strategy:
-                                  • EntityTarget    → Index / DataStream / WiredStream
-                                  • Bootstrap       → Templates, ILM, lifecycle
-                                  • Ingest          → Bulk operation headers
-                                  • Provisioning    → Create or reuse indices
-                                  • Alias           → Read/write aliases
+  [Index<>] declaration          ↓                                    Index templates
+  [DataStream<>]               IngestChannel                       →  _bulk API
+  [WiredStream<>]                ↓
+                               Auto-resolved strategy:
+                                 • EntityTarget    → Index / DataStream / WiredStream
+                                 • Bootstrap       → Templates, ILM, lifecycle
+                                 • Ingest          → Bulk operation headers
+                                 • Provisioning    → Create or reuse indices
+                                 • Alias           → Read/write aliases
 ```
 
-`Elastic.Mapping` attributes on your document class describe the Elasticsearch field mapping. The `[Entity<>]` attribute on your mapping context declares the target, naming, and optional aliases. The channel reads this context and auto-resolves a complete strategy.
+`Elastic.Mapping` attributes on your document class describe the Elasticsearch field mapping. The target-specific attributes (`[Index<T>]`, `[DataStream<T>]`, `[WiredStream<T>]`) on your mapping context declare the target, naming, and optional aliases. The channel reads this context and auto-resolves a complete strategy.
 
-See [mapping context](getting-started/mapping-context.md) for the full reference on how `[Entity<>]` parameters drive strategy selection.
+See [mapping context](getting-started/mapping-context.md) for the full reference on how attribute parameters drive strategy selection.
 
 ## Common strategies
 

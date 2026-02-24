@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System.Text;
+using System.Text.RegularExpressions;
 using Elastic.Mapping.Generator.Model;
 
 namespace Elastic.Mapping.Generator.Emitters;
@@ -14,6 +15,29 @@ internal static class ContextEmitter
 {
 	private const string MappingsBuilderFqn = "global::Elastic.Mapping.Mappings.MappingsBuilder";
 	private const string IConfigureElasticsearchFqn = "global::Elastic.Mapping.IConfigureElasticsearch";
+
+	private static readonly HashSet<string> WellKnownPlaceholders = new(StringComparer.OrdinalIgnoreCase)
+	{
+		"env", "environment", "namespace"
+	};
+
+	private record TemplatePlaceholder(string Name, bool IsWellKnown);
+
+	private static List<TemplatePlaceholder> ParseTemplatePlaceholders(string template)
+	{
+		var placeholders = new List<TemplatePlaceholder>();
+		foreach (Match match in Regex.Matches(template, @"\{(\w+)\}"))
+		{
+			var name = match.Groups[1].Value;
+			var isWellKnown = WellKnownPlaceholders.Contains(name);
+			if (placeholders.All(p => !p.Name.Equals(name, StringComparison.Ordinal)))
+				placeholders.Add(new TemplatePlaceholder(name, isWellKnown));
+		}
+		return placeholders.OrderBy(p => p.IsWellKnown).ThenBy(p => p.Name).ToList();
+	}
+
+	private static bool IsTemplated(TypeRegistration reg) =>
+		!string.IsNullOrEmpty(reg.IndexConfig?.NameTemplate);
 
 	public static string Emit(ContextMappingModel model)
 	{
@@ -56,12 +80,19 @@ internal static class ContextEmitter
 			sb.AppendLine();
 		}
 
-		// Emit All property
-		sb.AppendLine("\t/// <summary>All registered Elasticsearch type contexts.</summary>");
-		sb.Append("\tpublic static global::System.Collections.Generic.IReadOnlyList<global::Elastic.Mapping.ElasticsearchTypeContext> All { get; } =\n\t\t[");
-		var typeNames = model.TypeRegistrations.Select(r => $"{r.ResolverName}.Context").ToList();
-		sb.Append(string.Join(", ", typeNames));
-		sb.AppendLine("];");
+		// Emit All as IReadOnlyDictionary<Type, TypeFieldMetadata>
+		// Deduplicate by type — variants of the same type share identical field metadata
+		sb.AppendLine("\t/// <summary>Type field metadata for all registered document types.</summary>");
+		sb.AppendLine("\tpublic static global::System.Collections.Generic.IReadOnlyDictionary<global::System.Type, global::Elastic.Mapping.TypeFieldMetadata> All { get; } =");
+		sb.AppendLine("\t\tnew global::System.Collections.Generic.Dictionary<global::System.Type, global::Elastic.Mapping.TypeFieldMetadata>");
+		sb.AppendLine("\t\t{");
+		var emittedTypes = new HashSet<string>();
+		foreach (var reg in model.TypeRegistrations)
+		{
+			if (emittedTypes.Add(reg.TypeFullyQualifiedName))
+				sb.AppendLine($"\t\t\t[typeof(global::{reg.TypeFullyQualifiedName})] = {reg.ResolverName}.GetTypeFieldMetadata(),");
+		}
+		sb.AppendLine("\t\t};");
 		sb.AppendLine();
 
 		// Emit Instance property
@@ -120,9 +151,13 @@ internal static class ContextEmitter
 		var combinedHash = SharedEmitterHelpers.ComputeHash(indexJson);
 
 		var hasInterfaceConfig = reg.ConfigurationClassName != null;
+		var templated = IsTemplated(reg);
 
 		sb.AppendLine($"{indent}/// <summary>Generated Elasticsearch resolver for {reg.ResolverName}.</summary>");
-		sb.AppendLine($"{indent}public sealed class {reg.ResolverName}Resolver : global::Elastic.Mapping.IStaticMappingResolver<global::{typeFqn}>");
+		if (templated)
+			sb.AppendLine($"{indent}public sealed class {reg.ResolverName}Resolver");
+		else
+			sb.AppendLine($"{indent}public sealed class {reg.ResolverName}Resolver : global::Elastic.Mapping.IStaticMappingResolver<global::{typeFqn}>");
 		sb.AppendLine($"{indent}{{");
 
 		// Config override field for DI
@@ -137,6 +172,8 @@ internal static class ContextEmitter
 		sb.AppendLine($"{indent}\tprivate const string _settingsHash = \"{settingsHash}\";");
 		sb.AppendLine($"{indent}\tprivate const string _mappingsHash = \"{mappingsHash}\";");
 		sb.AppendLine();
+		var contextFieldName = templated ? "_baseContext" : "Context";
+		var contextVisibility = templated ? "private" : "public";
 
 		// Emit helper to get the config instance
 		if (hasInterfaceConfig)
@@ -165,8 +202,11 @@ internal static class ContextEmitter
 		}
 
 		// Context instance
-		sb.AppendLine($"{indent}\t/// <summary>Elasticsearch context metadata.</summary>");
-		sb.AppendLine($"{indent}\tpublic global::Elastic.Mapping.ElasticsearchTypeContext Context {{ get; }} = new(");
+		if (templated)
+			sb.AppendLine($"{indent}\t/// <summary>Base context with mappings and settings. Use <see cref=\"CreateContext\"/> to resolve the name template.</summary>");
+		else
+			sb.AppendLine($"{indent}\t/// <summary>Elasticsearch context metadata.</summary>");
+		sb.AppendLine($"{indent}\t{contextVisibility} global::Elastic.Mapping.ElasticsearchTypeContext {contextFieldName} {{ get; }} = new(");
 		sb.AppendLine($"{indent}\t\t_GetSettingsJson,");
 		sb.AppendLine($"{indent}\t\t_GetMappingJson,");
 		sb.AppendLine($"{indent}\t\t_GetIndexJson,");
@@ -241,7 +281,6 @@ internal static class ContextEmitter
 		sb.AppendLine($"{indent}\tpublic global::Elastic.Mapping.TypeFieldMetadata GetTypeFieldMetadata() => new(");
 		sb.AppendLine($"{indent}\t\tFieldMapping.PropertyToField,");
 		sb.AppendLine($"{indent}\t\tIgnoredProperties,");
-		sb.AppendLine($"{indent}\t\tSearchStrategy.Pattern,");
 		sb.AppendLine($"{indent}\t\tGetPropertyMap,");
 		sb.AppendLine($"{indent}\t\tTextFields: TextFields");
 		sb.AppendLine($"{indent}\t);");
@@ -249,6 +288,77 @@ internal static class ContextEmitter
 		// IStaticMappingResolver<T> members
 		EmitBatchTrackingMembers(sb, reg, typeFqn, indent + "\t");
 
+		// CreateContext method for templated names
+		if (IsTemplated(reg))
+			EmitCreateContextMethod(sb, reg, indent + "\t");
+
+		sb.AppendLine($"{indent}}}");
+	}
+
+	private static void EmitCreateContextMethod(StringBuilder sb, TypeRegistration reg, string indent)
+	{
+		var template = reg.IndexConfig!.NameTemplate!;
+		var placeholders = ParseTemplatePlaceholders(template);
+
+		// Build parameter list: required params first, well-known optional params last
+		var parameters = new List<string>();
+		foreach (var p in placeholders)
+		{
+			var paramName = p.Name;
+			// Escape C# keywords
+			if (paramName is "namespace" or "environment")
+				paramName = "@" + paramName;
+
+			parameters.Add(p.IsWellKnown
+				? $"string? {paramName} = null"
+				: $"string {paramName}");
+		}
+
+		sb.AppendLine();
+		sb.AppendLine($"{indent}/// <summary>");
+		sb.AppendLine($"{indent}/// Resolves the name template <c>\"{template}\"</c> and returns a concrete");
+		sb.AppendLine($"{indent}/// <see cref=\"global::Elastic.Mapping.ElasticsearchTypeContext\"/>.");
+		sb.AppendLine($"{indent}/// </summary>");
+		sb.AppendLine($"{indent}public global::Elastic.Mapping.ElasticsearchTypeContext CreateContext({string.Join(", ", parameters)})");
+		sb.AppendLine($"{indent}{{");
+
+		// Resolve well-known placeholders
+		foreach (var p in placeholders.Where(p => p.IsWellKnown))
+		{
+			var paramName = p.Name is "namespace" or "environment" ? "@" + p.Name : p.Name;
+			sb.AppendLine($"{indent}\t{paramName} ??= global::Elastic.Mapping.ElasticsearchTypeContext.ResolveDefaultNamespace();");
+		}
+
+		// Build the interpolated string
+		var interpolated = template;
+		foreach (var p in placeholders)
+		{
+			var paramName = p.Name is "namespace" or "environment" ? "@" + p.Name : p.Name;
+			interpolated = interpolated.Replace($"{{{p.Name}}}", $"{{{paramName}}}");
+		}
+
+		sb.AppendLine($"{indent}\tvar name = $\"{interpolated}\";");
+
+		// Build the new context with resolved name
+		var datePattern = reg.IndexConfig.DatePattern;
+		var readAlias = reg.IndexConfig.ReadAlias;
+
+		sb.AppendLine($"{indent}\treturn _baseContext with");
+		sb.AppendLine($"{indent}\t{{");
+		sb.AppendLine($"{indent}\t\tIndexStrategy = new global::Elastic.Mapping.IndexStrategy");
+		sb.AppendLine($"{indent}\t\t{{");
+		sb.AppendLine($"{indent}\t\t\tWriteTarget = name,");
+		if (!string.IsNullOrEmpty(datePattern))
+			sb.AppendLine($"{indent}\t\t\tDatePattern = \"{datePattern}\",");
+		sb.AppendLine($"{indent}\t\t}},");
+		sb.AppendLine($"{indent}\t\tSearchStrategy = new global::Elastic.Mapping.SearchStrategy");
+		sb.AppendLine($"{indent}\t\t{{");
+		if (!string.IsNullOrEmpty(readAlias))
+			sb.AppendLine($"{indent}\t\t\tReadAlias = \"{readAlias}\",");
+		if (!string.IsNullOrEmpty(datePattern))
+			sb.AppendLine($"{indent}\t\t\tPattern = name + \"-*\",");
+		sb.AppendLine($"{indent}\t\t}},");
+		sb.AppendLine($"{indent}\t}};");
 		sb.AppendLine($"{indent}}}");
 	}
 
@@ -336,19 +446,7 @@ internal static class ContextEmitter
 	{
 		sb.AppendLine($"{indent}private sealed class _MappingContext : global::Elastic.Mapping.IElasticsearchMappingContext");
 		sb.AppendLine($"{indent}{{");
-		sb.AppendLine($"{indent}\tpublic global::System.Collections.Generic.IReadOnlyList<global::Elastic.Mapping.ElasticsearchTypeContext> All => {model.ContextTypeName}.All;");
-		sb.AppendLine();
-		sb.AppendLine($"{indent}\tpublic global::Elastic.Mapping.TypeFieldMetadata? GetTypeMetadata(global::System.Type type)");
-		sb.AppendLine($"{indent}\t{{");
-
-		foreach (var reg in model.TypeRegistrations)
-		{
-			sb.AppendLine($"{indent}\t\tif (type == typeof(global::{reg.TypeFullyQualifiedName}))");
-			sb.AppendLine($"{indent}\t\t\treturn {model.ContextTypeName}.{reg.ResolverName}.GetTypeFieldMetadata();");
-		}
-
-		sb.AppendLine($"{indent}\t\treturn null;");
-		sb.AppendLine($"{indent}\t}}");
+		sb.AppendLine($"{indent}\tpublic global::System.Collections.Generic.IReadOnlyDictionary<global::System.Type, global::Elastic.Mapping.TypeFieldMetadata> All => {model.ContextTypeName}.All;");
 		sb.AppendLine($"{indent}}}");
 	}
 
@@ -431,8 +529,10 @@ internal static class ContextEmitter
 
 	private static void EmitSearchProperties(StringBuilder sb, IndexConfigModel idx, string indent)
 	{
-		if (!string.IsNullOrEmpty(idx.SearchPattern))
-			sb.AppendLine($"{indent}\tPattern = \"{idx.SearchPattern}\",");
+		// Auto-derive search pattern from write target and date pattern
+		var writeTarget = idx.WriteAlias ?? idx.Name;
+		if (!string.IsNullOrEmpty(writeTarget) && !string.IsNullOrEmpty(idx.DatePattern))
+			sb.AppendLine($"{indent}\tPattern = \"{writeTarget}-*\",");
 
 		if (!string.IsNullOrEmpty(idx.ReadAlias))
 			sb.AppendLine($"{indent}\tReadAlias = \"{idx.ReadAlias}\",");

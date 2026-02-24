@@ -402,15 +402,15 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			BatchTimestamp = _batchTimestamp,
 			PrimaryWriteAlias = _primaryWriteAlias!,
 			SecondaryWriteAlias = _secondaryWriteAlias,
-			PrimaryReadAlias = TypeContextResolver.ResolveReadTarget(_primaryTypeContext),
-			SecondaryReadAlias = TypeContextResolver.ResolveReadTarget(_secondaryTypeContext),
+			PrimaryReadAlias = _primaryTypeContext.ResolveReadTarget(),
+			SecondaryReadAlias = _secondaryTypeContext.ResolveReadTarget(),
 		};
 
 	private string ResolvePrimaryWriteAlias() =>
-		TypeContextResolver.ResolveWriteAlias(_primaryTypeContext);
+		_primaryTypeContext.ResolveWriteAlias();
 
 	private string ResolveSecondaryWriteAlias() =>
-		TypeContextResolver.ResolveWriteAlias(_secondaryTypeContext);
+		_secondaryTypeContext.ResolveWriteAlias();
 
 	private async Task<DateTimeOffset> QueryMaxBatchDateAsync(string index, CancellationToken ctx)
 	{

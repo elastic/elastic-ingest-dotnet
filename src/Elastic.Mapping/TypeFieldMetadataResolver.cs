@@ -22,10 +22,6 @@ public class TypeFieldMetadataResolver(IElasticsearchMappingContext? context = n
 	public string Resolve(MemberInfo member) =>
 		_fieldNameCache.GetOrAdd(member, ResolveFieldName);
 
-	/// <summary>Gets the search pattern for a type.</summary>
-	public string? GetSearchPattern(Type type) =>
-		GetTypeMetadata(type)?.SearchPattern;
-
 	/// <summary>Checks if a property should be ignored.</summary>
 	public bool IsIgnored(MemberInfo member)
 	{
@@ -78,8 +74,7 @@ public class TypeFieldMetadataResolver(IElasticsearchMappingContext? context = n
 	private TypeFieldMetadata? ResolveMetadata(Type type)
 	{
 		// 1. Context-based (pre-computed by source generator)
-		var fromContext = context?.GetTypeMetadata(type);
-		if (fromContext != null)
+		if (context?.All.TryGetValue(type, out var fromContext) == true)
 			return fromContext;
 
 		// 2. Attribute-based discovery
@@ -126,16 +121,7 @@ public class TypeFieldMetadataResolver(IElasticsearchMappingContext? context = n
 		if (map.Count == 0)
 			return null;
 
-		return new TypeFieldMetadata(map, ignored, DiscoverSearchPattern(type), null, MetadataSource.Attributes, textFields);
-	}
-
-	private static string? DiscoverSearchPattern(Type type)
-	{
-		var entityAttr = type.GetCustomAttribute<EntityAttribute>();
-		if (entityAttr != null)
-			return entityAttr.SearchPattern ?? entityAttr.ReadAlias;
-
-		return null;
+		return new TypeFieldMetadata(map, ignored, null, MetadataSource.Attributes, textFields);
 	}
 
 	internal static string ToCamelCase(string name)

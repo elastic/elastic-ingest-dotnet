@@ -16,15 +16,13 @@ Manual alias management gives you full control over when indices rotate. You cre
 
 ## Configuration
 
-Configure aliases in the entity declaration:
+Configure aliases in the index declaration:
 
 ```csharp
-[Entity<Product>(
-    Target = EntityTarget.Index,
+[Index<Product>(
     Name = "products",
     WriteAlias = "products",
     ReadAlias = "products-search",
-    SearchPattern = "products-*",
     DatePattern = "yyyy.MM.dd.HHmmss"
 )]
 ```
@@ -33,8 +31,7 @@ Configure aliases in the entity declaration:
 |----------|---------|
 | `WriteAlias` | Alias that points to the current write target |
 | `ReadAlias` | Alias for search queries (can span multiple indices) |
-| `SearchPattern` | Glob pattern matching all indices for this entity |
-| `DatePattern` | Suffix pattern for time-stamped index names |
+| `DatePattern` | Suffix pattern for time-stamped index names. Auto-derives search pattern as `"{writeTarget}-*"` |
 
 ## Auto-configured strategy
 
