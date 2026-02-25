@@ -45,7 +45,7 @@ internal static class AiEnrichmentEmitter
 		var pipelineName = "ai-enrichment-pipeline";
 
 		sb.AppendLine($"{indent}/// <summary>Generated AI enrichment provider for <see cref=\"global::{model.DocumentTypeFullyQualifiedName}\"/>.</summary>");
-		sb.AppendLine($"{indent}public sealed class {className} : global::Elastic.Ingest.Elasticsearch.Enrichment.IAiEnrichmentProvider");
+		sb.AppendLine($"{indent}public sealed class {className} : global::Elastic.Mapping.IAiEnrichmentProvider");
 		sb.AppendLine($"{indent}{{");
 
 		EmitFieldPromptHashes(sb, model, indent + "\t");
@@ -55,7 +55,6 @@ internal static class AiEnrichmentEmitter
 		EmitBuildPrompt(sb, model, indent + "\t");
 		EmitParseResponse(sb, model, indent + "\t");
 		EmitLookupInfrastructure(sb, model, lookupIndexName, policyName, pipelineName, indent + "\t");
-		EmitInternalTypes(sb, model, indent + "\t");
 
 		sb.AppendLine($"{indent}}}");
 	}
@@ -130,7 +129,7 @@ internal static class AiEnrichmentEmitter
 
 		foreach (var output in model.Outputs)
 		{
-			sb.AppendLine($"{indent}\tif (staleFields.Contains(\"{output.FieldName}\"))");
+			sb.AppendLine($"{indent}\tif (global::System.Linq.Enumerable.Contains(staleFields, \"{output.FieldName}\"))");
 			sb.AppendLine($"{indent}\t{{");
 			sb.AppendLine($"{indent}\t\trequired.Add(\"\\\"{output.FieldName}\\\"\");");
 
@@ -186,57 +185,45 @@ internal static class AiEnrichmentEmitter
 		sb.AppendLine($"{indent}public string? ParseResponse(string llmResponse, global::System.Collections.Generic.IReadOnlyCollection<string> enrichedFields)");
 		sb.AppendLine($"{indent}{{");
 
-		// Clean LLM response
 		sb.AppendLine($"{indent}\tvar cleaned = llmResponse.Replace(\"```json\", \"\").Replace(\"```\", \"\").Trim().TrimEnd('`');");
 		sb.AppendLine($"{indent}\tif (cleaned.EndsWith(\"}}}}\") && !cleaned.Contains(\"{{{{\"))");
 		sb.AppendLine($"{indent}\t\tcleaned = cleaned.Substring(0, cleaned.Length - 1);");
 		sb.AppendLine();
 
-		// Parse with generated STJ context
-		sb.AppendLine($"{indent}\t_AiFields? parsed;");
-		sb.AppendLine($"{indent}\ttry");
-		sb.AppendLine($"{indent}\t{{");
-		sb.AppendLine($"{indent}\t\tparsed = global::System.Text.Json.JsonSerializer.Deserialize(cleaned, _AiJsonContext.Default._AiFields);");
-		sb.AppendLine($"{indent}\t}}");
-		sb.AppendLine($"{indent}\tcatch (global::System.Text.Json.JsonException)");
-		sb.AppendLine($"{indent}\t{{");
-		sb.AppendLine($"{indent}\t\treturn null;");
-		sb.AppendLine($"{indent}\t}}");
-		sb.AppendLine($"{indent}\tif (parsed == null) return null;");
+		sb.AppendLine($"{indent}\tglobal::System.Text.Json.JsonDocument doc;");
+		sb.AppendLine($"{indent}\ttry {{ doc = global::System.Text.Json.JsonDocument.Parse(cleaned); }}");
+		sb.AppendLine($"{indent}\tcatch (global::System.Text.Json.JsonException) {{ return null; }}");
 		sb.AppendLine();
 
-		// Build partial doc JSON with only enriched fields + their prompt hashes
-		sb.AppendLine($"{indent}\tvar sb = new global::System.Text.StringBuilder();");
-		sb.AppendLine($"{indent}\tsb.Append('{{');");
-		sb.AppendLine($"{indent}\tvar first = true;");
+		sb.AppendLine($"{indent}\tusing (doc)");
+		sb.AppendLine($"{indent}\t{{");
+		sb.AppendLine($"{indent}\t\tvar root = doc.RootElement;");
+		sb.AppendLine($"{indent}\t\tif (root.ValueKind != global::System.Text.Json.JsonValueKind.Object) return null;");
+		sb.AppendLine();
+
+		sb.AppendLine($"{indent}\t\tvar sb = new global::System.Text.StringBuilder();");
+		sb.AppendLine($"{indent}\t\tsb.Append('{{');");
+		sb.AppendLine($"{indent}\t\tvar first = true;");
+		sb.AppendLine();
 
 		foreach (var output in model.Outputs)
 		{
-			sb.AppendLine($"{indent}\tif (enrichedFields.Contains(\"{output.FieldName}\") && parsed.{output.PropertyName} != null)");
-			sb.AppendLine($"{indent}\t{{");
-			sb.AppendLine($"{indent}\t\tif (!first) sb.Append(',');");
-			sb.AppendLine($"{indent}\t\tfirst = false;");
-
-			if (output.IsArray)
-			{
-				sb.AppendLine($"{indent}\t\tsb.Append(\"\\\"{output.FieldName}\\\":\");");
-				sb.AppendLine($"{indent}\t\tsb.Append(global::System.Text.Json.JsonSerializer.Serialize(parsed.{output.PropertyName}));");
-			}
-			else
-			{
-				sb.AppendLine($"{indent}\t\tsb.Append(\"\\\"{output.FieldName}\\\":\");");
-				sb.AppendLine($"{indent}\t\tsb.Append(global::System.Text.Json.JsonSerializer.Serialize(parsed.{output.PropertyName}));");
-			}
-
-			// Per-field prompt hash
-			sb.AppendLine($"{indent}\t\tsb.Append(\",\\\"{output.PromptHashFieldName}\\\":\\\"{output.PromptHash}\\\"\");");
-			sb.AppendLine($"{indent}\t}}");
+			sb.AppendLine($"{indent}\t\tif (global::System.Linq.Enumerable.Contains(enrichedFields, \"{output.FieldName}\") && root.TryGetProperty(\"{output.FieldName}\", out var _{output.PropertyName}))");
+			sb.AppendLine($"{indent}\t\t{{");
+			sb.AppendLine($"{indent}\t\t\tif (!first) sb.Append(',');");
+			sb.AppendLine($"{indent}\t\t\tfirst = false;");
+			sb.AppendLine($"{indent}\t\t\tsb.Append(\"\\\"{output.FieldName}\\\":\");");
+			sb.AppendLine($"{indent}\t\t\tsb.Append(_{output.PropertyName}.GetRawText());");
+			sb.AppendLine($"{indent}\t\t\tsb.Append(\",\\\"{output.PromptHashFieldName}\\\":\\\"{output.PromptHash}\\\"\");");
+			sb.AppendLine($"{indent}\t\t}}");
 		}
 
-		sb.AppendLine($"{indent}\tsb.Append('}}');");
+		sb.AppendLine();
+		sb.AppendLine($"{indent}\t\tsb.Append('}}');");
 
-		sb.AppendLine($"{indent}\tvar result = sb.ToString();");
-		sb.AppendLine($"{indent}\treturn result == \"{{}}\" ? null : result;");
+		sb.AppendLine($"{indent}\t\tvar result = sb.ToString();");
+		sb.AppendLine($"{indent}\t\treturn result == \"{{}}\" ? null : result;");
+		sb.AppendLine($"{indent}\t}}");
 
 		sb.AppendLine($"{indent}}}");
 		sb.AppendLine();
@@ -333,25 +320,6 @@ internal static class AiEnrichmentEmitter
 		sb.AppendLine($"{indent}  ]");
 		sb.AppendLine($"{indent}}}\";");
 		sb.AppendLine();
-	}
-
-	private static void EmitInternalTypes(StringBuilder sb, AiEnrichmentModel model, string indent)
-	{
-		// _AiFields — for deserializing the LLM response
-		sb.AppendLine($"{indent}internal sealed class _AiFields");
-		sb.AppendLine($"{indent}{{");
-		foreach (var output in model.Outputs)
-		{
-			var type = output.IsArray ? "string[]?" : "string?";
-			sb.AppendLine($"{indent}\t[global::System.Text.Json.Serialization.JsonPropertyName(\"{output.FieldName}\")]");
-			sb.AppendLine($"{indent}\tpublic {type} {output.PropertyName} {{ get; set; }}");
-		}
-		sb.AppendLine($"{indent}}}");
-		sb.AppendLine();
-
-		// STJ context
-		sb.AppendLine($"{indent}[global::System.Text.Json.Serialization.JsonSerializable(typeof(_AiFields))]");
-		sb.AppendLine($"{indent}internal sealed partial class _AiJsonContext : global::System.Text.Json.Serialization.JsonSerializerContext;");
 	}
 
 	// ── Helpers ──

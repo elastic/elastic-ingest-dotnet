@@ -12,6 +12,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Ingest.Elasticsearch.Helpers;
+using Elastic.Mapping;
 using Elastic.Transport;
 
 namespace Elastic.Ingest.Elasticsearch.Enrichment;

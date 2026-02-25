@@ -5,7 +5,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 
-namespace Elastic.Ingest.Elasticsearch.Enrichment;
+namespace Elastic.Mapping;
 
 /// <summary>
 /// Provides AI enrichment capabilities for indexed documents.

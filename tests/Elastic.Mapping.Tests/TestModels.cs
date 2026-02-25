@@ -343,6 +343,52 @@ public class DiTestDocumentConfig : IConfigureElasticsearch<DiTestDocument>
 }
 
 // ============================================================================
+// AI ENRICHMENT CONTEXT: tests [AiEnrichment<T>] + [AiInput] + [AiField]
+// ============================================================================
+
+/// <summary>
+/// Document type with AI enrichment attributes.
+/// </summary>
+public class DocumentationPage
+{
+	[Id]
+	[Keyword]
+	public string Url { get; set; } = string.Empty;
+
+	[AiInput]
+	[Text]
+	[JsonPropertyName("title")]
+	public string Title { get; set; } = string.Empty;
+
+	[AiInput]
+	[Text]
+	[JsonPropertyName("body")]
+	public string Body { get; set; } = string.Empty;
+
+	[AiField("A concise two-sentence summary of the document content.")]
+	[Text]
+	[JsonPropertyName("ai_summary")]
+	public string? AiSummary { get; set; }
+
+	[AiField("3 to 5 questions this document answers, phrased as a user would ask.", MinItems = 3, MaxItems = 5)]
+	[Keyword]
+	[JsonPropertyName("ai_questions")]
+	public string[]? AiQuestions { get; set; }
+}
+
+[ElasticsearchMappingContext]
+[Index<DocumentationPage>(
+	Name = "docs-pages",
+	WriteAlias = "docs-pages-write",
+	ReadAlias = "docs-pages-read"
+)]
+[AiEnrichment<DocumentationPage>(
+	Role = "You are a documentation analysis assistant.",
+	MatchField = "url"
+)]
+public static partial class AiTestMappingContext;
+
+// ============================================================================
 // STJ CONTEXT: tests JsonContext integration with naming policies
 // ============================================================================
 
