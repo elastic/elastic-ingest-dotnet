@@ -4,7 +4,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -109,76 +108,56 @@ public class AiEnrichmentOrchestrator : IDisposable
 	}
 
 	/// <summary>
-	/// Deletes lookup entries whose URL doesn't exist in the target index.
+	/// Deletes lookup entries whose match field value doesn't exist in the target index.
+	/// Uses <see cref="PointInTimeSearch{TDocument}"/> over the lookup index, then
+	/// batch-checks existence against the target via terms queries.
 	/// </summary>
 	public async Task CleanupOrphanedAsync(string targetIndex, CancellationToken ct = default)
 	{
 		var orphanUrls = new List<string>();
-		string? scrollId = null;
 
-		// Scroll lookup index for all URLs
-		var scrollQuery = $"{{\"size\":1000,\"_source\":[\"{_provider.MatchField}\"],\"query\":{{\"match_all\":{{}}}}}}";
-		var response = await RequestAsync(HttpMethod.POST,
-			$"{_provider.LookupIndexName}/_search?scroll=1m",
-			scrollQuery, ct).ConfigureAwait(false);
-
-		while (response != null)
+		var pit = new PointInTimeSearch<JsonElement>(_transport, new PointInTimeSearchOptions
 		{
-			using var doc = JsonDocument.Parse(response);
-			scrollId = doc.RootElement.TryGetProperty("_scroll_id", out var sid)
-				? sid.GetString() : null;
+			Index = _provider.LookupIndexName,
+			Size = 1000,
+			Slices = 1
+		});
 
-			if (!doc.RootElement.TryGetProperty("hits", out var hitsObj)
-				|| !hitsObj.TryGetProperty("hits", out var hitsArr)
-				|| hitsArr.GetArrayLength() == 0)
-				break;
-
-			// Collect URLs from this page
-			var urls = new List<string>();
-			foreach (var hit in hitsArr.EnumerateArray())
+		try
+		{
+			await foreach (var page in pit.SearchPagesAsync(ct).ConfigureAwait(false))
 			{
-				if (hit.TryGetProperty("_source", out var source)
-					&& source.TryGetProperty(_provider.MatchField, out var urlProp))
+				var urls = new List<string>();
+				foreach (var source in page.Documents)
 				{
-					var url = urlProp.GetString();
-					if (url != null) urls.Add(url);
+					if (source.TryGetProperty(_provider.MatchField, out var urlProp)
+						&& urlProp.GetString() is { } url)
+						urls.Add(url);
+				}
+
+				if (urls.Count == 0)
+					continue;
+
+				var existing = await FindExistingUrlsAsync(targetIndex, urls, ct).ConfigureAwait(false);
+				foreach (var url in urls)
+				{
+					if (!existing.Contains(url))
+						orphanUrls.Add(url);
 				}
 			}
-
-			// Batch _mget against target to check existence
-			if (urls.Count > 0)
-			{
-				var mgetDocs = string.Join(",", urls.Select(u => $"{{\"_id\":\"{UrlHash(u)}\"}}"));
-				var mgetBody = $"{{\"docs\":[{mgetDocs}]}}";
-				var mgetResponse = await RequestAsync(HttpMethod.POST,
-					$"{targetIndex}/_mget?_source=false", mgetBody, ct).ConfigureAwait(false);
-
-				if (mgetResponse != null)
-				{
-					using var mgetDoc = JsonDocument.Parse(mgetResponse);
-					if (mgetDoc.RootElement.TryGetProperty("docs", out var docs))
-					{
-						var i = 0;
-						foreach (var d in docs.EnumerateArray())
-						{
-							if (i < urls.Count && (!d.TryGetProperty("found", out var found) || !found.GetBoolean()))
-								orphanUrls.Add(urls[i]);
-							i++;
-						}
-					}
-				}
-			}
-
-			// Next scroll page
-			if (scrollId == null) break;
-			var scrollBody = $"{{\"scroll\":\"1m\",\"scroll_id\":\"{scrollId}\"}}";
-			response = await RequestAsync(HttpMethod.POST, "_search/scroll", scrollBody, ct).ConfigureAwait(false);
+		}
+		finally
+		{
+			await pit.DisposeAsync().ConfigureAwait(false);
 		}
 
-		// Delete orphaned entries
 		if (orphanUrls.Count > 0)
 		{
-			var terms = string.Join(",", orphanUrls.Select(u => $"\"{u}\""));
+			var terms = string.Join(",", orphanUrls.Select(u =>
+			{
+				var encoded = JsonEncodedText.Encode(u);
+				return $"\"{encoded}\"";
+			}));
 			var deleteQuery = $"{{\"terms\":{{\"{_provider.MatchField}\":[{terms}]}}}}";
 			var dbq = new DeleteByQuery(_transport, new DeleteByQueryOptions
 			{
@@ -194,8 +173,8 @@ public class AiEnrichmentOrchestrator : IDisposable
 	/// </summary>
 	public async Task CleanupOlderThanAsync(TimeSpan maxAge, CancellationToken ct = default)
 	{
-		var millis = (long)maxAge.TotalMilliseconds;
-		var query = $"{{\"range\":{{\"created_at\":{{\"lt\":\"now-{millis}ms\"}}}}}}";
+		var seconds = (long)maxAge.TotalSeconds;
+		var query = $"{{\"range\":{{\"created_at\":{{\"lt\":\"now-{seconds}s\"}}}}}}";
 		var dbq = new DeleteByQuery(_transport, new DeleteByQueryOptions
 		{
 			Index = _provider.LookupIndexName,
@@ -273,35 +252,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 	private async Task<(List<CandidateDocument> Hits, object[]? SearchAfter)> QueryCandidatesAsync(
 		string index, int size, object[]? searchAfter, CancellationToken ct)
 	{
-		var query = BuildCandidateQuery(size, searchAfter);
-		var body = await RequestAsync(HttpMethod.POST, $"{index}/_search", query, ct).ConfigureAwait(false);
-
-		if (body == null)
-			return (new List<CandidateDocument>(), null);
-
-		return ParseCandidateResponse(body);
-	}
-
-	private string BuildCandidateQuery(int size, object[]? searchAfter)
-	{
-		var shouldClauses = new List<string>();
-
-		foreach (var field in _provider.EnrichmentFields)
-		{
-			// Field missing
-			shouldClauses.Add($"{{\"bool\":{{\"must_not\":{{\"exists\":{{\"field\":\"{field}\"}}}}}}}}");
-
-			// Prompt hash stale
-			if (_provider.FieldPromptHashFieldNames.TryGetValue(field, out var phField)
-				&& _provider.FieldPromptHashes.TryGetValue(field, out var phValue))
-			{
-				shouldClauses.Add($"{{\"bool\":{{\"must_not\":{{\"term\":{{\"{phField}\":\"{phValue}\"}}}}}}}}");
-			}
-		}
-
-		// Source: inputs for prompt building + per-field prompt hashes for staleness detection
-		var sourceFields = new List<string>(_provider.RequiredSourceFields);
-		sourceFields.Add(_provider.MatchField);
+		var sourceFields = new List<string>(_provider.RequiredSourceFields) { _provider.MatchField };
 		foreach (var phField in _provider.FieldPromptHashFieldNames.Values)
 			sourceFields.Add(phField);
 		var sourceJson = string.Join(",", sourceFields.Select(f => $"\"{f}\""));
@@ -310,7 +261,39 @@ public class AiEnrichmentOrchestrator : IDisposable
 			? $",\"search_after\":[{string.Join(",", searchAfter.Select(v => $"\"{v}\""))}]"
 			: "";
 
-		return $"{{\"size\":{size},\"query\":{{\"bool\":{{\"should\":[{string.Join(",", shouldClauses)}],\"minimum_should_match\":1}}}},\"_source\":[{sourceJson}],\"sort\":[{{\"_doc\":\"asc\"}}]{searchAfterClause}}}";
+		var query = $"{{\"size\":{size},\"query\":{BuildStalenessQuery()},\"_source\":[{sourceJson}],\"sort\":[{{\"_doc\":\"asc\"}}]{searchAfterClause}}}";
+		var body = await RequestAsync(HttpMethod.POST, $"{index}/_search", query, ct).ConfigureAwait(false);
+
+		if (body == null)
+			return (new List<CandidateDocument>(), null);
+
+		return ParseCandidateResponse(body);
+	}
+
+	/// <summary>
+	/// Builds a bool/should query that matches documents where any enrichment field
+	/// is missing or has a stale prompt hash.
+	/// </summary>
+	private string BuildStalenessQuery()
+	{
+		var shouldClauses = BuildStalenessShouldClauses();
+		return $"{{\"bool\":{{\"should\":[{shouldClauses}],\"minimum_should_match\":1}}}}";
+	}
+
+	private string BuildStalenessShouldClauses()
+	{
+		var clauses = new List<string>();
+		foreach (var field in _provider.EnrichmentFields)
+		{
+			clauses.Add($"{{\"bool\":{{\"must_not\":{{\"exists\":{{\"field\":\"{field}\"}}}}}}}}");
+
+			if (_provider.FieldPromptHashFieldNames.TryGetValue(field, out var phField)
+				&& _provider.FieldPromptHashes.TryGetValue(field, out var phValue))
+			{
+				clauses.Add($"{{\"bool\":{{\"must_not\":{{\"term\":{{\"{phField}\":\"{phValue}\"}}}}}}}}");
+			}
+		}
+		return string.Join(",", clauses);
 	}
 
 	private static (List<CandidateDocument>, object[]?) ParseCandidateResponse(string body)
@@ -378,7 +361,6 @@ public class AiEnrichmentOrchestrator : IDisposable
 		await _throttle.WaitAsync(ct).ConfigureAwait(false);
 		try
 		{
-			// Determine which fields are stale for this document
 			var staleFields = DetermineStaleFields(candidate.Source);
 			if (staleFields.Count == 0)
 				return (candidate.Id, null, null);
@@ -393,7 +375,6 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 			var partialDoc = _provider.ParseResponse(completion, staleFields);
 
-			// Extract the match field value for the lookup doc ID
 			string? matchValue = null;
 			if (candidate.Source.TryGetProperty(_provider.MatchField, out var mv))
 				matchValue = mv.GetString();
@@ -423,7 +404,6 @@ public class AiEnrichmentOrchestrator : IDisposable
 				continue;
 			}
 
-			// Missing prompt hash field or mismatched value → stale
 			if (!source.TryGetProperty(phField, out var existingHash)
 				|| existingHash.ValueKind != JsonValueKind.String
 				|| existingHash.GetString() != currentHash)
@@ -436,14 +416,8 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 	private async Task<string?> CallCompletionAsync(string prompt, CancellationToken ct)
 	{
-		using var buffer = new MemoryStream();
-		using (var writer = new Utf8JsonWriter(buffer))
-		{
-			writer.WriteStartObject();
-			writer.WriteString("input", prompt);
-			writer.WriteEndObject();
-		}
-		var body = Encoding.UTF8.GetString(buffer.ToArray());
+		var encodedPrompt = JsonEncodedText.Encode(prompt);
+		var body = $"{{\"input\":\"{encodedPrompt}\"}}";
 		var url = $"_inference/completion/{_options.InferenceEndpointId}";
 
 		var response = await _transport.RequestAsync<StringResponse>(
@@ -475,15 +449,27 @@ public class AiEnrichmentOrchestrator : IDisposable
 		List<(string UrlHash, string MatchValue, string Json)> updates, CancellationToken ct)
 	{
 		var sb = new StringBuilder();
+		var now = DateTimeOffset.UtcNow.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+
 		foreach (var (urlHash, matchValue, json) in updates)
 		{
 			sb.Append("{\"update\":{\"_id\":\"").Append(urlHash).Append("\"}}\n");
-			var encodedMatch = JsonEncodedText.Encode(matchValue);
-			sb.Append("{\"doc\":{\"").Append(_provider.MatchField).Append("\":\"")
-				.Append(encodedMatch).Append("\",\"created_at\":\"")
-				.Append(DateTimeOffset.UtcNow.ToString("o")).Append("\",")
-				.Append(json, 1, json.Length - 1) // strip leading '{', keep rest
-				.Append(",\"doc_as_upsert\":true}\n");
+
+			sb.Append("{\"doc\":{\"").Append(_provider.MatchField).Append("\":");
+			sb.Append('"').Append(JsonEncodedText.Encode(matchValue)).Append("\",");
+			sb.Append("\"created_at\":\"").Append(now).Append("\",");
+
+			using var partialDoc = JsonDocument.Parse(json);
+			var first = true;
+			foreach (var prop in partialDoc.RootElement.EnumerateObject())
+			{
+				if (!first) sb.Append(',');
+				first = false;
+				sb.Append('"').Append(prop.Name).Append("\":");
+				sb.Append(prop.Value.GetRawText());
+			}
+
+			sb.Append("},\"doc_as_upsert\":true}\n");
 		}
 
 		await _transport.RequestAsync<StringResponse>(
@@ -495,23 +481,10 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 	private async Task BackfillAsync(string targetIndex, CancellationToken ct)
 	{
-		var shouldClauses = new List<string>();
-		foreach (var field in _provider.EnrichmentFields)
-		{
-			shouldClauses.Add($"{{\"bool\":{{\"must_not\":{{\"exists\":{{\"field\":\"{field}\"}}}}}}}}");
-
-			if (_provider.FieldPromptHashFieldNames.TryGetValue(field, out var phField)
-				&& _provider.FieldPromptHashes.TryGetValue(field, out var phValue))
-			{
-				shouldClauses.Add($"{{\"bool\":{{\"must_not\":{{\"term\":{{\"{phField}\":\"{phValue}\"}}}}}}}}");
-			}
-		}
-
-		var query = $"{{\"bool\":{{\"should\":[{string.Join(",", shouldClauses)}],\"minimum_should_match\":1}}}}";
 		var url = $"/{targetIndex}/_update_by_query?wait_for_completion=false&pipeline={_provider.PipelineName}";
 
 		var response = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.POST, url, PostData.String($"{{\"query\":{query}}}"),
+			HttpMethod.POST, url, PostData.String($"{{\"query\":{BuildStalenessQuery()}}}"),
 			cancellationToken: ct).ConfigureAwait(false);
 
 		var taskId = response.Get<string>("task");
@@ -520,9 +493,44 @@ public class AiEnrichmentOrchestrator : IDisposable
 			await foreach (var _ in ElasticsearchTaskMonitor.PollTaskAsync(
 				_transport, taskId, TimeSpan.FromSeconds(5), ct).ConfigureAwait(false))
 			{
-				// Just wait for completion
 			}
 		}
+	}
+
+	// ── Private: orphan detection ──
+
+	/// <summary>
+	/// Checks which URLs from the batch exist in the target index by querying the match field.
+	/// </summary>
+	private async Task<HashSet<string>> FindExistingUrlsAsync(
+		string targetIndex, List<string> urls, CancellationToken ct)
+	{
+		var existing = new HashSet<string>();
+		var terms = string.Join(",", urls.Select(u =>
+		{
+			var encoded = JsonEncodedText.Encode(u);
+			return $"\"{encoded}\"";
+		}));
+		var query = $"{{\"size\":{urls.Count},\"_source\":[\"{_provider.MatchField}\"],\"query\":{{\"terms\":{{\"{_provider.MatchField}\":[{terms}]}}}}}}";
+
+		var body = await RequestAsync(HttpMethod.POST, $"{targetIndex}/_search", query, ct).ConfigureAwait(false);
+		if (body == null)
+			return existing;
+
+		using var doc = JsonDocument.Parse(body);
+		if (doc.RootElement.TryGetProperty("hits", out var hitsObj)
+			&& hitsObj.TryGetProperty("hits", out var hitsArr))
+		{
+			foreach (var hit in hitsArr.EnumerateArray())
+			{
+				if (hit.TryGetProperty("_source", out var source)
+					&& source.TryGetProperty(_provider.MatchField, out var urlProp)
+					&& urlProp.GetString() is { } url)
+					existing.Add(url);
+			}
+		}
+
+		return existing;
 	}
 
 	// ── Private: helpers ──

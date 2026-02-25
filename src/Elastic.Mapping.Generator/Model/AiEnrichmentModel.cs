@@ -17,8 +17,7 @@ internal sealed record AiEnrichmentModel(
 	string? LookupIndexName,
 	string MatchFieldName,
 	ImmutableArray<AiInputFieldModel> Inputs,
-	ImmutableArray<AiOutputFieldModel> Outputs,
-	StjContextConfig? StjConfig
+	ImmutableArray<AiOutputFieldModel> Outputs
 );
 
 /// <summary>

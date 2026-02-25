@@ -25,7 +25,7 @@ internal static class AiEnrichmentAnalyzer
 		string? role,
 		string? lookupIndexName,
 		string? matchField,
-		StjContextConfig? stjConfig,
+		StjContextConfig? stjConfig, // passed through for field name resolution only
 		CancellationToken ct)
 	{
 		ct.ThrowIfCancellationRequested();
@@ -94,8 +94,7 @@ internal static class AiEnrichmentAnalyzer
 			lookupIndexName,
 			resolvedMatchField,
 			inputs.ToImmutable(),
-			outputs.ToImmutable(),
-			stjConfig
+			outputs.ToImmutable()
 		);
 	}
 

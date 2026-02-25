@@ -105,13 +105,14 @@ public class AiEnrichmentGeneratorTests
 	public void EnrichPolicyNameIsNotEmpty()
 	{
 		Provider.EnrichPolicyName.Should().NotBeNullOrEmpty();
-		Provider.EnrichPolicyName.Should().StartWith("ai-enrichment-policy-");
+		Provider.EnrichPolicyName.Should().StartWith($"{Provider.LookupIndexName}-policy-");
 	}
 
 	[Test]
 	public void PipelineNameIsNotEmpty()
 	{
 		Provider.PipelineName.Should().NotBeNullOrEmpty();
+		Provider.PipelineName.Should().StartWith($"{Provider.LookupIndexName}-pipeline-");
 	}
 
 	[Test]
@@ -209,5 +210,101 @@ public class AiEnrichmentGeneratorTests
 		result.Should().Contain("ai_summary");
 		result.Should().Contain("ai_summary_ph");
 		result.Should().NotContain("ai_questions");
+	}
+
+	// ── ParseResponse edge cases ──
+
+	[Test]
+	public void ParseResponseReturnsNullForEmptyObject()
+	{
+		var result = Provider.ParseResponse("{}", AllFields);
+		result.Should().BeNull("empty LLM response should produce null");
+	}
+
+	[Test]
+	public void ParseResponseIgnoresExtraFields()
+	{
+		var llmResponse = """{"ai_summary": "Summary.", "unknown_field": "ignored", "ai_questions": ["Q1?","Q2?","Q3?"]}""";
+		var result = Provider.ParseResponse(llmResponse, AllFields);
+
+		result.Should().NotBeNull();
+		result.Should().Contain("ai_summary");
+		result.Should().Contain("ai_questions");
+		result.Should().NotContain("unknown_field");
+	}
+
+	[Test]
+	public void ParseResponseHandlesMissingRequestedField()
+	{
+		var llmResponse = """{"ai_summary": "Only summary, no questions."}""";
+		var result = Provider.ParseResponse(llmResponse, AllFields);
+
+		result.Should().NotBeNull();
+		result.Should().Contain("ai_summary");
+		result.Should().NotContain("ai_questions",
+			"field not present in LLM response should not appear");
+	}
+
+	[Test]
+	public void ParseResponseHandlesUnicodeContent()
+	{
+		var llmResponse = """{"ai_summary": "Résumé avec des caractères spéciaux: 日本語 中文 한국어"}""";
+		var result = Provider.ParseResponse(llmResponse, SummaryOnly);
+
+		result.Should().NotBeNull();
+		result.Should().Contain("ai_summary");
+
+		using var doc = JsonDocument.Parse(result!);
+		var summary = doc.RootElement.GetProperty("ai_summary").GetString();
+		summary.Should().Contain("Résumé");
+		summary.Should().Contain("日本語");
+	}
+
+	[Test]
+	public void ParseResponseReturnsNullForJsonArray()
+	{
+		var result = Provider.ParseResponse("[1,2,3]", AllFields);
+		result.Should().BeNull("array root is not a valid response");
+	}
+
+	[Test]
+	public void ParseResponseReturnsNullForScalarJson()
+	{
+		var result = Provider.ParseResponse("\"just a string\"", AllFields);
+		result.Should().BeNull("scalar root is not a valid response");
+	}
+
+	[Test]
+	public void ParseResponseHandlesNestedMarkdownFences()
+	{
+		var llmResponse = """
+			```json
+			{"ai_summary": "Use ```code blocks``` in markdown.", "ai_questions": ["How to format?", "What is markdown?", "How to nest?"]}
+			```
+			""";
+		var result = Provider.ParseResponse(llmResponse, AllFields);
+
+		result.Should().NotBeNull();
+		result.Should().Contain("ai_summary");
+	}
+
+	[Test]
+	public void BuildPromptReturnsNullWhenAnyInputIsEmpty()
+	{
+		var sourceNoTitle = JsonDocument.Parse("""{"title": "", "body": "Some content."}""").RootElement;
+		Provider.BuildPrompt(sourceNoTitle, AllFields).Should().BeNull(
+			"empty title should cause prompt to be skipped");
+
+		var sourceNoBody = JsonDocument.Parse("""{"title": "Title", "body": ""}""").RootElement;
+		Provider.BuildPrompt(sourceNoBody, AllFields).Should().BeNull(
+			"empty body should cause prompt to be skipped");
+	}
+
+	[Test]
+	public void BuildPromptReturnsNullWhenInputIsMissing()
+	{
+		var source = JsonDocument.Parse("""{"title": "Title"}""").RootElement;
+		Provider.BuildPrompt(source, AllFields).Should().BeNull(
+			"missing body field should cause prompt to be skipped");
 	}
 }

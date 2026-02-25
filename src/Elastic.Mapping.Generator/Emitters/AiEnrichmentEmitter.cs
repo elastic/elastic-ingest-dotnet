@@ -41,8 +41,9 @@ internal static class AiEnrichmentEmitter
 	{
 		var className = $"{model.DocumentTypeName}AiEnrichmentProvider";
 		var lookupIndexName = model.LookupIndexName ?? $"{model.DocumentTypeName.ToLowerInvariant()}-ai-enrichment-cache";
-		var policyName = $"ai-enrichment-policy-{ComputeFieldsHash(model)}";
-		var pipelineName = "ai-enrichment-pipeline";
+		var fieldsHash = ComputeFieldsHash(model);
+		var policyName = $"{lookupIndexName}-policy-{fieldsHash}";
+		var pipelineName = $"{lookupIndexName}-pipeline-{fieldsHash}";
 
 		sb.AppendLine($"{indent}/// <summary>Generated AI enrichment provider for <see cref=\"global::{model.DocumentTypeFullyQualifiedName}\"/>.</summary>");
 		sb.AppendLine($"{indent}public sealed class {className} : global::Elastic.Mapping.IAiEnrichmentProvider");
@@ -114,11 +115,11 @@ internal static class AiEnrichmentEmitter
 			sb.AppendLine($"{indent}\t\t_in{i} = _iv{i}.GetString();");
 		}
 
-		// Find the "body" input (longest text, typically the second input)
-		if (model.Inputs.Length > 1)
-			sb.AppendLine($"{indent}\tif (string.IsNullOrWhiteSpace(_in1)) return null;");
-		else if (model.Inputs.Length > 0)
-			sb.AppendLine($"{indent}\tif (string.IsNullOrWhiteSpace(_in0)) return null;");
+		if (model.Inputs.Length > 0)
+		{
+			var checks = string.Join(" || ", Enumerable.Range(0, model.Inputs.Length).Select(i => $"string.IsNullOrWhiteSpace(_in{i})"));
+			sb.AppendLine($"{indent}\tif ({checks}) return null;");
+		}
 
 		sb.AppendLine();
 
