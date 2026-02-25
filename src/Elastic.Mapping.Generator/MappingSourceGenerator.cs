@@ -24,6 +24,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 	private const string DataStreamAttributePrefix = "Elastic.Mapping.DataStreamAttribute<";
 	private const string WiredStreamAttributePrefix = "Elastic.Mapping.WiredStreamAttribute<";
 	private const string ConfigureElasticsearchInterfacePrefix = "Elastic.Mapping.IConfigureElasticsearch<";
+	private const string AiEnrichmentAttributePrefix = "Elastic.Mapping.AiEnrichmentAttribute<";
 
 	// Ingest property attribute names
 	private const string IdAttributeName = "Elastic.Mapping.IdAttribute";
@@ -119,11 +120,36 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		if (registrations.Count == 0)
 			return null;
 
+		// Detect [AiEnrichment<T>]
+		AiEnrichmentModel? aiEnrichment = null;
+		foreach (var attr in contextSymbol.GetAttributes())
+		{
+			ct.ThrowIfCancellationRequested();
+
+			var attrClassName = attr.AttributeClass?.ToDisplayString();
+			if (attrClassName == null || !attrClassName.StartsWith(AiEnrichmentAttributePrefix, StringComparison.Ordinal))
+				continue;
+
+			var typeArg = attr.AttributeClass?.TypeArguments.FirstOrDefault();
+			if (typeArg is not INamedTypeSymbol documentType)
+				continue;
+
+			var role = GetNamedArg<string>(attr, "Role");
+			var lookupIndexName = GetNamedArg<string>(attr, "LookupIndexName");
+			var matchField = GetNamedArg<string>(attr, "MatchField");
+
+			aiEnrichment = AiEnrichmentAnalyzer.Analyze(
+				documentType, role, lookupIndexName, matchField, stjConfig, ct);
+
+			break; // Only one AI enrichment per context
+		}
+
 		return new ContextMappingModel(
 			contextSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty,
 			contextSymbol.Name,
 			stjConfig,
-			registrations.ToImmutable()
+			registrations.ToImmutable(),
+			aiEnrichment
 		);
 	}
 
@@ -514,6 +540,12 @@ public class MappingSourceGenerator : IIncrementalGenerator
 				var analysisNamesSource = AnalysisNamesEmitter.EmitForContext(model, reg);
 				if (analysisNamesSource != null)
 					context.AddSource($"{model.ContextTypeName}.{reg.ResolverName}Analysis.g.cs", analysisNamesSource);
+			}
+
+			if (model.AiEnrichment != null)
+			{
+				var aiSource = AiEnrichmentEmitter.Emit(model, model.AiEnrichment);
+				context.AddSource($"{model.ContextTypeName}.AiEnrichment.g.cs", aiSource);
 			}
 		}
 	}

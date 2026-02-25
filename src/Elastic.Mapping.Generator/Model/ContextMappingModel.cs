@@ -13,7 +13,8 @@ internal sealed record ContextMappingModel(
 	string Namespace,
 	string ContextTypeName,
 	StjContextConfig? StjConfig,
-	ImmutableArray<TypeRegistration> TypeRegistrations
+	ImmutableArray<TypeRegistration> TypeRegistrations,
+	AiEnrichmentModel? AiEnrichment = null
 );
 
 /// <summary>

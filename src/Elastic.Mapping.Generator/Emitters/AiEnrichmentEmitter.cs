@@ -1,0 +1,373 @@
+// Licensed to Elasticsearch B.V under one or more agreements.
+// Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
+// See the LICENSE file in the project root for more information
+
+using System.Security.Cryptography;
+using System.Text;
+using Elastic.Mapping.Generator.Model;
+
+namespace Elastic.Mapping.Generator.Emitters;
+
+/// <summary>
+/// Emits an <c>IAiEnrichmentProvider</c> implementation from an <see cref="AiEnrichmentModel"/>.
+/// </summary>
+internal static class AiEnrichmentEmitter
+{
+	public static string Emit(ContextMappingModel context, AiEnrichmentModel model)
+	{
+		var sb = new StringBuilder();
+		SharedEmitterHelpers.EmitHeader(sb);
+
+		if (!string.IsNullOrEmpty(context.Namespace))
+		{
+			sb.AppendLine($"namespace {context.Namespace};");
+			sb.AppendLine();
+		}
+
+		sb.AppendLine($"static partial class {context.ContextTypeName}");
+		sb.AppendLine("{");
+
+		EmitProviderClass(sb, model, "\t");
+
+		sb.AppendLine();
+		sb.AppendLine($"\t/// <summary>Source-generated AI enrichment provider for {model.DocumentTypeName}.</summary>");
+		sb.AppendLine($"\tpublic static {model.DocumentTypeName}AiEnrichmentProvider AiEnrichment {{ get; }} = new();");
+
+		sb.AppendLine("}");
+		return sb.ToString();
+	}
+
+	private static void EmitProviderClass(StringBuilder sb, AiEnrichmentModel model, string indent)
+	{
+		var className = $"{model.DocumentTypeName}AiEnrichmentProvider";
+		var lookupIndexName = model.LookupIndexName ?? $"{model.DocumentTypeName.ToLowerInvariant()}-ai-enrichment-cache";
+		var policyName = $"ai-enrichment-policy-{ComputeFieldsHash(model)}";
+		var pipelineName = "ai-enrichment-pipeline";
+
+		sb.AppendLine($"{indent}/// <summary>Generated AI enrichment provider for <see cref=\"global::{model.DocumentTypeFullyQualifiedName}\"/>.</summary>");
+		sb.AppendLine($"{indent}public sealed class {className} : global::Elastic.Ingest.Elasticsearch.Enrichment.IAiEnrichmentProvider");
+		sb.AppendLine($"{indent}{{");
+
+		EmitFieldPromptHashes(sb, model, indent + "\t");
+		EmitFieldPromptHashFieldNames(sb, model, indent + "\t");
+		EmitEnrichmentFields(sb, model, indent + "\t");
+		EmitRequiredSourceFields(sb, model, indent + "\t");
+		EmitBuildPrompt(sb, model, indent + "\t");
+		EmitParseResponse(sb, model, indent + "\t");
+		EmitLookupInfrastructure(sb, model, lookupIndexName, policyName, pipelineName, indent + "\t");
+		EmitInternalTypes(sb, model, indent + "\t");
+
+		sb.AppendLine($"{indent}}}");
+	}
+
+	private static void EmitFieldPromptHashes(StringBuilder sb, AiEnrichmentModel model, string indent)
+	{
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public global::System.Collections.Generic.IReadOnlyDictionary<string, string> FieldPromptHashes {{ get; }} =");
+		sb.AppendLine($"{indent}\tnew global::System.Collections.Generic.Dictionary<string, string>");
+		sb.AppendLine($"{indent}\t{{");
+		foreach (var o in model.Outputs)
+			sb.AppendLine($"{indent}\t\t[\"{o.FieldName}\"] = \"{o.PromptHash}\",");
+		sb.AppendLine($"{indent}\t}};");
+		sb.AppendLine();
+	}
+
+	private static void EmitFieldPromptHashFieldNames(StringBuilder sb, AiEnrichmentModel model, string indent)
+	{
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public global::System.Collections.Generic.IReadOnlyDictionary<string, string> FieldPromptHashFieldNames {{ get; }} =");
+		sb.AppendLine($"{indent}\tnew global::System.Collections.Generic.Dictionary<string, string>");
+		sb.AppendLine($"{indent}\t{{");
+		foreach (var o in model.Outputs)
+			sb.AppendLine($"{indent}\t\t[\"{o.FieldName}\"] = \"{o.PromptHashFieldName}\",");
+		sb.AppendLine($"{indent}\t}};");
+		sb.AppendLine();
+	}
+
+	private static void EmitEnrichmentFields(StringBuilder sb, AiEnrichmentModel model, string indent)
+	{
+		var fields = string.Join(", ", model.Outputs.Select(o => $"\"{o.FieldName}\""));
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public string[] EnrichmentFields {{ get; }} = [{fields}];");
+		sb.AppendLine();
+	}
+
+	private static void EmitRequiredSourceFields(StringBuilder sb, AiEnrichmentModel model, string indent)
+	{
+		var fields = string.Join(", ", model.Inputs.Select(i => $"\"{i.FieldName}\""));
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public string[] RequiredSourceFields {{ get; }} = [{fields}];");
+		sb.AppendLine();
+	}
+
+	private static void EmitBuildPrompt(StringBuilder sb, AiEnrichmentModel model, string indent)
+	{
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public string? BuildPrompt(global::System.Text.Json.JsonElement source, global::System.Collections.Generic.IReadOnlyCollection<string> staleFields)");
+		sb.AppendLine($"{indent}{{");
+
+		// Extract input fields
+		for (var i = 0; i < model.Inputs.Length; i++)
+		{
+			var input = model.Inputs[i];
+			sb.AppendLine($"{indent}\tstring? _in{i} = null;");
+			sb.AppendLine($"{indent}\tif (source.TryGetProperty(\"{input.FieldName}\", out var _iv{i}) && _iv{i}.ValueKind == global::System.Text.Json.JsonValueKind.String)");
+			sb.AppendLine($"{indent}\t\t_in{i} = _iv{i}.GetString();");
+		}
+
+		// Find the "body" input (longest text, typically the second input)
+		if (model.Inputs.Length > 1)
+			sb.AppendLine($"{indent}\tif (string.IsNullOrWhiteSpace(_in1)) return null;");
+		else if (model.Inputs.Length > 0)
+			sb.AppendLine($"{indent}\tif (string.IsNullOrWhiteSpace(_in0)) return null;");
+
+		sb.AppendLine();
+
+		// Build JSON schema properties conditionally per stale field
+		sb.AppendLine($"{indent}\tvar properties = new global::System.Collections.Generic.List<string>();");
+		sb.AppendLine($"{indent}\tvar required = new global::System.Collections.Generic.List<string>();");
+		sb.AppendLine();
+
+		foreach (var output in model.Outputs)
+		{
+			sb.AppendLine($"{indent}\tif (staleFields.Contains(\"{output.FieldName}\"))");
+			sb.AppendLine($"{indent}\t{{");
+			sb.AppendLine($"{indent}\t\trequired.Add(\"\\\"{output.FieldName}\\\"\");");
+
+			if (output.IsArray)
+			{
+				var schemaBuilder = new StringBuilder();
+				schemaBuilder.Append($"\\\"{output.FieldName}\\\": {{\\\"type\\\":\\\"array\\\",\\\"items\\\":{{\\\"type\\\":\\\"string\\\"}}");
+				if (output.MinItems > 0)
+					schemaBuilder.Append($",\\\"minItems\\\":{output.MinItems}");
+				if (output.MaxItems > 0)
+					schemaBuilder.Append($",\\\"maxItems\\\":{output.MaxItems}");
+				schemaBuilder.Append($",\\\"description\\\":\\\"{EscapeForStringLiteral(output.Description)}\\\"}}");
+				sb.AppendLine($"{indent}\t\tproperties.Add(\"{schemaBuilder}\");");
+			}
+			else
+			{
+				sb.AppendLine($"{indent}\t\tproperties.Add(\"\\\"{output.FieldName}\\\": {{\\\"type\\\":\\\"string\\\",\\\"description\\\":\\\"{EscapeForStringLiteral(output.Description)}\\\"}}\");");
+			}
+
+			sb.AppendLine($"{indent}\t}}");
+		}
+
+		sb.AppendLine();
+		sb.AppendLine($"{indent}\tif (properties.Count == 0) return null;");
+		sb.AppendLine();
+
+		// Build the prompt string
+		var roleSection = !string.IsNullOrEmpty(model.Role)
+			? $"<role>\\n{EscapeForStringLiteral(model.Role!)}\\n</role>\\n\\n"
+			: "";
+
+		sb.AppendLine($"{indent}\tvar reqJson = string.Join(\",\", required);");
+		sb.AppendLine($"{indent}\tvar propJson = string.Join(\",\", properties);");
+		sb.AppendLine();
+
+		// Use input variables in the prompt
+		var inputSection = new StringBuilder();
+		for (var i = 0; i < model.Inputs.Length; i++)
+		{
+			var input = model.Inputs[i];
+			inputSection.Append($"<{input.FieldName}>\" + (_in{i} ?? \"\") + \"</{input.FieldName}>\\n");
+		}
+
+		sb.AppendLine($"{indent}\treturn \"{roleSection}<task>\\nReturn a single valid JSON object matching the schema. No markdown, no extra text, no trailing characters.\\n</task>\\n\\n<json-schema>\\n{{\\\"type\\\":\\\"object\\\",\\\"required\\\":[\" + reqJson + \"],\\\"additionalProperties\\\":false,\\\"properties\\\":{{\" + propJson + \"}}}}\\n</json-schema>\\n\\n<rules>\\n- Extract ONLY from provided content. Never hallucinate.\\n- Be specific. Avoid generic phrases.\\n- Output exactly one JSON object.\\n</rules>\\n\\n<document>\\n{inputSection}</document>\";");
+
+		sb.AppendLine($"{indent}}}");
+		sb.AppendLine();
+	}
+
+	private static void EmitParseResponse(StringBuilder sb, AiEnrichmentModel model, string indent)
+	{
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public string? ParseResponse(string llmResponse, global::System.Collections.Generic.IReadOnlyCollection<string> enrichedFields)");
+		sb.AppendLine($"{indent}{{");
+
+		// Clean LLM response
+		sb.AppendLine($"{indent}\tvar cleaned = llmResponse.Replace(\"```json\", \"\").Replace(\"```\", \"\").Trim().TrimEnd('`');");
+		sb.AppendLine($"{indent}\tif (cleaned.EndsWith(\"}}}}\") && !cleaned.Contains(\"{{{{\"))");
+		sb.AppendLine($"{indent}\t\tcleaned = cleaned.Substring(0, cleaned.Length - 1);");
+		sb.AppendLine();
+
+		// Parse with generated STJ context
+		sb.AppendLine($"{indent}\t_AiFields? parsed;");
+		sb.AppendLine($"{indent}\ttry");
+		sb.AppendLine($"{indent}\t{{");
+		sb.AppendLine($"{indent}\t\tparsed = global::System.Text.Json.JsonSerializer.Deserialize(cleaned, _AiJsonContext.Default._AiFields);");
+		sb.AppendLine($"{indent}\t}}");
+		sb.AppendLine($"{indent}\tcatch (global::System.Text.Json.JsonException)");
+		sb.AppendLine($"{indent}\t{{");
+		sb.AppendLine($"{indent}\t\treturn null;");
+		sb.AppendLine($"{indent}\t}}");
+		sb.AppendLine($"{indent}\tif (parsed == null) return null;");
+		sb.AppendLine();
+
+		// Build partial doc JSON with only enriched fields + their prompt hashes
+		sb.AppendLine($"{indent}\tvar sb = new global::System.Text.StringBuilder();");
+		sb.AppendLine($"{indent}\tsb.Append('{{');");
+		sb.AppendLine($"{indent}\tvar first = true;");
+
+		foreach (var output in model.Outputs)
+		{
+			sb.AppendLine($"{indent}\tif (enrichedFields.Contains(\"{output.FieldName}\") && parsed.{output.PropertyName} != null)");
+			sb.AppendLine($"{indent}\t{{");
+			sb.AppendLine($"{indent}\t\tif (!first) sb.Append(',');");
+			sb.AppendLine($"{indent}\t\tfirst = false;");
+
+			if (output.IsArray)
+			{
+				sb.AppendLine($"{indent}\t\tsb.Append(\"\\\"{output.FieldName}\\\":\");");
+				sb.AppendLine($"{indent}\t\tsb.Append(global::System.Text.Json.JsonSerializer.Serialize(parsed.{output.PropertyName}));");
+			}
+			else
+			{
+				sb.AppendLine($"{indent}\t\tsb.Append(\"\\\"{output.FieldName}\\\":\");");
+				sb.AppendLine($"{indent}\t\tsb.Append(global::System.Text.Json.JsonSerializer.Serialize(parsed.{output.PropertyName}));");
+			}
+
+			// Per-field prompt hash
+			sb.AppendLine($"{indent}\t\tsb.Append(\",\\\"{output.PromptHashFieldName}\\\":\\\"{output.PromptHash}\\\"\");");
+			sb.AppendLine($"{indent}\t}}");
+		}
+
+		sb.AppendLine($"{indent}\tsb.Append('}}');");
+
+		sb.AppendLine($"{indent}\tvar result = sb.ToString();");
+		sb.AppendLine($"{indent}\treturn result == \"{{}}\" ? null : result;");
+
+		sb.AppendLine($"{indent}}}");
+		sb.AppendLine();
+	}
+
+	private static void EmitLookupInfrastructure(
+		StringBuilder sb, AiEnrichmentModel model,
+		string lookupIndexName, string policyName, string pipelineName,
+		string indent)
+	{
+		// LookupIndexName
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public string LookupIndexName => \"{lookupIndexName}\";");
+		sb.AppendLine();
+
+		// LookupIndexMapping
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public string LookupIndexMapping => @\"{{");
+		sb.AppendLine($"{indent}  \"\"mappings\"\": {{");
+		sb.AppendLine($"{indent}    \"\"properties\"\": {{");
+		sb.AppendLine($"{indent}      \"\"{model.MatchFieldName}\"\": {{ \"\"type\"\": \"\"keyword\"\" }},");
+		foreach (var output in model.Outputs)
+		{
+			sb.AppendLine($"{indent}      \"\"{output.FieldName}\"\": {{ \"\"type\"\": \"\"text\"\" }},");
+			sb.AppendLine($"{indent}      \"\"{output.PromptHashFieldName}\"\": {{ \"\"type\"\": \"\"keyword\"\" }},");
+		}
+		sb.AppendLine($"{indent}      \"\"created_at\"\": {{ \"\"type\"\": \"\"date\"\" }}");
+		sb.AppendLine($"{indent}    }}");
+		sb.AppendLine($"{indent}  }}");
+		sb.AppendLine($"{indent}}}\";");
+		sb.AppendLine();
+
+		// MatchField
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public string MatchField => \"{model.MatchFieldName}\";");
+		sb.AppendLine();
+
+		// EnrichPolicyName
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public string EnrichPolicyName => \"{policyName}\";");
+		sb.AppendLine();
+
+		// EnrichPolicyBody
+		var enrichFields = new List<string>();
+		foreach (var output in model.Outputs)
+		{
+			enrichFields.Add($"\"\"{output.FieldName}\"\"");
+			enrichFields.Add($"\"\"{output.PromptHashFieldName}\"\"");
+		}
+		var enrichFieldsJson = string.Join(", ", enrichFields);
+
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public string EnrichPolicyBody => @\"{{");
+		sb.AppendLine($"{indent}  \"\"match\"\": {{");
+		sb.AppendLine($"{indent}    \"\"indices\"\": \"\"{lookupIndexName}\"\",");
+		sb.AppendLine($"{indent}    \"\"match_field\"\": \"\"{model.MatchFieldName}\"\",");
+		sb.AppendLine($"{indent}    \"\"enrich_fields\"\": [{enrichFieldsJson}]");
+		sb.AppendLine($"{indent}  }}");
+		sb.AppendLine($"{indent}}}\";");
+		sb.AppendLine();
+
+		// PipelineName
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public string PipelineName => \"{pipelineName}\";");
+		sb.AppendLine();
+
+		// PipelineBody — per-field copy script
+		var scriptParts = new List<string>();
+		foreach (var output in model.Outputs)
+		{
+			scriptParts.Add($"if (e.{output.FieldName} != null) {{ ctx.{output.FieldName} = e.{output.FieldName}; ctx.{output.PromptHashFieldName} = e.{output.PromptHashFieldName}; }}");
+		}
+		var script = $"def e = ctx._enrich; {string.Join(" ", scriptParts)} ctx.remove('_enrich');";
+
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public string PipelineBody => @\"{{");
+		sb.AppendLine($"{indent}  \"\"description\"\": \"\"AI enrichment pipeline\"\",");
+		sb.AppendLine($"{indent}  \"\"processors\"\": [");
+		sb.AppendLine($"{indent}    {{");
+		sb.AppendLine($"{indent}      \"\"enrich\"\": {{");
+		sb.AppendLine($"{indent}        \"\"policy_name\"\": \"\"{policyName}\"\",");
+		sb.AppendLine($"{indent}        \"\"field\"\": \"\"{model.MatchFieldName}\"\",");
+		sb.AppendLine($"{indent}        \"\"target_field\"\": \"\"_enrich\"\",");
+		sb.AppendLine($"{indent}        \"\"max_matches\"\": 1,");
+		sb.AppendLine($"{indent}        \"\"ignore_missing\"\": true");
+		sb.AppendLine($"{indent}      }}");
+		sb.AppendLine($"{indent}    }},");
+		sb.AppendLine($"{indent}    {{");
+		sb.AppendLine($"{indent}      \"\"script\"\": {{");
+		sb.AppendLine($"{indent}        \"\"if\"\": \"\"ctx._enrich != null\"\",");
+		sb.AppendLine($"{indent}        \"\"source\"\": \"\"{EscapeForVerbatim(script)}\"\"");
+		sb.AppendLine($"{indent}      }}");
+		sb.AppendLine($"{indent}    }}");
+		sb.AppendLine($"{indent}  ]");
+		sb.AppendLine($"{indent}}}\";");
+		sb.AppendLine();
+	}
+
+	private static void EmitInternalTypes(StringBuilder sb, AiEnrichmentModel model, string indent)
+	{
+		// _AiFields — for deserializing the LLM response
+		sb.AppendLine($"{indent}internal sealed class _AiFields");
+		sb.AppendLine($"{indent}{{");
+		foreach (var output in model.Outputs)
+		{
+			var type = output.IsArray ? "string[]?" : "string?";
+			sb.AppendLine($"{indent}\t[global::System.Text.Json.Serialization.JsonPropertyName(\"{output.FieldName}\")]");
+			sb.AppendLine($"{indent}\tpublic {type} {output.PropertyName} {{ get; set; }}");
+		}
+		sb.AppendLine($"{indent}}}");
+		sb.AppendLine();
+
+		// STJ context
+		sb.AppendLine($"{indent}[global::System.Text.Json.Serialization.JsonSerializable(typeof(_AiFields))]");
+		sb.AppendLine($"{indent}internal sealed partial class _AiJsonContext : global::System.Text.Json.Serialization.JsonSerializerContext;");
+	}
+
+	// ── Helpers ──
+
+	private static string ComputeFieldsHash(AiEnrichmentModel model)
+	{
+		var fieldsString = string.Join(",",
+			model.Outputs.SelectMany(o => new[] { o.FieldName, o.PromptHashFieldName }));
+		using var sha = SHA256.Create();
+		var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(fieldsString));
+		return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant().Substring(0, 8);
+	}
+
+	private static string EscapeForStringLiteral(string value) =>
+		value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "");
+
+	private static string EscapeForVerbatim(string value) =>
+		value.Replace("\"", "\"\"");
+}

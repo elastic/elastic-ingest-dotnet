@@ -33,13 +33,13 @@ public class OrchestratorContext<TEvent> where TEvent : class
 	public string PrimaryWriteAlias { get; init; } = null!;
 
 	/// <summary> The resolved secondary write alias (or data stream name). </summary>
-	public string? SecondaryWriteAlias { get; init; }
+	public string SecondaryWriteAlias { get; init; } = null!;
 
 	/// <summary> The resolved primary read target (ReadAlias or fallback to write alias). </summary>
 	public string PrimaryReadAlias { get; init; } = null!;
 
 	/// <summary> The resolved secondary read target (ReadAlias or fallback to write alias). </summary>
-	public string? SecondaryReadAlias { get; init; }
+	public string SecondaryReadAlias { get; init; } = null!;
 }
 
 /// <summary>
@@ -401,7 +401,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			Strategy = _strategy,
 			BatchTimestamp = _batchTimestamp,
 			PrimaryWriteAlias = _primaryWriteAlias!,
-			SecondaryWriteAlias = _secondaryWriteAlias,
+			SecondaryWriteAlias = _secondaryWriteAlias!,
 			PrimaryReadAlias = _primaryTypeContext.ResolveReadTarget(),
 			SecondaryReadAlias = _secondaryTypeContext.ResolveReadTarget(),
 		};
