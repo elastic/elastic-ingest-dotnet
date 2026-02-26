@@ -105,14 +105,27 @@ public class AiEnrichmentGeneratorTests
 	public void EnrichPolicyNameIsNotEmpty()
 	{
 		Provider.EnrichPolicyName.Should().NotBeNullOrEmpty();
-		Provider.EnrichPolicyName.Should().StartWith($"{Provider.LookupIndexName}-policy-");
+		Provider.EnrichPolicyName.Should().Be($"{Provider.LookupIndexName}-ai-policy");
 	}
 
 	[Test]
 	public void PipelineNameIsNotEmpty()
 	{
 		Provider.PipelineName.Should().NotBeNullOrEmpty();
-		Provider.PipelineName.Should().StartWith($"{Provider.LookupIndexName}-pipeline-");
+		Provider.PipelineName.Should().Be($"{Provider.LookupIndexName}-ai-pipeline");
+	}
+
+	[Test]
+	public void FieldsHashIsNotEmpty()
+	{
+		Provider.FieldsHash.Should().NotBeNullOrEmpty();
+		Provider.FieldsHash.Should().HaveLength(8, "fields hash should be first 8 chars of SHA-256");
+	}
+
+	[Test]
+	public void PipelineBodyContainsFieldsHash()
+	{
+		Provider.PipelineBody.Should().Contain($"[fields_hash:{Provider.FieldsHash}]");
 	}
 
 	[Test]

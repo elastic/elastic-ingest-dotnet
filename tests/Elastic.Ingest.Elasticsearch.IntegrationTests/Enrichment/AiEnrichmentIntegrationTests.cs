@@ -68,8 +68,8 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 	public async Task ProviderGeneratesValidInfrastructureJson()
 	{
 		Provider.LookupIndexName.Should().NotBeNullOrEmpty();
-		Provider.EnrichPolicyName.Should().StartWith($"{Provider.LookupIndexName}-policy-");
-		Provider.PipelineName.Should().StartWith($"{Provider.LookupIndexName}-pipeline-");
+		Provider.EnrichPolicyName.Should().Be($"{Provider.LookupIndexName}-ai-policy");
+		Provider.PipelineName.Should().Be($"{Provider.LookupIndexName}-ai-pipeline");
 		Provider.MatchField.Should().Be("url");
 
 		using var mappingDoc = JsonDocument.Parse(Provider.LookupIndexMapping);
@@ -373,6 +373,45 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 					summary.GetString().Should().Be("Backfill test summary.");
 			}
 		}
+	}
+
+	// ── Idempotency ──
+
+	[Test]
+	public async Task InitializeAsyncIsIdempotent()
+	{
+		using var enrichment = new AiEnrichmentOrchestrator(Transport, Provider);
+
+		await enrichment.InitializeAsync();
+		await enrichment.InitializeAsync();
+
+		var lookupExists = await Transport.RequestAsync<StringResponse>(
+			HttpMethod.HEAD, Provider.LookupIndexName);
+		lookupExists.ApiCallDetails.HttpStatusCode.Should().Be(200,
+			"lookup index should still exist after double initialization");
+
+		var pipelineExists = await Transport.RequestAsync<StringResponse>(
+			HttpMethod.GET, $"_ingest/pipeline/{Provider.PipelineName}");
+		pipelineExists.ApiCallDetails.HttpStatusCode.Should().Be(200,
+			"pipeline should still exist after double initialization");
+	}
+
+	[Test]
+	public async Task EnrichAsyncIsIdempotent()
+	{
+		using var enrichment = new AiEnrichmentOrchestrator(Transport, Provider);
+		await enrichment.InitializeAsync();
+		await IndexTestDocumentsAsync();
+
+		var secondaryAlias = TestMappingContext.AiDocumentationPageAiSecondary.Context.ResolveWriteAlias();
+
+		var first = await enrichment.EnrichAsync(secondaryAlias);
+		first.TotalCandidates.Should().BeGreaterThan(0,
+			"first run should find candidates");
+
+		var second = await enrichment.EnrichAsync(secondaryAlias);
+		second.TotalCandidates.Should().BeLessThanOrEqualTo(first.TotalCandidates,
+			"second run should find fewer or equal candidates since first run enriched some");
 	}
 
 	// ── Rollover survival ──

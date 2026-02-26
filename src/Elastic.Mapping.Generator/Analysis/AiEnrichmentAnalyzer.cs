@@ -24,8 +24,9 @@ internal static class AiEnrichmentAnalyzer
 		INamedTypeSymbol documentType,
 		string? role,
 		string? lookupIndexName,
+		string? writeAlias,
 		string? matchField,
-		StjContextConfig? stjConfig, // passed through for field name resolution only
+		StjContextConfig? stjConfig,
 		CancellationToken ct)
 	{
 		ct.ThrowIfCancellationRequested();
@@ -92,6 +93,7 @@ internal static class AiEnrichmentAnalyzer
 			documentType.ToDisplayString(),
 			role,
 			lookupIndexName,
+			writeAlias,
 			resolvedMatchField,
 			inputs.ToImmutable(),
 			outputs.ToImmutable()

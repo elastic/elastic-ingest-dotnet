@@ -134,14 +134,26 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			if (typeArg is not INamedTypeSymbol documentType)
 				continue;
 
+			if (aiEnrichment != null)
+				break; // Only one AI enrichment per context (enforced via diagnostic below)
+
 			var role = GetNamedArg<string>(attr, "Role");
 			var lookupIndexName = GetNamedArg<string>(attr, "LookupIndexName");
 			var matchField = GetNamedArg<string>(attr, "MatchField");
 
-			aiEnrichment = AiEnrichmentAnalyzer.Analyze(
-				documentType, role, lookupIndexName, matchField, stjConfig, ct);
+			// Resolve the WriteAlias from the matching [Index<T>] registration for this document type
+			string? writeAlias = null;
+			foreach (var reg in registrations)
+			{
+				if (reg.TypeFullyQualifiedName == documentType.ToDisplayString() && reg.IndexConfig?.WriteAlias != null)
+				{
+					writeAlias = reg.IndexConfig.WriteAlias;
+					break;
+				}
+			}
 
-			break; // Only one AI enrichment per context
+			aiEnrichment = AiEnrichmentAnalyzer.Analyze(
+				documentType, role, lookupIndexName, writeAlias, matchField, stjConfig, ct);
 		}
 
 		return new ContextMappingModel(
@@ -515,12 +527,42 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			: AnalysisComponentsModel.Empty;
 	}
 
+	private static readonly DiagnosticDescriptor DuplicateAiEnrichmentDiagnostic = new(
+		"ELASTIC001",
+		"Duplicate AI enrichment for entity",
+		"Only one [AiEnrichment<{0}>] is allowed across all mapping contexts. Remove the duplicate from '{1}'.",
+		"Elastic.Mapping",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
 	private static void ExecuteAll(SourceProductionContext context, ImmutableArray<ContextMappingModel> models)
 	{
 		// Track emitted extension classes globally across all contexts to avoid
 		// duplicate definitions when the same document type is registered in
 		// multiple contexts within the same namespace.
 		var emittedExtensionKeys = new HashSet<string>();
+
+		// Enforce: only one [AiEnrichment<T>] per document type across all contexts
+		var aiEnrichmentTypes = new Dictionary<string, string>();
+		foreach (var model in models)
+		{
+			if (model.AiEnrichment != null)
+			{
+				var docFqn = model.AiEnrichment.DocumentTypeFullyQualifiedName;
+				if (aiEnrichmentTypes.ContainsKey(docFqn))
+				{
+					context.ReportDiagnostic(Diagnostic.Create(
+						DuplicateAiEnrichmentDiagnostic,
+						Location.None,
+						model.AiEnrichment.DocumentTypeName,
+						model.ContextTypeName));
+				}
+				else
+				{
+					aiEnrichmentTypes[docFqn] = model.ContextTypeName;
+				}
+			}
+		}
 
 		foreach (var model in models)
 		{

@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Elastic.Ingest.Elasticsearch.Enrichment;
@@ -113,6 +114,92 @@ public class AiEnrichmentOrchestratorTests
 		using var orchestrator = new AiEnrichmentOrchestrator(TestSetup.SharedTransport, CreateProvider());
 		await orchestrator.CleanupOlderThanAsync(TimeSpan.FromDays(30));
 	}
+
+	[Test]
+	public void ProviderBuildPromptIncludesAllFieldsWhenNoHashes()
+	{
+		var provider = CreateProvider();
+		var source = JsonDocument.Parse("""{"title":"Test","body":"Some content"}""").RootElement;
+		var staleFields = new List<string> { "ai_summary", "ai_questions" };
+		var prompt = provider.BuildPrompt(source, staleFields);
+		prompt.Should().NotBeNull();
+		prompt.Should().Contain("Some content");
+	}
+
+	[Test]
+	public void ProviderBuildPromptReturnsNullForEmptyBody()
+	{
+		var provider = CreateProvider();
+		var source = JsonDocument.Parse("""{"title":"Test","body":""}""").RootElement;
+		var staleFields = new List<string> { "ai_summary" };
+		var prompt = provider.BuildPrompt(source, staleFields);
+		prompt.Should().BeNull("empty body should produce null prompt");
+	}
+
+	[Test]
+	public void ProviderParseResponseReturnsNullForInvalidResponse()
+	{
+		var provider = CreateProvider();
+		string[] fields = ["ai_summary"];
+		var result = provider.ParseResponse("totally unrelated text", fields);
+		result.Should().BeNull("response without ai_summary key should be null");
+	}
+
+	[Test]
+	public void ExtractCompletionTextReturnsResultFromJsonResponse()
+	{
+		var transport = Virtual.Elasticsearch
+			.Bootstrap(1)
+			.ClientCalls(r => r.SucceedAlways()
+				.ReturnResponse(new { completion = new[] { new { result = "Hello world" } } }))
+			.StaticNodePool()
+			.Settings(s => s.DisablePing().EnableDebugMode())
+			.RequestHandler;
+
+		var response = transport.Request<JsonResponse>(HttpMethod.GET, "/");
+		var text = response.Get<string>("completion.0.result");
+
+		text.Should().Be("Hello world");
+	}
+
+	[Test]
+	public void ExtractCompletionTextReturnsNullForEmptyCompletion()
+	{
+		var transport = Virtual.Elasticsearch
+			.Bootstrap(1)
+			.ClientCalls(r => r.SucceedAlways()
+				.ReturnResponse(new { completion = Array.Empty<object>() }))
+			.StaticNodePool()
+			.Settings(s => s.DisablePing().EnableDebugMode())
+			.RequestHandler;
+
+		var response = transport.Request<JsonResponse>(HttpMethod.GET, "/");
+		var text = response.Get<string>("completion.0.result");
+
+		text.Should().BeNullOrEmpty();
+	}
+
+	[Test]
+	public void UrlHashIsDeterministic()
+	{
+		var hash1 = UrlHash("/test-page");
+		var hash2 = UrlHash("/test-page");
+		hash1.Should().Be(hash2);
+	}
+
+	[Test]
+	public void UrlHashDiffersForDifferentUrls()
+	{
+		var hash1 = UrlHash("/page-a");
+		var hash2 = UrlHash("/page-b");
+		hash1.Should().NotBe(hash2);
+	}
+
+	private static string UrlHash(string url)
+	{
+		var hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(url));
+		return Convert.ToHexString(hash).ToLowerInvariant();
+	}
 }
 
 internal sealed class FakeAiEnrichmentProvider : IAiEnrichmentProvider
@@ -150,5 +237,6 @@ internal sealed class FakeAiEnrichmentProvider : IAiEnrichmentProvider
 	public string EnrichPolicyName => "test-ai-enrichment-policy";
 	public string EnrichPolicyBody => """{"match":{"indices":"test-ai-enrichment-cache","match_field":"url","enrich_fields":["ai_summary"]}}""";
 	public string PipelineName => "test-ai-enrichment-pipeline";
-	public string PipelineBody => """{"processors":[]}""";
+	public string PipelineBody => """{"description":"AI enrichment pipeline [fields_hash:abcd1234]","processors":[]}""";
+	public string FieldsHash => "abcd1234";
 }

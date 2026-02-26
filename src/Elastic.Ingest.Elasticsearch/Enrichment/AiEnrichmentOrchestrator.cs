@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -11,6 +12,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Ingest.Elasticsearch.Helpers;
+using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Mapping;
 using Elastic.Transport;
 
@@ -23,11 +25,6 @@ namespace Elastic.Ingest.Elasticsearch.Enrichment;
 ///   <item><see cref="EnrichAsync"/> — query for unenriched/stale docs, call LLM per-field, update lookup, backfill</item>
 ///   <item><see cref="CleanupOrphanedAsync"/>, <see cref="CleanupOlderThanAsync"/>, <see cref="PurgeAsync"/> — manage stale cache entries</item>
 /// </list>
-/// <para>
-/// No in-memory cache — the lookup index is the persistent store and the target index
-/// is queried directly to find candidates. Per-field prompt hashing ensures that changing
-/// one field's prompt only regenerates that field.
-/// </para>
 /// </summary>
 public class AiEnrichmentOrchestrator : IDisposable
 {
@@ -35,6 +32,9 @@ public class AiEnrichmentOrchestrator : IDisposable
 	private readonly IAiEnrichmentProvider _provider;
 	private readonly AiEnrichmentOptions _options;
 	private readonly SemaphoreSlim _throttle;
+
+	private readonly JsonElement _stalenessQuery;
+	private readonly string[] _sourceFields;
 
 	/// <inheritdoc cref="AiEnrichmentOrchestrator"/>
 	public AiEnrichmentOrchestrator(
@@ -46,6 +46,8 @@ public class AiEnrichmentOrchestrator : IDisposable
 		_provider = provider ?? throw new ArgumentNullException(nameof(provider));
 		_options = options ?? new AiEnrichmentOptions();
 		_throttle = new SemaphoreSlim(_options.MaxConcurrency);
+		_stalenessQuery = BuildStalenessQuery();
+		_sourceFields = BuildSourceFields();
 	}
 
 	/// <summary>
@@ -68,6 +70,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 	public async Task<AiEnrichmentResult> EnrichAsync(string targetIndex, CancellationToken ct = default)
 	{
 		var enriched = 0;
+		var skipped = 0;
 		var failed = 0;
 		var totalCandidates = 0;
 		object[]? searchAfter = null;
@@ -77,19 +80,20 @@ public class AiEnrichmentOrchestrator : IDisposable
 			var remaining = _options.MaxEnrichmentsPerRun - enriched - failed;
 			var batchSize = Math.Min(_options.QueryBatchSize, remaining);
 
-			var (candidates, nextSearchAfter) = await QueryCandidatesAsync(
+			var result = await QueryCandidatesAsync(
 				targetIndex, batchSize, searchAfter, ct).ConfigureAwait(false);
 
-			if (candidates.Count == 0)
+			if (result.Candidates.Count == 0)
 				break;
 
-			totalCandidates += candidates.Count;
-			searchAfter = nextSearchAfter;
+			totalCandidates += result.Candidates.Count;
+			searchAfter = result.SearchAfter;
 
-			var (batchEnriched, batchFailed) = await ProcessBatchAsync(candidates, ct).ConfigureAwait(false);
+			var batch = await ProcessBatchAsync(result.Candidates, ct).ConfigureAwait(false);
 
-			enriched += batchEnriched;
-			failed += batchFailed;
+			enriched += batch.Enriched;
+			skipped += batch.Skipped;
+			failed += batch.Failed;
 		}
 
 		if (enriched > 0)
@@ -102,6 +106,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 		{
 			TotalCandidates = totalCandidates,
 			Enriched = enriched,
+			Skipped = skipped,
 			Failed = failed,
 			ReachedLimit = enriched + failed >= _options.MaxEnrichmentsPerRun
 		};
@@ -114,8 +119,6 @@ public class AiEnrichmentOrchestrator : IDisposable
 	/// </summary>
 	public async Task CleanupOrphanedAsync(string targetIndex, CancellationToken ct = default)
 	{
-		var orphanUrls = new List<string>();
-
 		var pit = new PointInTimeSearch<JsonElement>(_transport, new PointInTimeSearchOptions
 		{
 			Index = _provider.LookupIndexName,
@@ -139,32 +142,15 @@ public class AiEnrichmentOrchestrator : IDisposable
 					continue;
 
 				var existing = await FindExistingUrlsAsync(targetIndex, urls, ct).ConfigureAwait(false);
-				foreach (var url in urls)
-				{
-					if (!existing.Contains(url))
-						orphanUrls.Add(url);
-				}
+				var orphans = urls.Where(u => !existing.Contains(u)).ToList();
+
+				if (orphans.Count > 0)
+					await DeleteByMatchFieldAsync(_provider.LookupIndexName, orphans, ct).ConfigureAwait(false);
 			}
 		}
 		finally
 		{
 			await pit.DisposeAsync().ConfigureAwait(false);
-		}
-
-		if (orphanUrls.Count > 0)
-		{
-			var terms = string.Join(",", orphanUrls.Select(u =>
-			{
-				var encoded = JsonEncodedText.Encode(u);
-				return $"\"{encoded}\"";
-			}));
-			var deleteQuery = $"{{\"terms\":{{\"{_provider.MatchField}\":[{terms}]}}}}";
-			var dbq = new DeleteByQuery(_transport, new DeleteByQueryOptions
-			{
-				Index = _provider.LookupIndexName,
-				QueryBody = deleteQuery
-			});
-			await dbq.RunAsync(ct).ConfigureAwait(false);
 		}
 	}
 
@@ -207,101 +193,146 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 	private async Task EnsureLookupIndexAsync(CancellationToken ct)
 	{
-		var exists = await _transport.RequestAsync<StringResponse>(
+		var exists = await _transport.RequestAsync<JsonResponse>(
 			HttpMethod.HEAD, _provider.LookupIndexName, cancellationToken: ct).ConfigureAwait(false);
 
 		if (exists.ApiCallDetails.HttpStatusCode == 200)
 			return;
 
-		await _transport.RequestAsync<StringResponse>(
+		var put = await _transport.RequestAsync<JsonResponse>(
 			HttpMethod.PUT, _provider.LookupIndexName,
 			PostData.String(_provider.LookupIndexMapping), cancellationToken: ct).ConfigureAwait(false);
+
+		if (put.ApiCallDetails.HttpStatusCode is not (200 or 201))
+			throw new Exception($"Failed to create lookup index '{_provider.LookupIndexName}': HTTP {put.ApiCallDetails.HttpStatusCode}");
 	}
 
 	private async Task EnsureEnrichPolicyAsync(CancellationToken ct)
 	{
-		var exists = await _transport.RequestAsync<StringResponse>(
+		var exists = await _transport.RequestAsync<JsonResponse>(
 			HttpMethod.GET, $"_enrich/policy/{_provider.EnrichPolicyName}",
 			cancellationToken: ct).ConfigureAwait(false);
 
-		if (exists.ApiCallDetails.HttpStatusCode == 200
-			&& exists.Body?.Contains(_provider.EnrichPolicyName) == true)
-			return;
+		if (exists.ApiCallDetails.HttpStatusCode == 200)
+		{
+			// Check if the existing policy matches the current fields hash by
+			// inspecting the enrich_fields — if they differ, delete and recreate.
+			var currentBody = _provider.EnrichPolicyBody;
+			var existingFieldsMatch = PolicyMatchesCurrentFields(exists);
+			if (existingFieldsMatch)
+				return;
 
-		await _transport.RequestAsync<StringResponse>(
+			await _transport.RequestAsync<JsonResponse>(
+				HttpMethod.DELETE, $"_enrich/policy/{_provider.EnrichPolicyName}",
+				cancellationToken: ct).ConfigureAwait(false);
+		}
+
+		var put = await _transport.RequestAsync<JsonResponse>(
 			HttpMethod.PUT, $"_enrich/policy/{_provider.EnrichPolicyName}",
 			PostData.String(_provider.EnrichPolicyBody), cancellationToken: ct).ConfigureAwait(false);
+
+		if (put.ApiCallDetails.HttpStatusCode is not (200 or 201))
+			throw new Exception($"Failed to create enrich policy '{_provider.EnrichPolicyName}': HTTP {put.ApiCallDetails.HttpStatusCode}");
+	}
+
+	private bool PolicyMatchesCurrentFields(JsonResponse response)
+	{
+		var policies = response.Get<JsonElement>("policies");
+		if (policies.ValueKind != JsonValueKind.Array)
+			return false;
+
+		foreach (var policy in policies.EnumerateArray())
+		{
+			if (!policy.TryGetProperty("config", out var config))
+				continue;
+			if (!config.TryGetProperty("match", out var match))
+				continue;
+			if (!match.TryGetProperty("enrich_fields", out var fields))
+				continue;
+
+			var existingFields = new HashSet<string>();
+			foreach (var f in fields.EnumerateArray())
+			{
+				if (f.GetString() is { } s)
+					existingFields.Add(s);
+			}
+
+			var expectedFields = new HashSet<string>();
+			foreach (var field in _provider.EnrichmentFields)
+			{
+				expectedFields.Add(field);
+				if (_provider.FieldPromptHashFieldNames.TryGetValue(field, out var phField))
+					expectedFields.Add(phField);
+			}
+
+			return existingFields.SetEquals(expectedFields);
+		}
+
+		return false;
 	}
 
 	private async Task ExecuteEnrichPolicyAsync(CancellationToken ct)
 	{
-		await _transport.RequestAsync<StringResponse>(
+		var response = await _transport.RequestAsync<JsonResponse>(
 			HttpMethod.POST, $"_enrich/policy/{_provider.EnrichPolicyName}/_execute",
 			PostData.Empty, cancellationToken: ct).ConfigureAwait(false);
+
+		if (response.ApiCallDetails.HttpStatusCode is not 200)
+			throw new Exception($"Failed to execute enrich policy '{_provider.EnrichPolicyName}': HTTP {response.ApiCallDetails.HttpStatusCode}");
 	}
 
 	private async Task EnsurePipelineAsync(CancellationToken ct)
 	{
-		await _transport.RequestAsync<StringResponse>(
+		var expectedTag = $"[fields_hash:{_provider.FieldsHash}]";
+
+		var existing = await _transport.RequestAsync<JsonResponse>(
+			HttpMethod.GET, $"_ingest/pipeline/{_provider.PipelineName}",
+			cancellationToken: ct).ConfigureAwait(false);
+
+		if (existing.ApiCallDetails.HttpStatusCode == 200)
+		{
+			var desc = existing.Get<string>($"{_provider.PipelineName}.description");
+			if (desc != null && desc.Contains(expectedTag))
+				return;
+		}
+
+		var response = await _transport.RequestAsync<JsonResponse>(
 			HttpMethod.PUT, $"_ingest/pipeline/{_provider.PipelineName}",
 			PostData.String(_provider.PipelineBody), cancellationToken: ct).ConfigureAwait(false);
+
+		if (response.ApiCallDetails.HttpStatusCode is not 200)
+			throw new Exception($"Failed to create pipeline '{_provider.PipelineName}': HTTP {response.ApiCallDetails.HttpStatusCode}");
 	}
 
 	// ── Private: candidate querying ──
 
-	private async Task<(List<CandidateDocument> Hits, object[]? SearchAfter)> QueryCandidatesAsync(
+	private async Task<CandidateQueryResult> QueryCandidatesAsync(
 		string index, int size, object[]? searchAfter, CancellationToken ct)
 	{
-		var sourceFields = new List<string>(_provider.RequiredSourceFields) { _provider.MatchField };
-		foreach (var phField in _provider.FieldPromptHashFieldNames.Values)
-			sourceFields.Add(phField);
-		var sourceJson = string.Join(",", sourceFields.Select(f => $"\"{f}\""));
-
 		var searchAfterClause = searchAfter != null
 			? $",\"search_after\":[{string.Join(",", searchAfter.Select(v => $"\"{v}\""))}]"
 			: "";
 
-		var query = $"{{\"size\":{size},\"query\":{BuildStalenessQuery()},\"_source\":[{sourceJson}],\"sort\":[{{\"_doc\":\"asc\"}}]{searchAfterClause}}}";
-		var body = await RequestAsync(HttpMethod.POST, $"{index}/_search", query, ct).ConfigureAwait(false);
+		var sourceJson = string.Join(",", _sourceFields.Select(f => $"\"{f}\""));
 
-		if (body == null)
-			return (new List<CandidateDocument>(), null);
+		var query = $"{{\"size\":{size},\"query\":{_stalenessQuery.GetRawText()},\"_source\":[{sourceJson}],\"sort\":[{{\"_doc\":\"asc\"}}]{searchAfterClause}}}";
+		var response = await _transport.RequestAsync<JsonResponse>(
+			HttpMethod.POST, $"{index}/_search", PostData.String(query), cancellationToken: ct).ConfigureAwait(false);
 
-		return ParseCandidateResponse(body);
+		if (response.ApiCallDetails.HttpStatusCode is not 200)
+			return new CandidateQueryResult([], null);
+
+		return ParseCandidateResponse(response);
 	}
 
-	/// <summary>
-	/// Builds a bool/should query that matches documents where any enrichment field
-	/// is missing or has a stale prompt hash.
-	/// </summary>
-	private string BuildStalenessQuery()
+	private static CandidateQueryResult ParseCandidateResponse(JsonResponse response)
 	{
-		var shouldClauses = BuildStalenessShouldClauses();
-		return $"{{\"bool\":{{\"should\":[{shouldClauses}],\"minimum_should_match\":1}}}}";
-	}
-
-	private string BuildStalenessShouldClauses()
-	{
-		var clauses = new List<string>();
-		foreach (var field in _provider.EnrichmentFields)
-		{
-			clauses.Add($"{{\"bool\":{{\"must_not\":{{\"exists\":{{\"field\":\"{field}\"}}}}}}}}");
-
-			if (_provider.FieldPromptHashFieldNames.TryGetValue(field, out var phField)
-				&& _provider.FieldPromptHashes.TryGetValue(field, out var phValue))
-			{
-				clauses.Add($"{{\"bool\":{{\"must_not\":{{\"term\":{{\"{phField}\":\"{phValue}\"}}}}}}}}");
-			}
-		}
-		return string.Join(",", clauses);
-	}
-
-	private static (List<CandidateDocument>, object[]?) ParseCandidateResponse(string body)
-	{
-		using var doc = JsonDocument.Parse(body);
-		var hits = doc.RootElement.GetProperty("hits").GetProperty("hits");
 		var candidates = new List<CandidateDocument>();
 		object[]? lastSort = null;
+
+		var hits = response.Get<JsonElement>("hits.hits");
+		if (hits.ValueKind != JsonValueKind.Array)
+			return new CandidateQueryResult(candidates, null);
 
 		foreach (var hit in hits.EnumerateArray())
 		{
@@ -313,49 +344,70 @@ public class AiEnrichmentOrchestrator : IDisposable
 				lastSort = sort.EnumerateArray().Select(e => (object)e.ToString()).ToArray();
 		}
 
-		return (candidates, lastSort);
+		return new CandidateQueryResult(candidates, lastSort);
 	}
 
 	// ── Private: enrichment processing ──
 
-	private async Task<(int Enriched, int Failed)> ProcessBatchAsync(
+	private async Task<BatchResult> ProcessBatchAsync(
 		List<CandidateDocument> candidates, CancellationToken ct)
 	{
 		var tasks = candidates.Select(c => EnrichOneAsync(c, ct)).ToList();
-		var pendingUpdates = new List<(string UrlHash, string MatchValue, string Json)>();
+		var pendingUpdates = new List<LookupUpdate>();
+		var batchSkipped = 0;
 		var batchFailed = 0;
 
 #if NET9_0_OR_GREATER
 		await foreach (var completedTask in Task.WhenEach(tasks).WithCancellation(ct).ConfigureAwait(false))
 		{
-			var (urlHash, matchValue, json) = await completedTask.ConfigureAwait(false);
-			if (json != null && matchValue != null)
-				pendingUpdates.Add((urlHash, matchValue, json));
-			else
-				batchFailed++;
+			var outcome = await completedTask.ConfigureAwait(false);
+			switch (outcome.Status)
+			{
+				case EnrichmentStatus.Enriched:
+					pendingUpdates.Add(outcome.Update!);
+					break;
+				case EnrichmentStatus.Skipped:
+					batchSkipped++;
+					break;
+				case EnrichmentStatus.Failed:
+					batchFailed++;
+					break;
+			}
 		}
 #else
-		var pending = new HashSet<Task<(string UrlHash, string? MatchValue, string? Json)>>(tasks);
+		var pending = new HashSet<Task<EnrichmentOutcome>>(tasks);
 		while (pending.Count > 0)
 		{
 			ct.ThrowIfCancellationRequested();
 			var completed = await Task.WhenAny(pending).ConfigureAwait(false);
 			pending.Remove(completed);
-			var (urlHash, matchValue, json) = await completed.ConfigureAwait(false);
-			if (json != null && matchValue != null)
-				pendingUpdates.Add((urlHash, matchValue, json));
-			else
-				batchFailed++;
+			var outcome = await completed.ConfigureAwait(false);
+			switch (outcome.Status)
+			{
+				case EnrichmentStatus.Enriched:
+					pendingUpdates.Add(outcome.Update!);
+					break;
+				case EnrichmentStatus.Skipped:
+					batchSkipped++;
+					break;
+				case EnrichmentStatus.Failed:
+					batchFailed++;
+					break;
+			}
 		}
 #endif
 
+		var bulkErrors = 0;
 		if (pendingUpdates.Count > 0)
-			await BulkUpsertLookupAsync(pendingUpdates, ct).ConfigureAwait(false);
+			bulkErrors = await BulkUpsertLookupAsync(pendingUpdates, ct).ConfigureAwait(false);
 
-		return (pendingUpdates.Count, batchFailed);
+		return new BatchResult(
+			Enriched: pendingUpdates.Count - bulkErrors,
+			Skipped: batchSkipped,
+			Failed: batchFailed + bulkErrors);
 	}
 
-	private async Task<(string UrlHash, string? MatchValue, string? Json)> EnrichOneAsync(
+	private async Task<EnrichmentOutcome> EnrichOneAsync(
 		CandidateDocument candidate, CancellationToken ct)
 	{
 		await _throttle.WaitAsync(ct).ConfigureAwait(false);
@@ -363,28 +415,35 @@ public class AiEnrichmentOrchestrator : IDisposable
 		{
 			var staleFields = DetermineStaleFields(candidate.Source);
 			if (staleFields.Count == 0)
-				return (candidate.Id, null, null);
+				return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Skipped);
 
 			var prompt = _provider.BuildPrompt(candidate.Source, staleFields);
 			if (prompt == null)
-				return (candidate.Id, null, null);
+				return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Skipped);
 
 			var completion = await CallCompletionAsync(prompt, ct).ConfigureAwait(false);
 			if (completion == null)
-				return (candidate.Id, null, null);
+				return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Failed);
 
 			var partialDoc = _provider.ParseResponse(completion, staleFields);
+			if (partialDoc == null)
+				return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Failed);
 
 			string? matchValue = null;
 			if (candidate.Source.TryGetProperty(_provider.MatchField, out var mv))
 				matchValue = mv.GetString();
 
-			var urlHash = matchValue != null ? UrlHash(matchValue) : candidate.Id;
-			return (urlHash, matchValue, partialDoc);
+			if (matchValue == null)
+				return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Skipped);
+
+			var urlHash = UrlHash(matchValue);
+			var lookupDoc = BuildLookupDocument(matchValue, partialDoc);
+			var update = new LookupUpdate(urlHash, lookupDoc);
+			return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Enriched, update);
 		}
 		catch (Exception ex) when (ex is not OperationCanceledException)
 		{
-			return (candidate.Id, null, null);
+			return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Failed);
 		}
 		finally
 		{
@@ -416,65 +475,90 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 	private async Task<string?> CallCompletionAsync(string prompt, CancellationToken ct)
 	{
-		var encodedPrompt = JsonEncodedText.Encode(prompt);
-		var body = $"{{\"input\":\"{encodedPrompt}\"}}";
 		var url = $"_inference/completion/{_options.InferenceEndpointId}";
 
-		var response = await _transport.RequestAsync<StringResponse>(
-			HttpMethod.POST, url, PostData.String(body), cancellationToken: ct).ConfigureAwait(false);
+		var response = await _transport.RequestAsync<JsonResponse>(
+			HttpMethod.POST, url,
+			PostData.Serializable(new CompletionRequest { Input = prompt }),
+			cancellationToken: ct).ConfigureAwait(false);
 
 		if (response.ApiCallDetails.HttpStatusCode is not 200)
 			return null;
 
-		return ExtractCompletionText(response.Body);
+		return ExtractCompletionText(response);
 	}
 
-	private static string? ExtractCompletionText(string? responseBody)
+	private static string? ExtractCompletionText(JsonResponse response)
 	{
-		if (string.IsNullOrEmpty(responseBody))
-			return null;
-
-		using var doc = JsonDocument.Parse(responseBody!);
-		if (doc.RootElement.TryGetProperty("completion", out var arr)
-			&& arr.GetArrayLength() > 0
-			&& arr[0].TryGetProperty("result", out var result))
-			return result.GetString();
-
-		return null;
+		var result = response.Get<string>("completion.0.result");
+		return string.IsNullOrEmpty(result) ? null : result;
 	}
 
 	// ── Private: lookup index updates ──
 
-	private async Task BulkUpsertLookupAsync(
-		List<(string UrlHash, string MatchValue, string Json)> updates, CancellationToken ct)
+	private JsonElement BuildLookupDocument(string matchValue, string partialDocJson)
 	{
+		var now = DateTimeOffset.UtcNow.UtcDateTime.ToString(
+			"yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
+
 		var sb = new StringBuilder();
-		var now = DateTimeOffset.UtcNow.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+		sb.Append('{');
+		sb.Append('"').Append(_provider.MatchField).Append("\":");
+		sb.Append('"').Append(JsonEncodedText.Encode(matchValue)).Append("\",");
+		sb.Append("\"created_at\":\"").Append(now).Append('"');
 
-		foreach (var (urlHash, matchValue, json) in updates)
+		using var partialDoc = JsonDocument.Parse(partialDocJson);
+		foreach (var prop in partialDoc.RootElement.EnumerateObject())
 		{
-			sb.Append("{\"update\":{\"_id\":\"").Append(urlHash).Append("\"}}\n");
-
-			sb.Append("{\"doc\":{\"").Append(_provider.MatchField).Append("\":");
-			sb.Append('"').Append(JsonEncodedText.Encode(matchValue)).Append("\",");
-			sb.Append("\"created_at\":\"").Append(now).Append("\",");
-
-			using var partialDoc = JsonDocument.Parse(json);
-			var first = true;
-			foreach (var prop in partialDoc.RootElement.EnumerateObject())
-			{
-				if (!first) sb.Append(',');
-				first = false;
-				sb.Append('"').Append(prop.Name).Append("\":");
-				sb.Append(prop.Value.GetRawText());
-			}
-
-			sb.Append("},\"doc_as_upsert\":true}\n");
+			sb.Append(',');
+			sb.Append('"').Append(prop.Name).Append("\":");
+			sb.Append(prop.Value.GetRawText());
 		}
 
-		await _transport.RequestAsync<StringResponse>(
-			HttpMethod.POST, $"{_provider.LookupIndexName}/_bulk",
-			PostData.String(sb.ToString()), cancellationToken: ct).ConfigureAwait(false);
+		sb.Append('}');
+		return JsonDocument.Parse(sb.ToString()).RootElement.Clone();
+	}
+
+	private async Task<int> BulkUpsertLookupAsync(List<LookupUpdate> updates, CancellationToken ct)
+	{
+		PostData body;
+
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
+		var items = updates.ToArray();
+		var bytes = BulkRequestDataFactory.GetBytes<LookupUpdate, JsonElement>(
+			items.AsSpan(),
+			IngestChannelStatics.SerializerOptions,
+			static u => new UpdateOperation { Id = u.UrlHash },
+			static u => u.Document);
+		body = PostData.ReadOnlyMemory(bytes);
+#else
+		var sb = new StringBuilder();
+		foreach (var update in updates)
+		{
+			sb.Append("{\"update\":{\"_id\":\"").Append(update.UrlHash).Append("\"}}\n");
+			sb.Append("{\"doc_as_upsert\":true,\"doc\":").Append(update.Document.GetRawText()).Append("}\n");
+		}
+		body = PostData.String(sb.ToString());
+#endif
+
+		var response = await _transport.RequestAsync<BulkResponse>(
+			HttpMethod.POST,
+			$"{_provider.LookupIndexName}/_bulk?filter_path=errors,items.*.status,items.*.error",
+			body, cancellationToken: ct).ConfigureAwait(false);
+
+		if (response.ApiCallDetails.HttpStatusCode is not 200)
+			return updates.Count;
+
+		var errors = 0;
+		if (response.Items != null)
+		{
+			foreach (var item in response.Items)
+			{
+				if (item.Status < 200 || item.Status > 299)
+					errors++;
+			}
+		}
+		return errors;
 	}
 
 	// ── Private: backfill ──
@@ -484,8 +568,12 @@ public class AiEnrichmentOrchestrator : IDisposable
 		var url = $"/{targetIndex}/_update_by_query?wait_for_completion=false&pipeline={_provider.PipelineName}";
 
 		var response = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.POST, url, PostData.String($"{{\"query\":{BuildStalenessQuery()}}}"),
+			HttpMethod.POST, url,
+			PostData.Serializable(new QueryRequest { Query = _stalenessQuery }),
 			cancellationToken: ct).ConfigureAwait(false);
+
+		if (response.ApiCallDetails.HttpStatusCode is not 200)
+			return;
 
 		var taskId = response.Get<string>("task");
 		if (!string.IsNullOrEmpty(taskId))
@@ -499,9 +587,6 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 	// ── Private: orphan detection ──
 
-	/// <summary>
-	/// Checks which URLs from the batch exist in the target index by querying the match field.
-	/// </summary>
 	private async Task<HashSet<string>> FindExistingUrlsAsync(
 		string targetIndex, List<string> urls, CancellationToken ct)
 	{
@@ -511,39 +596,78 @@ public class AiEnrichmentOrchestrator : IDisposable
 			var encoded = JsonEncodedText.Encode(u);
 			return $"\"{encoded}\"";
 		}));
-		var query = $"{{\"size\":{urls.Count},\"_source\":[\"{_provider.MatchField}\"],\"query\":{{\"terms\":{{\"{_provider.MatchField}\":[{terms}]}}}}}}";
 
-		var body = await RequestAsync(HttpMethod.POST, $"{targetIndex}/_search", query, ct).ConfigureAwait(false);
-		if (body == null)
+		var query = $"{{\"size\":{urls.Count}"
+			+ $",\"_source\":[\"{_provider.MatchField}\"]"
+			+ $",\"query\":{{\"terms\":{{\"{_provider.MatchField}\":[{terms}]}}}}"
+			+ $",\"collapse\":{{\"field\":\"{_provider.MatchField}\"}}"
+			+ "}";
+
+		var response = await _transport.RequestAsync<JsonResponse>(
+			HttpMethod.POST, $"{targetIndex}/_search", PostData.String(query), cancellationToken: ct).ConfigureAwait(false);
+
+		if (response.ApiCallDetails.HttpStatusCode is not 200)
 			return existing;
 
-		using var doc = JsonDocument.Parse(body);
-		if (doc.RootElement.TryGetProperty("hits", out var hitsObj)
-			&& hitsObj.TryGetProperty("hits", out var hitsArr))
+		var hits = response.Get<JsonElement>("hits.hits");
+		if (hits.ValueKind != JsonValueKind.Array)
+			return existing;
+
+		foreach (var hit in hits.EnumerateArray())
 		{
-			foreach (var hit in hitsArr.EnumerateArray())
-			{
-				if (hit.TryGetProperty("_source", out var source)
-					&& source.TryGetProperty(_provider.MatchField, out var urlProp)
-					&& urlProp.GetString() is { } url)
-					existing.Add(url);
-			}
+			if (hit.TryGetProperty("_source", out var source)
+				&& source.TryGetProperty(_provider.MatchField, out var urlProp)
+				&& urlProp.GetString() is { } url)
+				existing.Add(url);
 		}
 
 		return existing;
 	}
 
-	// ── Private: helpers ──
-
-	private async Task<string?> RequestAsync(HttpMethod method, string path, string body, CancellationToken ct)
+	private async Task DeleteByMatchFieldAsync(string index, List<string> values, CancellationToken ct)
 	{
-		var response = await _transport.RequestAsync<StringResponse>(
-			method, path, PostData.String(body), cancellationToken: ct).ConfigureAwait(false);
-
-		return response.ApiCallDetails.HttpStatusCode is 200 or 201
-			? response.Body
-			: null;
+		var terms = string.Join(",", values.Select(u =>
+		{
+			var encoded = JsonEncodedText.Encode(u);
+			return $"\"{encoded}\"";
+		}));
+		var deleteQuery = $"{{\"terms\":{{\"{_provider.MatchField}\":[{terms}]}}}}";
+		var dbq = new DeleteByQuery(_transport, new DeleteByQueryOptions
+		{
+			Index = index,
+			QueryBody = deleteQuery
+		});
+		await dbq.RunAsync(ct).ConfigureAwait(false);
 	}
+
+	// ── Private: query building (cached) ──
+
+	private JsonElement BuildStalenessQuery()
+	{
+		var clauses = new List<string>();
+		foreach (var field in _provider.EnrichmentFields)
+		{
+			clauses.Add($"{{\"bool\":{{\"must_not\":{{\"exists\":{{\"field\":\"{field}\"}}}}}}}}");
+
+			if (_provider.FieldPromptHashFieldNames.TryGetValue(field, out var phField)
+				&& _provider.FieldPromptHashes.TryGetValue(field, out var phValue))
+			{
+				clauses.Add($"{{\"bool\":{{\"must_not\":{{\"term\":{{\"{phField}\":\"{phValue}\"}}}}}}}}");
+			}
+		}
+		var json = $"{{\"bool\":{{\"should\":[{string.Join(",", clauses)}],\"minimum_should_match\":1}}}}";
+		return JsonDocument.Parse(json).RootElement.Clone();
+	}
+
+	private string[] BuildSourceFields()
+	{
+		var fields = new List<string>(_provider.RequiredSourceFields) { _provider.MatchField };
+		foreach (var phField in _provider.FieldPromptHashFieldNames.Values)
+			fields.Add(phField);
+		return fields.ToArray();
+	}
+
+	// ── Private: helpers ──
 
 	internal static string UrlHash(string url)
 	{
@@ -556,17 +680,4 @@ public class AiEnrichmentOrchestrator : IDisposable
 		return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
 #endif
 	}
-
-}
-
-internal sealed class CandidateDocument
-{
-	public CandidateDocument(string id, JsonElement source)
-	{
-		Id = id;
-		Source = source;
-	}
-
-	public string Id { get; }
-	public JsonElement Source { get; }
 }

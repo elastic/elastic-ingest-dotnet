@@ -15,6 +15,11 @@ internal sealed record AiEnrichmentModel(
 	string DocumentTypeFullyQualifiedName,
 	string? Role,
 	string? LookupIndexName,
+	/// <summary>
+	/// The write alias from the <c>[Index&lt;T&gt;]</c> registration for the same document type.
+	/// Used to derive the default lookup index name when <see cref="LookupIndexName"/> is null.
+	/// </summary>
+	string? WriteAlias,
 	string MatchFieldName,
 	ImmutableArray<AiInputFieldModel> Inputs,
 	ImmutableArray<AiOutputFieldModel> Outputs

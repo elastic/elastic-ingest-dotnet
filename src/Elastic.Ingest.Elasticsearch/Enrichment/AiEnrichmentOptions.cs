@@ -2,6 +2,10 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace Elastic.Ingest.Elasticsearch.Enrichment;
 
 /// <summary>
@@ -43,9 +47,72 @@ public sealed class AiEnrichmentResult
 	/// <summary>Documents successfully enriched in this run.</summary>
 	public int Enriched { get; set; }
 
+	/// <summary>Documents skipped (e.g. empty input fields).</summary>
+	public int Skipped { get; set; }
+
 	/// <summary>Documents that failed enrichment (LLM error, parse failure).</summary>
 	public int Failed { get; set; }
 
 	/// <summary>Whether the run hit <see cref="AiEnrichmentOptions.MaxEnrichmentsPerRun"/>.</summary>
 	public bool ReachedLimit { get; set; }
+}
+
+/// <summary>
+/// Outcome of enriching a single candidate document.
+/// </summary>
+internal sealed record EnrichmentOutcome(string Id, EnrichmentStatus Status, LookupUpdate? Update = null);
+
+/// <summary>
+/// Distinguishes successful enrichment from legitimate skips and actual failures.
+/// </summary>
+internal enum EnrichmentStatus
+{
+	/// <summary>LLM returned valid enrichment data.</summary>
+	Enriched,
+	/// <summary>Document was skipped (empty input, no stale fields, null prompt).</summary>
+	Skipped,
+	/// <summary>Enrichment failed (LLM error, parse failure, exception).</summary>
+	Failed
+}
+
+/// <summary>
+/// A pending update for the lookup index. <see cref="UrlHash"/> is used as the <c>_id</c>
+/// in the bulk update header. <see cref="Document"/> is serialized as the <c>doc</c> body.
+/// </summary>
+internal sealed record LookupUpdate(string UrlHash, JsonElement Document);
+
+/// <summary>
+/// Result of querying for candidate documents needing enrichment.
+/// </summary>
+internal sealed record CandidateQueryResult(List<CandidateDocument> Candidates, object[]? SearchAfter);
+
+/// <summary>
+/// Result of processing a batch of candidate documents.
+/// </summary>
+internal sealed record BatchResult(int Enriched, int Skipped, int Failed);
+
+/// <summary>
+/// A candidate document identified as needing enrichment.
+/// </summary>
+/// <summary>
+/// A candidate document identified as needing enrichment.
+/// </summary>
+internal sealed record CandidateDocument(string Id, JsonElement Source);
+
+/// <summary>
+/// Request body for the <c>_inference/completion</c> API.
+/// </summary>
+internal sealed class CompletionRequest
+{
+	[JsonPropertyName("input")]
+	public string Input { get; init; } = null!;
+}
+
+/// <summary>
+/// Wraps a query body for <c>_search</c>, <c>_update_by_query</c>, etc.
+/// </summary>
+internal sealed class QueryRequest
+{
+	[JsonPropertyName("query")]
+	public JsonElement Query { get; init; }
 }

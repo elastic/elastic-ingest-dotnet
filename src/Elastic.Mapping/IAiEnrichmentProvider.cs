@@ -81,4 +81,11 @@ public interface IAiEnrichmentProvider
 
 	/// <summary>The JSON body for creating the ingest pipeline.</summary>
 	string PipelineBody { get; }
+
+	/// <summary>
+	/// A short hash derived from the enrichment field names.
+	/// Stored in the enrich policy/pipeline description so the orchestrator can detect
+	/// when the field set changes and update the resources without creating new ones.
+	/// </summary>
+	string FieldsHash { get; }
 }
