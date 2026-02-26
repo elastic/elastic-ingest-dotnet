@@ -7,12 +7,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Elastic.Channels;
 using Elastic.Ingest.Elasticsearch.Enrichment;
 using Elastic.Mapping;
 using Elastic.Transport;
 using FluentAssertions;
-using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Enrichment;
 
@@ -65,7 +63,7 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 	}
 
 	[Test]
-	public async Task ProviderGeneratesValidInfrastructureJson()
+	public void ProviderGeneratesValidInfrastructureJson()
 	{
 		Provider.LookupIndexName.Should().NotBeNullOrEmpty();
 		Provider.EnrichPolicyName.Should().Be($"{Provider.LookupIndexName}-ai-policy");
@@ -107,7 +105,7 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 				HttpMethod.POST, $"/{secondaryAlias}/_search",
 				PostData.String("""{"size":1,"_source":["ai_summary","ai_questions","ai_summary_ph"],"query":{"exists":{"field":"ai_summary"}}}"""));
 
-			if (search.ApiCallDetails.HttpStatusCode == 200 && search.Body != null)
+			if (search.ApiCallDetails.HttpStatusCode == 200)
 			{
 				using var doc = JsonDocument.Parse(search.Body);
 				var hits = doc.RootElement.GetProperty("hits").GetProperty("hits");
@@ -230,11 +228,10 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 		await SeedLookupEntryAsync("/orphan", "Summary orphan");
 
 		// Index only /page-a and /page-b into the target
-		await IndexTestDocumentsAsync(new[]
-		{
+		await IndexTestDocumentsAsync([
 			new AiDocumentationPage { Url = "/page-a", Title = "Page A", Body = "Content A." },
 			new AiDocumentationPage { Url = "/page-b", Title = "Page B", Body = "Content B." }
-		});
+		]);
 
 		var secondaryAlias = TestMappingContext.AiDocumentationPageAiSecondary.Context.ResolveWriteAlias();
 		await RefreshAsync(secondaryAlias);
@@ -332,20 +329,19 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 		await ExecuteEnrichPolicyAsync();
 
 		// Index a document WITHOUT AI fields
-		await IndexTestDocumentsAsync(new[]
-		{
+		await IndexTestDocumentsAsync([
 			new AiDocumentationPage
 			{
 				Url = "/backfill-test",
 				Title = "Backfill",
 				Body = "Testing backfill pipeline."
 			}
-		});
+		]);
 
 		var secondaryAlias = TestMappingContext.AiDocumentationPageAiSecondary.Context.ResolveWriteAlias();
 		await RefreshAsync(secondaryAlias);
 
-		// Apply enrichments via _update_by_query with pipeline (same mechanism as BackfillAsync)
+		// Apply enrichments via _update_by_query with a pipeline (same mechanism as BackfillAsync)
 		var ubqBody = $@"{{""query"":{{""term"":{{""{Provider.MatchField}"":""/backfill-test""}}}}}}";
 		var ubqResponse = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.POST,
@@ -360,7 +356,7 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 			HttpMethod.POST, $"/{secondaryAlias}/_search",
 			PostData.String(searchBody));
 
-		if (search.ApiCallDetails.HttpStatusCode == 200 && search.Body != null)
+		if (search.ApiCallDetails.HttpStatusCode == 200)
 		{
 			using var doc = JsonDocument.Parse(search.Body);
 			var hits = doc.RootElement.GetProperty("hits").GetProperty("hits");
@@ -484,8 +480,8 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 
 	private async Task IndexTestDocumentsAsync(AiDocumentationPage[]? pages = null)
 	{
-		pages ??= new[]
-		{
+		pages ??=
+		[
 			new AiDocumentationPage
 			{
 				Url = "/getting-started",
@@ -504,7 +500,7 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 				Title = "Ingest Pipelines",
 				Body = "Ingest pipelines let you transform documents before indexing. Processors in a pipeline can rename fields, convert data types, enrich documents from external sources, and run inference models. Pipelines are defined via the _ingest API."
 			}
-		};
+		];
 
 		using var orch = new IncrementalSyncOrchestrator<AiDocumentationPage>(
 			Transport,
@@ -539,34 +535,27 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 			PostData.String(doc));
 	}
 
-	private async Task RefreshAsync(string index)
-	{
-		await Transport.RequestAsync<StringResponse>(
-			HttpMethod.POST, $"/{index}/_refresh");
-	}
+	private async Task RefreshAsync(string index) =>
+		await Transport.RequestAsync<StringResponse>(HttpMethod.POST, $"/{index}/_refresh");
 
-	private async Task ExecuteEnrichPolicyAsync()
-	{
+	private async Task ExecuteEnrichPolicyAsync() =>
 		await Transport.RequestAsync<StringResponse>(
 			HttpMethod.POST, $"_enrich/policy/{Provider.EnrichPolicyName}/_execute",
 			PostData.Empty);
-	}
 
 	private async Task<long> GetDocCount(string index)
 	{
 		var response = await Transport.RequestAsync<StringResponse>(
 			HttpMethod.GET, $"/{index}/_count");
-		if (response.ApiCallDetails.HttpStatusCode != 200 || response.Body == null)
+		if (response.ApiCallDetails.HttpStatusCode != 200)
 			return -1;
 		using var doc = JsonDocument.Parse(response.Body);
 		return doc.RootElement.GetProperty("count").GetInt64();
 	}
 
-	private async Task CleanupLookupAsync()
-	{
+	private async Task CleanupLookupAsync() =>
 		await Transport.RequestAsync<StringResponse>(
 			HttpMethod.DELETE, $"{Provider.LookupIndexName}?ignore_unavailable=true");
-	}
 
 	private async Task CleanupPolicyAndPipelineAsync()
 	{

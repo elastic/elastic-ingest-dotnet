@@ -217,7 +217,6 @@ public class AiEnrichmentOrchestrator : IDisposable
 		{
 			// Check if the existing policy matches the current fields hash by
 			// inspecting the enrich_fields — if they differ, delete and recreate.
-			var currentBody = _provider.EnrichPolicyBody;
 			var existingFieldsMatch = PolicyMatchesCurrentFields(exists);
 			if (existingFieldsMatch)
 				return;
@@ -292,7 +291,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 		if (existing.ApiCallDetails.HttpStatusCode == 200)
 		{
 			var desc = existing.Get<string>($"{_provider.PipelineName}.description");
-			if (desc != null && desc.Contains(expectedTag))
+			if (desc.Contains(expectedTag))
 				return;
 		}
 
@@ -463,12 +462,8 @@ public class AiEnrichmentOrchestrator : IDisposable
 				continue;
 			}
 
-			if (!source.TryGetProperty(phField, out var existingHash)
-				|| existingHash.ValueKind != JsonValueKind.String
-				|| existingHash.GetString() != currentHash)
-			{
+			if (!source.TryGetProperty(phField, out var existingHash) || existingHash.ValueKind != JsonValueKind.String || existingHash.GetString() != currentHash)
 				stale.Add(field);
-			}
 		}
 		return stale;
 	}
@@ -525,7 +520,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 #if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 		var items = updates.ToArray();
-		var bytes = BulkRequestDataFactory.GetBytes<LookupUpdate, JsonElement>(
+		var bytes = BulkRequestDataFactory.GetBytes(
 			items.AsSpan(),
 			IngestChannelStatics.SerializerOptions,
 			static u => new UpdateOperation { Id = u.UrlHash },
@@ -550,13 +545,10 @@ public class AiEnrichmentOrchestrator : IDisposable
 			return updates.Count;
 
 		var errors = 0;
-		if (response.Items != null)
+		foreach (var item in response.Items)
 		{
-			foreach (var item in response.Items)
-			{
-				if (item.Status < 200 || item.Status > 299)
-					errors++;
-			}
+			if (item.Status < 200 || item.Status > 299)
+				errors++;
 		}
 		return errors;
 	}
@@ -651,9 +643,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 			if (_provider.FieldPromptHashFieldNames.TryGetValue(field, out var phField)
 				&& _provider.FieldPromptHashes.TryGetValue(field, out var phValue))
-			{
 				clauses.Add($"{{\"bool\":{{\"must_not\":{{\"term\":{{\"{phField}\":\"{phValue}\"}}}}}}}}");
-			}
 		}
 		var json = $"{{\"bool\":{{\"should\":[{string.Join(",", clauses)}],\"minimum_should_match\":1}}}}";
 		return JsonDocument.Parse(json).RootElement.Clone();
@@ -669,7 +659,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 	// ── Private: helpers ──
 
-	internal static string UrlHash(string url)
+	private static string UrlHash(string url)
 	{
 #if NET8_0_OR_GREATER
 		var hash = SHA256.HashData(Encoding.UTF8.GetBytes(url));

@@ -374,7 +374,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		}
 
 		// --- Priority 2: Configuration class implementing IConfigureElasticsearch<T> ---
-		bool configClassImplementsInterface = false;
+		var configClassImplementsInterface = false;
 		if (configTypeSymbol != null)
 			configClassImplementsInterface = ImplementsConfigureElasticsearch(configTypeSymbol, targetType);
 
@@ -437,7 +437,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		}
 
 		// --- Build ConfigureMappings info ---
-		bool hasConfigureMappings =
+		var hasConfigureMappings =
 			contextConfigureMappings != null ||
 			configClassImplementsInterface ||
 			configClassMappings != null ||
@@ -445,7 +445,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			hasConfigureMappingsOnType;
 
 		// Context-level static method reference (only set for context-level methods)
-		string? contextConfigureMappingsRef = contextConfigureMappings != null
+		var contextConfigureMappingsRef = contextConfigureMappings != null
 			? $"global::{contextSymbol.ToDisplayString()}.{contextConfigureMappings.Name}"
 			: null;
 
