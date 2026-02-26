@@ -291,7 +291,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 		if (existing.ApiCallDetails.HttpStatusCode == 200)
 		{
 			var desc = existing.Get<string>($"{_provider.PipelineName}.description");
-			if (desc.Contains(expectedTag))
+			if (desc != null && desc.Contains(expectedTag))
 				return;
 		}
 
