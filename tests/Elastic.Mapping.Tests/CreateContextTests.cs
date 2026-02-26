@@ -212,7 +212,7 @@ public class CreateContextTests
 	[Test]
 	public void TemplatedContextInstanceImplementsMappingContextInterface()
 	{
-		IElasticsearchMappingContext instance = TemplatedMappingContext.Instance;
+		var instance = TemplatedMappingContext.Instance;
 
 		instance.All.Should().HaveCount(2);
 		instance.All.Should().ContainKey(typeof(KnowledgeArticle));

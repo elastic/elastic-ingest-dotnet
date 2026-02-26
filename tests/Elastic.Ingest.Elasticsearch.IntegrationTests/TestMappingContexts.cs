@@ -80,4 +80,21 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 [Index<SemanticArticle>(
 	Name = "semantic-articles",
 	Configuration = typeof(SemanticArticleConfig))]
+
+// ── AI Enrichment: ai-docs ─────────────────────────────────────────────
+[Index<AiDocumentationPage>(
+	Name = "ai-docs-primary",
+	Variant = "AiPrimary",
+	WriteAlias = "ai-docs-primary",
+	ReadAlias = "ai-docs-primary-search",
+	DatePattern = "yyyy.MM.dd.HHmmss")]
+[Index<AiDocumentationPage>(
+	Name = "ai-docs-secondary",
+	Variant = "AiSecondary",
+	WriteAlias = "ai-docs-secondary",
+	ReadAlias = "ai-docs-secondary-search",
+	DatePattern = "yyyy.MM.dd.HHmmss")]
+[AiEnrichment<AiDocumentationPage>(
+	Role = "You are a documentation analysis assistant.",
+	MatchField = "url")]
 public static partial class TestMappingContext;

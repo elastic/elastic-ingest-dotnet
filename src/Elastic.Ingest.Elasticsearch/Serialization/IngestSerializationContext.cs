@@ -3,7 +3,9 @@
 // See the LICENSE file in the project root for more information
 
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using Elastic.Ingest.Elasticsearch.Enrichment;
 
 namespace Elastic.Ingest.Elasticsearch.Serialization;
 
@@ -16,6 +18,9 @@ namespace Elastic.Ingest.Elasticsearch.Serialization;
 [JsonSerializable(typeof(BulkResponse))]
 [JsonSerializable(typeof(BulkResponseItem))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
+[JsonSerializable(typeof(CompletionRequest))]
+[JsonSerializable(typeof(QueryRequest))]
+[JsonSerializable(typeof(JsonElement))]
 internal sealed partial class IngestSerializationContext : JsonSerializerContext
 {
 	static IngestSerializationContext() =>

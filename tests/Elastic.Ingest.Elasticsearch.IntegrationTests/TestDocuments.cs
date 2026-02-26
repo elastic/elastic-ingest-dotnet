@@ -242,6 +242,52 @@ public class HashableArticleConfig : IConfigureElasticsearch<HashableArticle>
 }
 
 /// <summary>
+/// Simulates a documentation page with AI enrichment fields.
+/// </summary>
+public partial class AiDocumentationPage
+{
+	[Id]
+	[Keyword]
+	[JsonPropertyName("url")]
+	public string Url { get; set; } = null!;
+
+	[AiInput]
+	[Text]
+	[JsonPropertyName("title")]
+	public string Title { get; set; } = string.Empty;
+
+	[AiInput]
+	[Text]
+	[JsonPropertyName("body")]
+	public string Body { get; set; } = string.Empty;
+
+	[AiField("A concise two-sentence summary of this documentation page.")]
+	[Text]
+	[JsonPropertyName("ai_summary")]
+	public string? AiSummary { get; set; }
+
+	[AiField("3 to 5 questions that this documentation page answers, phrased as a user would ask.", MinItems = 3, MaxItems = 5)]
+	[Keyword]
+	[JsonPropertyName("ai_questions")]
+	public string[]? AiQuestions { get; set; }
+
+	[ContentHash]
+	[Keyword]
+	[JsonPropertyName("content_hash")]
+	public string ContentHash { get; set; } = string.Empty;
+
+	[BatchIndexDate]
+	[Date]
+	[JsonPropertyName("index_batch_date")]
+	public DateTimeOffset IndexBatchDate { get; set; }
+
+	[LastUpdated]
+	[Date]
+	[JsonPropertyName("last_updated")]
+	public DateTimeOffset LastUpdated { get; set; }
+}
+
+/// <summary>
 /// Simulates a document for semantic search with inference endpoints.
 /// </summary>
 public partial class SemanticArticle

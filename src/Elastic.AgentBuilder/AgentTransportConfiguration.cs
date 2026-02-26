@@ -43,7 +43,7 @@ public class AgentTransportConfiguration
 	/// Connect to a Kibana instance at the given URL with an API key.
 	/// </summary>
 	public AgentTransportConfiguration(Uri kibanaUri, ApiKey credentials) =>
-		_factory = () => (TransportConfigurationDescriptor)new TransportConfigurationDescriptor(new SingleNodePool(kibanaUri))
+		_factory = () => new TransportConfigurationDescriptor(new SingleNodePool(kibanaUri))
 			.Authentication(credentials)
 			.GlobalHeaders(KibanaHeaders);
 
@@ -51,7 +51,7 @@ public class AgentTransportConfiguration
 	/// Connect to a Kibana instance at the given URL with basic credentials.
 	/// </summary>
 	public AgentTransportConfiguration(Uri kibanaUri, BasicAuthentication credentials) =>
-		_factory = () => (TransportConfigurationDescriptor)new TransportConfigurationDescriptor(new SingleNodePool(kibanaUri))
+		_factory = () => new TransportConfigurationDescriptor(new SingleNodePool(kibanaUri))
 			.Authentication(credentials)
 			.GlobalHeaders(KibanaHeaders);
 
@@ -62,18 +62,12 @@ public class AgentTransportConfiguration
 /// An <see cref="ITransport"/> pre-configured for the Kibana Agent Builder API.
 /// Wraps a <see cref="DistributedTransport"/> created from an <see cref="AgentTransportConfiguration"/>.
 /// </summary>
-public class AgentTransport : ITransport
+public class AgentTransport(AgentTransportConfiguration configuration) : ITransport
 {
-	private readonly DistributedTransport _inner;
+	private readonly DistributedTransport _inner = new(configuration.CreateTransportConfiguration());
 
 	/// <summary> The configuration used to create this transport. </summary>
-	public AgentTransportConfiguration AgentConfiguration { get; }
-
-	public AgentTransport(AgentTransportConfiguration configuration)
-	{
-		AgentConfiguration = configuration ?? throw new ArgumentNullException(nameof(configuration));
-		_inner = new DistributedTransport(configuration.CreateTransportConfiguration());
-	}
+	public AgentTransportConfiguration AgentConfiguration { get; } = configuration ?? throw new ArgumentNullException(nameof(configuration));
 
 	/// <inheritdoc />
 	public ITransportConfiguration Configuration => _inner.Configuration;

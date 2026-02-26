@@ -24,6 +24,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 	private const string DataStreamAttributePrefix = "Elastic.Mapping.DataStreamAttribute<";
 	private const string WiredStreamAttributePrefix = "Elastic.Mapping.WiredStreamAttribute<";
 	private const string ConfigureElasticsearchInterfacePrefix = "Elastic.Mapping.IConfigureElasticsearch<";
+	private const string AiEnrichmentAttributePrefix = "Elastic.Mapping.AiEnrichmentAttribute<";
 
 	// Ingest property attribute names
 	private const string IdAttributeName = "Elastic.Mapping.IdAttribute";
@@ -119,11 +120,48 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		if (registrations.Count == 0)
 			return null;
 
+		// Detect [AiEnrichment<T>]
+		AiEnrichmentModel? aiEnrichment = null;
+		foreach (var attr in contextSymbol.GetAttributes())
+		{
+			ct.ThrowIfCancellationRequested();
+
+			var attrClassName = attr.AttributeClass?.ToDisplayString();
+			if (attrClassName == null || !attrClassName.StartsWith(AiEnrichmentAttributePrefix, StringComparison.Ordinal))
+				continue;
+
+			var typeArg = attr.AttributeClass?.TypeArguments.FirstOrDefault();
+			if (typeArg is not INamedTypeSymbol documentType)
+				continue;
+
+			if (aiEnrichment != null)
+				break; // Only one AI enrichment per context (enforced via diagnostic below)
+
+			var role = GetNamedArg<string>(attr, "Role");
+			var lookupIndexName = GetNamedArg<string>(attr, "LookupIndexName");
+			var matchField = GetNamedArg<string>(attr, "MatchField");
+
+			// Resolve the WriteAlias from the matching [Index<T>] registration for this document type
+			string? writeAlias = null;
+			foreach (var reg in registrations)
+			{
+				if (reg.TypeFullyQualifiedName == documentType.ToDisplayString() && reg.IndexConfig?.WriteAlias != null)
+				{
+					writeAlias = reg.IndexConfig.WriteAlias;
+					break;
+				}
+			}
+
+			aiEnrichment = AiEnrichmentAnalyzer.Analyze(
+				documentType, role, lookupIndexName, writeAlias, matchField, stjConfig, ct);
+		}
+
 		return new ContextMappingModel(
 			contextSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty,
 			contextSymbol.Name,
 			stjConfig,
-			registrations.ToImmutable()
+			registrations.ToImmutable(),
+			aiEnrichment
 		);
 	}
 
@@ -336,7 +374,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		}
 
 		// --- Priority 2: Configuration class implementing IConfigureElasticsearch<T> ---
-		bool configClassImplementsInterface = false;
+		var configClassImplementsInterface = false;
 		if (configTypeSymbol != null)
 			configClassImplementsInterface = ImplementsConfigureElasticsearch(configTypeSymbol, targetType);
 
@@ -399,7 +437,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		}
 
 		// --- Build ConfigureMappings info ---
-		bool hasConfigureMappings =
+		var hasConfigureMappings =
 			contextConfigureMappings != null ||
 			configClassImplementsInterface ||
 			configClassMappings != null ||
@@ -407,7 +445,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			hasConfigureMappingsOnType;
 
 		// Context-level static method reference (only set for context-level methods)
-		string? contextConfigureMappingsRef = contextConfigureMappings != null
+		var contextConfigureMappingsRef = contextConfigureMappings != null
 			? $"global::{contextSymbol.ToDisplayString()}.{contextConfigureMappings.Name}"
 			: null;
 
@@ -489,12 +527,42 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			: AnalysisComponentsModel.Empty;
 	}
 
+	private static readonly DiagnosticDescriptor DuplicateAiEnrichmentDiagnostic = new(
+		"ELASTIC001",
+		"Duplicate AI enrichment for entity",
+		"Only one [AiEnrichment<{0}>] is allowed across all mapping contexts. Remove the duplicate from '{1}'.",
+		"Elastic.Mapping",
+		DiagnosticSeverity.Error,
+		isEnabledByDefault: true);
+
 	private static void ExecuteAll(SourceProductionContext context, ImmutableArray<ContextMappingModel> models)
 	{
 		// Track emitted extension classes globally across all contexts to avoid
 		// duplicate definitions when the same document type is registered in
 		// multiple contexts within the same namespace.
 		var emittedExtensionKeys = new HashSet<string>();
+
+		// Enforce: only one [AiEnrichment<T>] per document type across all contexts
+		var aiEnrichmentTypes = new Dictionary<string, string>();
+		foreach (var model in models)
+		{
+			if (model.AiEnrichment != null)
+			{
+				var docFqn = model.AiEnrichment.DocumentTypeFullyQualifiedName;
+				if (aiEnrichmentTypes.ContainsKey(docFqn))
+				{
+					context.ReportDiagnostic(Diagnostic.Create(
+						DuplicateAiEnrichmentDiagnostic,
+						Location.None,
+						model.AiEnrichment.DocumentTypeName,
+						model.ContextTypeName));
+				}
+				else
+				{
+					aiEnrichmentTypes[docFqn] = model.ContextTypeName;
+				}
+			}
+		}
 
 		foreach (var model in models)
 		{
@@ -514,6 +582,12 @@ public class MappingSourceGenerator : IIncrementalGenerator
 				var analysisNamesSource = AnalysisNamesEmitter.EmitForContext(model, reg);
 				if (analysisNamesSource != null)
 					context.AddSource($"{model.ContextTypeName}.{reg.ResolverName}Analysis.g.cs", analysisNamesSource);
+			}
+
+			if (model.AiEnrichment != null)
+			{
+				var aiSource = AiEnrichmentEmitter.Emit(model, model.AiEnrichment);
+				context.AddSource($"{model.ContextTypeName}.AiEnrichment.g.cs", aiSource);
 			}
 		}
 	}

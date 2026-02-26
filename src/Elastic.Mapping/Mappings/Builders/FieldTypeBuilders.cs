@@ -1047,7 +1047,7 @@ public sealed class RawFieldBuilder
 	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
 	public static implicit operator FieldBuilder(RawFieldBuilder builder)
 	{
-		Dictionary<string, IFieldDefinition>? multiFields = builder._multiFields.Count > 0
+		var multiFields = builder._multiFields.Count > 0
 			? builder._multiFields.ToDictionary(x => x.Name, x => x.Definition)
 			: null;
 		builder._parent.SetDefinition(new RawFieldDefinition(builder._type, builder._properties, multiFields));

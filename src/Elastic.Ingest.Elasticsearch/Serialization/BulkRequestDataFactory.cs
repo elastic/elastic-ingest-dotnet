@@ -27,6 +27,56 @@ public static class BulkRequestDataFactory
 {
 #if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 	/// <summary>
+	/// Get the NDJSON request body bytes for a list of items with a header factory and body selector.
+	/// This is the lightweight overload that does not require <see cref="IngestChannelOptionsBase{TEvent}"/>.
+	/// Only supports <see cref="UpdateOperation"/> (doc_as_upsert) and simple index/create headers.
+	/// </summary>
+	/// <typeparam name="TItem">The item type that drives both the header and body.</typeparam>
+	/// <typeparam name="TBody">The type serialized as the document body for each bulk line.</typeparam>
+	/// <param name="items">The items to produce bulk NDJSON for.</param>
+	/// <param name="serializerOptions">JSON serializer options (should include a JsonSerializerContext for AOT).</param>
+	/// <param name="headerFactory">Produces the bulk operation header for each item.</param>
+	/// <param name="bodySelector">Extracts the document body to serialize from each item.</param>
+	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "Callers provide JsonSerializerOptions with appropriate context")]
+	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "Callers provide JsonSerializerOptions with appropriate context")]
+	public static ReadOnlyMemory<byte> GetBytes<TItem, TBody>(
+		ReadOnlySpan<TItem> items,
+		JsonSerializerOptions serializerOptions,
+		Func<TItem, BulkOperationHeader> headerFactory,
+		Func<TItem, TBody> bodySelector)
+	{
+		var bufferWriter = new ArrayBufferWriter<byte>();
+		using var writer = new Utf8JsonWriter(bufferWriter, WriterOptions);
+		foreach (var item in items)
+		{
+			var header = headerFactory(item);
+			JsonSerializer.Serialize(writer, header, header.GetType(), serializerOptions);
+			bufferWriter.Write(LineFeed);
+			writer.Reset();
+
+			if (header is UpdateOperation)
+			{
+				bufferWriter.Write(DocUpdateHeaderStart);
+				writer.Reset();
+			}
+
+			var body = bodySelector(item);
+			JsonSerializer.Serialize(writer, body, serializerOptions);
+			writer.Reset();
+
+			if (header is UpdateOperation)
+			{
+				bufferWriter.Write(DocUpdateHeaderEnd);
+				writer.Reset();
+			}
+
+			bufferWriter.Write(LineFeed);
+			writer.Reset();
+		}
+		return bufferWriter.WrittenMemory;
+	}
+
+	/// <summary>
 	/// Get the NDJSON request body bytes for a page of <typeparamref name="TEvent"/> events.
 	/// </summary>
 	/// <typeparam name="TEvent">The type for the event being ingested.</typeparam>
