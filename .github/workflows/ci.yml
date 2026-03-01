@@ -108,7 +108,7 @@ jobs:
     - name: "Inspect public API changes"
       run: ./build.sh generateapichanges -s true
 
-    - uses: actions/upload-artifact@v6
+    - uses: actions/upload-artifact@v7
       with:
         name: build
         path: build/output/
@@ -131,12 +131,12 @@ jobs:
       with:
         global-json-file: ./global.json
 
-    - uses: actions/download-artifact@v7
+    - uses: actions/download-artifact@v8
       with:
         name: build
         path: build/output
 
-    - uses: actions/attest-build-provenance@v3
+    - uses: actions/attest-build-provenance@v4
       with:
         subject-path: '${{ github.workspace }}/${{ env.ARTIFACTS }}'
 
@@ -172,7 +172,7 @@ jobs:
       with:
           global-json-file: ./global.json
 
-    - uses: actions/download-artifact@v7
+    - uses: actions/download-artifact@v8
       with:
         name: build
         path: build/output
@@ -183,7 +183,7 @@ jobs:
     - name: Create or update release for tag on github
       run: ./build.sh createreleaseongithub -s true --token ${{secrets.GITHUB_TOKEN}}
 
-    - uses: actions/attest-build-provenance@v3
+    - uses: actions/attest-build-provenance@v4
       with:
         subject-path: '${{ github.workspace }}/${{ env.ARTIFACTS }}'
 
