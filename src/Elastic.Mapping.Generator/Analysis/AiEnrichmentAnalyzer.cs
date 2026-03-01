@@ -147,6 +147,6 @@ internal static class AiEnrichmentAnalyzer
 	{
 		using var sha = SHA256.Create();
 		var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(input));
-		return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant();
+		return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant().Substring(0, 16);
 	}
 }

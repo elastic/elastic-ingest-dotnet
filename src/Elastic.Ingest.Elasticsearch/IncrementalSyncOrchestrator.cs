@@ -62,7 +62,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 
 	private IngestChannel<TEvent>? _primaryChannel;
 	private IngestChannel<TEvent>? _secondaryChannel;
-	private IngestSyncStrategy _strategy = IngestSyncStrategy.Reindex;
+	private IngestSyncStrategy _strategy = IngestSyncStrategy.Multiplex;
 
 	private string? _primaryWriteAlias;
 	private string? _secondaryWriteAlias;
@@ -95,26 +95,21 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	}
 
 	/// <summary>
-	/// Creates the orchestrator from two raw <see cref="ElasticsearchTypeContext"/> instances
-	/// with optional delegate params for document stamping. Use this when you don't have
-	/// source-generated resolvers.
+	/// Creates the orchestrator from two raw <see cref="ElasticsearchTypeContext"/> instances.
+	/// Batch tracking delegates and field names are read from the primary context.
 	/// </summary>
 	public IncrementalSyncOrchestrator(
 		ITransport transport,
 		ElasticsearchTypeContext primary,
-		ElasticsearchTypeContext secondary,
-		Action<TEvent, DateTimeOffset>? setBatchIndexDate = null,
-		Action<TEvent, DateTimeOffset>? setLastUpdated = null,
-		string? batchIndexDateField = null,
-		string? lastUpdatedField = null)
+		ElasticsearchTypeContext secondary)
 	{
 		_transport = transport;
-		_primaryTypeContext = primary;
-		_secondaryTypeContext = secondary;
-		_setBatchIndexDate = setBatchIndexDate;
-		_setLastUpdated = setLastUpdated;
-		if (batchIndexDateField != null) BatchIndexDateField = batchIndexDateField;
-		if (lastUpdatedField != null) LastUpdatedField = lastUpdatedField;
+		_primaryTypeContext = primary with { IndexPatternUseBatchDate = true };
+		_secondaryTypeContext = secondary with { IndexPatternUseBatchDate = true };
+		_setBatchIndexDate = primary.SetBatchIndexDate;
+		_setLastUpdated = primary.SetLastUpdated;
+		if (primary.BatchIndexDateFieldName != null) BatchIndexDateField = primary.BatchIndexDateFieldName;
+		if (primary.LastUpdatedFieldName != null) LastUpdatedField = primary.LastUpdatedFieldName;
 	}
 
 	/// <summary> The field name used for last-updated range queries. </summary>
@@ -131,6 +126,18 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 
 	/// <summary> Optional hook that runs after <see cref="CompleteAsync"/> finishes all operations. </summary>
 	public Func<OrchestratorContext<TEvent>, ITransport, CancellationToken, Task>? OnPostComplete { get; init; }
+
+	/// <summary>
+	/// Callback invoked on each progress poll during a server-side _reindex step.
+	/// The string parameter is a label identifying the step (e.g. "reindex-updates", "reindex-deletes").
+	/// </summary>
+	public Action<string, ReindexProgress>? OnReindexProgress { get; init; }
+
+	/// <summary>
+	/// Callback invoked on each progress poll during a _delete_by_query step.
+	/// The string parameter is a label identifying the step (e.g. "cleanup").
+	/// </summary>
+	public Action<string, DeleteByQueryProgress>? OnDeleteByQueryProgress { get; init; }
 
 	/// <summary> The resolved ingest strategy after <see cref="StartAsync"/> completes. </summary>
 	public IngestSyncStrategy Strategy => _strategy;
@@ -161,14 +168,17 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		foreach (var task in _preBootstrapTasks)
 			await task(_transport, ctx).ConfigureAwait(false);
 
-		// 2. Create and bootstrap primary channel.
-		var primaryOpts = new IngestChannelOptions<TEvent>(_transport, _primaryTypeContext, _batchTimestamp);
+		// 2. Detect index reuse for primary: if the template hash already matches
+		//    and the -latest alias exists, write to the existing concrete index
+		//    instead of creating a new date-stamped one.
+		_primaryWriteAlias = ResolvePrimaryWriteAlias();
+		var reusePrimary = await TryResolveReusableIndexAsync(_primaryTypeContext, _primaryWriteAlias, ctx).ConfigureAwait(false);
+
+		var primaryOpts = new IngestChannelOptions<TEvent>(
+			_transport, _primaryTypeContext, _batchTimestamp, indexNameOverride: reusePrimary);
 		ConfigurePrimary?.Invoke(primaryOpts);
 		_primaryChannel = new IngestChannel<TEvent>(primaryOpts);
 
-		// When the primary uses content-hash scripted upserts, inject a hash-match factory
-		// that updates batch_index_date instead of NOOPing. This ensures unchanged documents
-		// are still marked as part of the current batch so the cleanup step doesn't delete them.
 		if (_primaryTypeContext.GetContentHash != null
 		    && _primaryChannel.Options.Strategy.DocumentIngest is TypeContextIndexIngestStrategy<TEvent> primaryStrategy)
 		{
@@ -186,7 +196,18 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		var primaryServerHash = await _primaryChannel.GetIndexTemplateHashAsync(ctx).ConfigureAwait(false) ?? string.Empty;
 		await _primaryChannel.BootstrapElasticsearchAsync(method, ctx).ConfigureAwait(false);
 
-		_primaryWriteAlias = ResolvePrimaryWriteAlias();
+		// If we optimistically chose reuse but the hash now differs (template evolved),
+		// fall back to a new date-stamped index.
+		if (reusePrimary != null && primaryServerHash != _primaryChannel.ChannelHash)
+		{
+			_primaryChannel.Dispose();
+			primaryOpts = new IngestChannelOptions<TEvent>(_transport, _primaryTypeContext, _batchTimestamp);
+			ConfigurePrimary?.Invoke(primaryOpts);
+			_primaryChannel = new IngestChannel<TEvent>(primaryOpts);
+			await _primaryChannel.BootstrapElasticsearchAsync(method, ctx).ConfigureAwait(false);
+			reusePrimary = null;
+		}
+
 		_primaryIndexName = _primaryChannel.IndexName;
 		if (primaryServerHash != _primaryChannel.ChannelHash)
 			_strategy = IngestSyncStrategy.Multiplex;
@@ -196,17 +217,29 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		var head = await _transport.HeadAsync(_secondaryWriteAlias, ctx).ConfigureAwait(false);
 		var secondaryExists = head.ApiCallDetails.HttpStatusCode == 200;
 
-		// 4. Create and bootstrap secondary channel.
-		// Strip ContentHash from the secondary — the secondary is populated via _reindex,
-		// never via scripted bulk upserts (which fail on semantic_text fields).
+		// 4. Detect index reuse for secondary (same logic as primary).
 		var secondaryTc = _secondaryTypeContext with { GetContentHash = null };
-		var secondaryOpts = new IngestChannelOptions<TEvent>(_transport, secondaryTc, _batchTimestamp);
+		var reuseSecondary = await TryResolveReusableIndexAsync(_secondaryTypeContext, _secondaryWriteAlias, ctx).ConfigureAwait(false);
+
+		var secondaryOpts = new IngestChannelOptions<TEvent>(
+			_transport, secondaryTc, _batchTimestamp, indexNameOverride: reuseSecondary);
 		ConfigureSecondary?.Invoke(secondaryOpts);
 		_secondaryChannel = new IngestChannel<TEvent>(secondaryOpts);
 
 		_secondaryIndexName = _secondaryChannel.IndexName;
 		var secondaryServerHash = await _secondaryChannel.GetIndexTemplateHashAsync(ctx).ConfigureAwait(false) ?? string.Empty;
 		await _secondaryChannel.BootstrapElasticsearchAsync(method, ctx).ConfigureAwait(false);
+
+		if (reuseSecondary != null && secondaryServerHash != _secondaryChannel.ChannelHash)
+		{
+			_secondaryChannel.Dispose();
+			secondaryOpts = new IngestChannelOptions<TEvent>(_transport, secondaryTc, _batchTimestamp);
+			ConfigureSecondary?.Invoke(secondaryOpts);
+			_secondaryChannel = new IngestChannel<TEvent>(secondaryOpts);
+			await _secondaryChannel.BootstrapElasticsearchAsync(method, ctx).ConfigureAwait(false);
+			_secondaryIndexName = _secondaryChannel.IndexName;
+			reuseSecondary = null;
+		}
 
 		if (secondaryServerHash != _secondaryChannel.ChannelHash)
 			_strategy = IngestSyncStrategy.Multiplex;
@@ -218,8 +251,6 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			_strategy = IngestSyncStrategy.Reindex;
 
 		// 6. Resolve reindex target and cutoff for Reindex mode.
-		// Query the secondary for max(batch_index_date) so we pick up any changes
-		// since the last successful sync — including docs from prior failed syncs.
 		if (_strategy == IngestSyncStrategy.Reindex)
 		{
 			_secondaryReindexTarget = await ResolveExistingIndexAsync(_secondaryWriteAlias, ctx).ConfigureAwait(false);
@@ -300,7 +331,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			await _secondaryChannel.ApplyAliasesAsync(_secondaryIndexName!, ctx).ConfigureAwait(false);
 
 			// 3. Delete old from primary
-			await DeleteOldDocumentsAsync(_primaryWriteAlias!, ctx).ConfigureAwait(false);
+			await DeleteOldDocumentsAsync("primary-cleanup", _primaryWriteAlias!, ctx).ConfigureAwait(false);
 			await _primaryChannel.RefreshAsync(ctx).ConfigureAwait(false);
 		}
 		else // Reindex strategy
@@ -311,7 +342,6 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			if (secondaryHead.ApiCallDetails.HttpStatusCode != 200)
 			{
 				await _secondaryChannel!.BootstrapElasticsearchAsync(BootstrapMethod.Failure, ctx).ConfigureAwait(false);
-				// Create the target index with empty body to trigger template
 				secondaryTarget = _secondaryWriteAlias;
 				await _transport.PutAsync<StringResponse>(secondaryTarget!, PostData.String("{}"), ctx).ConfigureAwait(false);
 			}
@@ -319,17 +349,18 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			if (string.IsNullOrEmpty(secondaryTarget))
 				secondaryTarget = _secondaryWriteAlias;
 
-			// 3. Reindex updates: last_updated >= reindexCutoff (max batch_index_date from secondary).
-			// Uses the secondary's last known sync timestamp so failed prior syncs are retried.
-			await ReindexAsync(_primaryWriteAlias!, secondaryTarget!,
-				BuildRangeQuery(LastUpdatedField, "gte", _reindexCutoff), ctx).ConfigureAwait(false);
+			// 3. Reindex updates: last_updated > reindexCutoff (max batch_index_date from secondary).
+			//    Strict "gt" because docs whose last_updated equals the cutoff were already
+			//    reindexed in the previous batch — re-reindexing them would wipe AI-enriched fields.
+			await ReindexAsync("reindex-updates", _primaryWriteAlias!, secondaryTarget!,
+				BuildRangeQuery(LastUpdatedField, "gt", _reindexCutoff), ctx).ConfigureAwait(false);
 
 			// 4. Reindex deletions: batch_index_date < batchTimestamp → delete script
-			await ReindexWithDeleteScriptAsync(_primaryWriteAlias!, secondaryTarget!,
+			await ReindexWithDeleteScriptAsync("reindex-deletes", _primaryWriteAlias!, secondaryTarget!,
 				BuildRangeQuery(BatchIndexDateField, "lt"), ctx).ConfigureAwait(false);
 
 			// 5. Delete old from primary
-			await DeleteOldDocumentsAsync(_primaryWriteAlias!, ctx).ConfigureAwait(false);
+			await DeleteOldDocumentsAsync("primary-cleanup", _primaryWriteAlias!, ctx).ConfigureAwait(false);
 
 			// 6. Apply aliases
 			await _primaryChannel.ApplyAliasesAsync(_primaryIndexName!, ctx).ConfigureAwait(false);
@@ -449,7 +480,29 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		return string.IsNullOrEmpty(index) ? null : index;
 	}
 
-	private async Task ReindexAsync(string source, string dest, string query, CancellationToken ctx)
+	private async Task<string?> TryResolveReusableIndexAsync(
+		ElasticsearchTypeContext tc, string writeAlias, CancellationToken ctx)
+	{
+		if (tc.IndexStrategy?.DatePattern == null)
+			return null;
+
+		var aliasHead = await _transport.HeadAsync(writeAlias, ctx).ConfigureAwait(false);
+		if (aliasHead.ApiCallDetails.HttpStatusCode != 200)
+			return null;
+
+		var templateName = $"{tc.IndexStrategy.WriteTarget}-template";
+		var hashResponse = await _transport.RequestAsync<StringResponse>(
+			HttpMethod.GET,
+			$"/_index_template/{templateName}?filter_path=index_templates.index_template._meta.hash",
+			cancellationToken: ctx).ConfigureAwait(false);
+
+		if (!hashResponse.ApiCallDetails.HasSuccessfulStatusCode || string.IsNullOrEmpty(hashResponse.Body))
+			return null;
+
+		return await ResolveExistingIndexAsync(writeAlias, ctx).ConfigureAwait(false);
+	}
+
+	private async Task ReindexAsync(string label, string source, string dest, string query, CancellationToken ctx)
 	{
 		var reindex = new ServerReindex(_transport, new ServerReindexOptions
 		{
@@ -457,10 +510,11 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			Destination = dest,
 			Query = query,
 		});
-		await reindex.RunAsync(ctx).ConfigureAwait(false);
+		await foreach (var progress in reindex.MonitorAsync(ctx).ConfigureAwait(false))
+			OnReindexProgress?.Invoke(label, progress);
 	}
 
-	private async Task ReindexWithDeleteScriptAsync(string source, string dest, string query, CancellationToken ctx)
+	private async Task ReindexWithDeleteScriptAsync(string label, string source, string dest, string query, CancellationToken ctx)
 	{
 		var body = $$"""
 		{
@@ -475,10 +529,11 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			Destination = dest,
 			Body = body,
 		});
-		await reindex.RunAsync(ctx).ConfigureAwait(false);
+		await foreach (var progress in reindex.MonitorAsync(ctx).ConfigureAwait(false))
+			OnReindexProgress?.Invoke(label, progress);
 	}
 
-	private async Task DeleteOldDocumentsAsync(string alias, CancellationToken ctx)
+	private async Task DeleteOldDocumentsAsync(string label, string alias, CancellationToken ctx)
 	{
 		var query = BuildRangeQuery(BatchIndexDateField, "lt");
 		var dbq = new DeleteByQuery(_transport, new DeleteByQueryOptions
@@ -486,7 +541,8 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			Index = alias,
 			QueryBody = query,
 		});
-		await dbq.RunAsync(ctx).ConfigureAwait(false);
+		await foreach (var progress in dbq.MonitorAsync(ctx).ConfigureAwait(false))
+			OnDeleteByQueryProgress?.Invoke(label, progress);
 	}
 
 	private string BuildRangeQuery(string field, string op, DateTimeOffset? timestamp = null) =>

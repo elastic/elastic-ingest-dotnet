@@ -16,14 +16,17 @@ public static class IngestStrategies
 {
 	/// <summary>
 	/// Auto-detect the appropriate strategy from the <see cref="ElasticsearchTypeContext.EntityTarget"/>.
+	/// When <paramref name="indexNameOverride"/> is set and the entity target is an index,
+	/// that name is used verbatim instead of computing a date-stamped name.
 	/// </summary>
 	public static IIngestStrategy<TEvent> ForContext<TEvent>(
-		ElasticsearchTypeContext tc, DateTimeOffset? batchTimestamp = null) where TEvent : class =>
+		ElasticsearchTypeContext tc, DateTimeOffset? batchTimestamp = null,
+		string? indexNameOverride = null) where TEvent : class =>
 		tc.EntityTarget switch
 		{
 			EntityTarget.WiredStream => WiredStream<TEvent>(tc),
 			EntityTarget.DataStream => DataStream<TEvent>(tc),
-			_ => Index<TEvent>(tc, batchTimestamp: batchTimestamp)
+			_ => Index<TEvent>(tc, batchTimestamp: batchTimestamp, indexNameOverride: indexNameOverride)
 		};
 
 	/// <summary>
@@ -56,16 +59,25 @@ public static class IngestStrategies
 	/// from <paramref name="batchTimestamp"/> (or <see cref="DateTimeOffset.UtcNow"/> if null)
 	/// at strategy creation time. All documents in the batch are written to this single fixed
 	/// index (e.g., <c>my-index-2026.02.22.143055</c>).
+	/// When <paramref name="indexNameOverride"/> is set, it is used verbatim as the write
+	/// target — useful for reusing an existing index behind a write alias.
 	/// </summary>
 	public static IIngestStrategy<TEvent> Index<TEvent>(
 		ElasticsearchTypeContext tc,
 		IBootstrapStrategy? bootstrap = null,
-		DateTimeOffset? batchTimestamp = null) where TEvent : class
+		DateTimeOffset? batchTimestamp = null,
+		string? indexNameOverride = null) where TEvent : class
 	{
 		bootstrap ??= BootstrapStrategies.Index();
 
-		var batchDate = tc.IndexPatternUseBatchDate ? batchTimestamp ?? DateTimeOffset.UtcNow : (DateTimeOffset?)null;
-		var indexFormat = tc.ResolveIndexFormat(batchDate);
+		string indexFormat;
+		if (indexNameOverride != null)
+			indexFormat = indexNameOverride;
+		else
+		{
+			var batchDate = tc.IndexPatternUseBatchDate ? batchTimestamp ?? DateTimeOffset.UtcNow : (DateTimeOffset?)null;
+			indexFormat = tc.ResolveIndexFormat(batchDate);
+		}
 
 		var documentIngestStrategy = new TypeContextIndexIngestStrategy<TEvent>(tc, indexFormat, DefaultBulkPathAndQuery);
 		IIndexProvisioningStrategy provisionStrategy = tc.GetContentHash != null ? new HashBasedReuseProvisioning() : new AlwaysCreateProvisioning();
@@ -90,7 +102,7 @@ public static class IngestStrategies
 
 	internal static IAliasStrategy ResolveAliasStrategy(ElasticsearchTypeContext? tc)
 	{
-		if (tc?.SearchStrategy?.ReadAlias != null && tc.IndexStrategy?.WriteTarget != null)
+		if (tc?.IndexStrategy is { WriteTarget: not null, DatePattern: not null })
 			return new LatestAndSearchAliasStrategy(tc.ResolveAliasFormat());
 
 		return new NoAliasStrategy();

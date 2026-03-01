@@ -41,7 +41,7 @@ public class AiEnrichmentOrchestratorTests
 	[Test]
 	public void ConstructorThrowsOnNullProvider()
 	{
-		var act = () => new AiEnrichmentOrchestrator(CreateTransport(), null!);
+		var act = () => new AiEnrichmentOrchestrator(CreateTransport(), (IAiEnrichmentProvider)null!);
 		act.Should().Throw<ArgumentNullException>();
 	}
 
@@ -239,4 +239,7 @@ internal sealed class FakeAiEnrichmentProvider : IAiEnrichmentProvider
 	public string PipelineName => "test-ai-enrichment-pipeline";
 	public string PipelineBody => """{"description":"AI enrichment pipeline [fields_hash:abcd1234]","processors":[]}""";
 	public string FieldsHash => "abcd1234";
+
+	public AiInfrastructure CreateInfrastructure(string lookupIndexName) =>
+		AiInfrastructure.FromProvider(this);
 }

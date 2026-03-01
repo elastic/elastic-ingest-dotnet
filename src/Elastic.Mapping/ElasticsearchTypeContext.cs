@@ -32,6 +32,11 @@ namespace Elastic.Mapping;
 /// When true, the index pattern uses a single fixed batch date (captured at channel creation)
 /// instead of per-document timestamps. All documents in a batch are written to the same concrete index.
 /// </param>
+/// <param name="SetBatchIndexDate">Generated setter delegate for the [BatchIndexDate] property. Stamps each document with the batch date.</param>
+/// <param name="SetLastUpdated">Generated setter delegate for the [LastUpdated] property. Stamps each document with the current time.</param>
+/// <param name="BatchIndexDateFieldName">The JSON field name of the [BatchIndexDate] property.</param>
+/// <param name="LastUpdatedFieldName">The JSON field name of the [LastUpdated] property.</param>
+/// <param name="AiEnrichmentProvider">Source-generated AI enrichment provider for this document type, if any.</param>
 public record ElasticsearchTypeContext(
 	Func<string> GetSettingsJson,
 	Func<string> GetMappingsJson,
@@ -50,7 +55,12 @@ public record ElasticsearchTypeContext(
 	Func<AnalysisBuilder, AnalysisBuilder>? ConfigureAnalysis = null,
 	Type? MappedType = null,
 	IReadOnlyDictionary<string, string>? IndexSettings = null,
-	bool IndexPatternUseBatchDate = false
+	bool IndexPatternUseBatchDate = false,
+	Action<object, DateTimeOffset>? SetBatchIndexDate = null,
+	Action<object, DateTimeOffset>? SetLastUpdated = null,
+	string? BatchIndexDateFieldName = null,
+	string? LastUpdatedFieldName = null,
+	IAiEnrichmentProvider? AiEnrichmentProvider = null
 )
 {
 	// ── Resolve methods ──────────────────────────────────────────────────

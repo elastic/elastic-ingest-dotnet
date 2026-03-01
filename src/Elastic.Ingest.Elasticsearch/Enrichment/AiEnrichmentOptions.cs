@@ -37,6 +37,49 @@ public sealed class AiEnrichmentOptions
 }
 
 /// <summary>
+/// Progress snapshot emitted during <see cref="AiEnrichmentOrchestrator.EnrichAsync"/>.
+/// </summary>
+public sealed class AiEnrichmentProgress
+{
+	/// <summary>The current phase of the enrichment run.</summary>
+	public required AiEnrichmentPhase Phase { get; init; }
+
+	/// <summary>Running total of documents enriched so far.</summary>
+	public int Enriched { get; init; }
+
+	/// <summary>Running total of documents skipped so far.</summary>
+	public int Skipped { get; init; }
+
+	/// <summary>Running total of documents failed so far.</summary>
+	public int Failed { get; init; }
+
+	/// <summary>Running total of candidates discovered so far.</summary>
+	public int TotalCandidates { get; init; }
+
+	/// <summary>Optional message with phase-specific detail.</summary>
+	public string? Message { get; init; }
+}
+
+/// <summary>
+/// Phases reported by <see cref="AiEnrichmentProgress"/>.
+/// </summary>
+public enum AiEnrichmentPhase
+{
+	/// <summary>Querying for candidate documents.</summary>
+	Querying,
+	/// <summary>A batch of documents has been processed.</summary>
+	BatchComplete,
+	/// <summary>Refreshing the lookup index.</summary>
+	Refreshing,
+	/// <summary>Executing the enrich policy.</summary>
+	ExecutingPolicy,
+	/// <summary>Backfilling enriched data into the target index.</summary>
+	Backfilling,
+	/// <summary>Enrichment run completed.</summary>
+	Complete
+}
+
+/// <summary>
 /// Result of an AI enrichment run.
 /// </summary>
 public sealed class AiEnrichmentResult

@@ -245,7 +245,9 @@ internal static class AiEnrichmentEmitter
 
 		// LookupIndexMapping
 		sb.AppendLine($"{indent}/// <inheritdoc />");
-		sb.AppendLine($"{indent}public string LookupIndexMapping => @\"{{");
+		sb.AppendLine($"{indent}public string LookupIndexMapping => _lookupIndexMapping;");
+		sb.AppendLine();
+		sb.AppendLine($"{indent}private static readonly string _lookupIndexMapping = @\"{{");
 		sb.AppendLine($"{indent}  \"\"mappings\"\": {{");
 		sb.AppendLine($"{indent}    \"\"properties\"\": {{");
 		sb.AppendLine($"{indent}      \"\"{model.MatchFieldName}\"\": {{ \"\"type\"\": \"\"keyword\"\" }},");
@@ -275,7 +277,7 @@ internal static class AiEnrichmentEmitter
 		sb.AppendLine($"{indent}public string EnrichPolicyName => \"{policyName}\";");
 		sb.AppendLine();
 
-		// EnrichPolicyBody
+		// Enrich fields (shared between default body and CreateInfrastructure)
 		var enrichFields = new List<string>();
 		foreach (var output in model.Outputs)
 		{
@@ -284,6 +286,7 @@ internal static class AiEnrichmentEmitter
 		}
 		var enrichFieldsJson = string.Join(", ", enrichFields);
 
+		// EnrichPolicyBody
 		sb.AppendLine($"{indent}/// <inheritdoc />");
 		sb.AppendLine($"{indent}public string EnrichPolicyBody => @\"{{");
 		sb.AppendLine($"{indent}  \"\"match\"\": {{");
@@ -299,7 +302,7 @@ internal static class AiEnrichmentEmitter
 		sb.AppendLine($"{indent}public string PipelineName => \"{pipelineName}\";");
 		sb.AppendLine();
 
-		// PipelineBody — per-field copy script, with fields_hash in description for conditional update
+		// Pipeline script (shared between default body and CreateInfrastructure)
 		var scriptParts = new List<string>();
 		foreach (var output in model.Outputs)
 		{
@@ -307,6 +310,7 @@ internal static class AiEnrichmentEmitter
 		}
 		var script = $"def e = ctx._enrich; {string.Join(" ", scriptParts)} ctx.remove('_enrich');";
 
+		// PipelineBody
 		sb.AppendLine($"{indent}/// <inheritdoc />");
 		sb.AppendLine($"{indent}public string PipelineBody => @\"{{");
 		sb.AppendLine($"{indent}  \"\"description\"\": \"\"AI enrichment pipeline [fields_hash:{fieldsHash}]\"\",");
@@ -329,6 +333,52 @@ internal static class AiEnrichmentEmitter
 		sb.AppendLine($"{indent}  ]");
 		sb.AppendLine($"{indent}}}\";");
 		sb.AppendLine();
+
+		// CreateInfrastructure — builds AiInfrastructure with a runtime-resolved lookup index name
+		EmitCreateInfrastructure(sb, model, fieldsHash, enrichFieldsJson, script, indent);
+	}
+
+	private static void EmitCreateInfrastructure(
+		StringBuilder sb, AiEnrichmentModel model,
+		string fieldsHash, string enrichFieldsJson, string script,
+		string indent)
+	{
+		// Build the enrich fields JSON for the generated code (using regular string escaping)
+		var enrichFieldsEscaped = new List<string>();
+		foreach (var output in model.Outputs)
+		{
+			enrichFieldsEscaped.Add($"\\\"" + output.FieldName + "\\\"");
+			enrichFieldsEscaped.Add($"\\\"" + output.PromptHashFieldName + "\\\"");
+		}
+		var enrichFieldsForInterpolation = string.Join(", ", enrichFieldsEscaped);
+
+		var scriptEscaped = script.Replace("\"", "\\\"");
+
+		sb.AppendLine($"{indent}/// <summary>");
+		sb.AppendLine($"{indent}/// Creates an <see cref=\"global::Elastic.Mapping.AiInfrastructure\"/> with all infrastructure");
+		sb.AppendLine($"{indent}/// names and bodies derived from the specified lookup index name.");
+		sb.AppendLine($"{indent}/// Use this when the index write target is resolved at runtime (e.g., via <c>CreateContext</c>).");
+		sb.AppendLine($"{indent}/// </summary>");
+		sb.AppendLine($"{indent}public global::Elastic.Mapping.AiInfrastructure CreateInfrastructure(string lookupIndexName)");
+		sb.AppendLine($"{indent}{{");
+		sb.AppendLine($"{indent}\tvar policyName = lookupIndexName + \"-ai-policy\";");
+		sb.AppendLine($"{indent}\tvar pipelineName = lookupIndexName + \"-ai-pipeline\";");
+		sb.AppendLine();
+		sb.AppendLine($"{indent}\tvar policyBody = \"{{\\\"match\\\":{{\\\"indices\\\":\\\"\" + lookupIndexName + \"\\\",\\\"match_field\\\":\\\"{model.MatchFieldName}\\\",\\\"enrich_fields\\\":[{enrichFieldsForInterpolation}]}}}}\";");
+		sb.AppendLine();
+		sb.AppendLine($"{indent}\tvar pipelineBody = \"{{\\\"description\\\":\\\"AI enrichment pipeline [fields_hash:{fieldsHash}]\\\",\\\"processors\\\":[{{\\\"enrich\\\":{{\\\"policy_name\\\":\\\"\" + policyName + \"\\\",\\\"field\\\":\\\"{model.MatchFieldName}\\\",\\\"target_field\\\":\\\"_enrich\\\",\\\"max_matches\\\":1,\\\"ignore_missing\\\":true}}}},{{\\\"script\\\":{{\\\"if\\\":\\\"ctx._enrich != null\\\",\\\"source\\\":\\\"{scriptEscaped}\\\"}}}}]}}\";");
+		sb.AppendLine();
+		sb.AppendLine($"{indent}\treturn new global::Elastic.Mapping.AiInfrastructure(");
+		sb.AppendLine($"{indent}\t\tlookupIndexName,");
+		sb.AppendLine($"{indent}\t\t_lookupIndexMapping,");
+		sb.AppendLine($"{indent}\t\t\"{model.MatchFieldName}\",");
+		sb.AppendLine($"{indent}\t\t\"{fieldsHash}\",");
+		sb.AppendLine($"{indent}\t\tpolicyName,");
+		sb.AppendLine($"{indent}\t\tpolicyBody,");
+		sb.AppendLine($"{indent}\t\tpipelineName,");
+		sb.AppendLine($"{indent}\t\tpipelineBody);");
+		sb.AppendLine($"{indent}}}");
+		sb.AppendLine();
 	}
 
 	// ── Helpers ──
@@ -339,7 +389,7 @@ internal static class AiEnrichmentEmitter
 			model.Outputs.SelectMany(o => new[] { o.FieldName, o.PromptHashFieldName }));
 		using var sha = SHA256.Create();
 		var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(fieldsString));
-		return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant().Substring(0, 8);
+		return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant().Substring(0, 16);
 	}
 
 	private static string EscapeForStringLiteral(string value) =>

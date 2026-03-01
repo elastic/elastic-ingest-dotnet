@@ -88,4 +88,11 @@ public interface IAiEnrichmentProvider
 	/// when the field set changes and update the resources without creating new ones.
 	/// </summary>
 	string FieldsHash { get; }
+
+	/// <summary>
+	/// Creates an <see cref="AiInfrastructure"/> with all infrastructure names and bodies
+	/// derived from the specified lookup index name. Use this when the index write target
+	/// is resolved at runtime (e.g., via <c>CreateContext</c>).
+	/// </summary>
+	AiInfrastructure CreateInfrastructure(string lookupIndexName);
 }

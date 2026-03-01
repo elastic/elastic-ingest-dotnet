@@ -243,9 +243,29 @@ internal static class ContextEmitter
 
 		// IndexSettings
 		if (reg.IndexSettingsReference != null)
-			sb.AppendLine($"{indent}\t\tIndexSettings: {reg.IndexSettingsReference}");
+			sb.AppendLine($"{indent}\t\tIndexSettings: {reg.IndexSettingsReference},");
 		else
-			sb.AppendLine($"{indent}\t\tIndexSettings: null");
+			sb.AppendLine($"{indent}\t\tIndexSettings: null,");
+
+		// Batch tracking setters
+		EmitBatchTrackingSetterDelegate(sb, reg.IngestProperties.BatchIndexDatePropertyName, typeFqn, "SetBatchIndexDate", indent + "\t\t");
+		EmitBatchTrackingSetterDelegate(sb, reg.IngestProperties.LastUpdatedPropertyName, typeFqn, "SetLastUpdated", indent + "\t\t");
+
+		if (reg.IngestProperties.BatchIndexDateFieldName != null)
+			sb.AppendLine($"{indent}\t\tBatchIndexDateFieldName: \"{reg.IngestProperties.BatchIndexDateFieldName}\",");
+		else
+			sb.AppendLine($"{indent}\t\tBatchIndexDateFieldName: null,");
+
+		if (reg.IngestProperties.LastUpdatedFieldName != null)
+			sb.AppendLine($"{indent}\t\tLastUpdatedFieldName: \"{reg.IngestProperties.LastUpdatedFieldName}\",");
+		else
+			sb.AppendLine($"{indent}\t\tLastUpdatedFieldName: null,");
+
+		// AI enrichment provider
+		if (model.AiEnrichment != null && model.AiEnrichment.DocumentTypeFullyQualifiedName == reg.TypeFullyQualifiedName)
+			sb.AppendLine($"{indent}\t\tAiEnrichmentProvider: new {model.AiEnrichment.DocumentTypeName}AiEnrichmentProvider()");
+		else
+			sb.AppendLine($"{indent}\t\tAiEnrichmentProvider: null");
 
 		sb.AppendLine($"{indent}\t);");
 		sb.AppendLine();
@@ -403,6 +423,14 @@ internal static class ContextEmitter
 			sb.AppendLine($"{indent}/// <inheritdoc />\n{indent}public string? LastUpdatedFieldName => \"{ingest.LastUpdatedFieldName}\";");
 		else
 			sb.AppendLine($"{indent}/// <inheritdoc />\n{indent}public string? LastUpdatedFieldName => null;");
+	}
+
+	private static void EmitBatchTrackingSetterDelegate(StringBuilder sb, string? propertyName, string typeFqn, string paramName, string indent)
+	{
+		if (propertyName != null)
+			sb.AppendLine($"{indent}{paramName}: static (obj, val) => ((global::{typeFqn})obj).{propertyName} = val,");
+		else
+			sb.AppendLine($"{indent}{paramName}: null,");
 	}
 
 	private static void EmitAccessorDelegate(StringBuilder sb, string? propertyName, string typeFqn, string paramName, bool isLast, string indent)
