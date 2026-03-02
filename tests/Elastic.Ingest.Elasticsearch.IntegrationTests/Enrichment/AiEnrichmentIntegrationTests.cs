@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -91,10 +92,10 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 		await IndexTestDocumentsAsync();
 
 		var secondaryAlias = TestMappingContext.AiDocumentationPageAiSecondary.Context.ResolveWriteAlias();
-		var result = await enrichment.EnrichAsync(secondaryAlias);
+		var result = await DrainEnrichAsync(enrichment, secondaryAlias);
 
 		result.Should().NotBeNull();
-		result.TotalCandidates.Should().BeGreaterThan(0,
+		result!.TotalCandidates.Should().BeGreaterThan(0,
 			"documents without AI fields should be found as candidates");
 
 		if (result.Enriched > 0)
@@ -152,8 +153,8 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 		await RefreshAsync(secondaryAlias);
 
 		// Verify the document is still a candidate (ai_questions missing)
-		var result = await enrichment.EnrichAsync(secondaryAlias);
-		result.TotalCandidates.Should().BeGreaterThan(0,
+		var result = await DrainEnrichAsync(enrichment, secondaryAlias);
+		result!.TotalCandidates.Should().BeGreaterThan(0,
 			"document with missing ai_questions should be a candidate");
 
 		// Verify the provider only requests stale fields in the prompt
@@ -176,21 +177,19 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 	[Test]
 	public async Task EnrichAsyncRespectsMaxEnrichmentsPerRun()
 	{
-		using var enrichment = new AiEnrichmentOrchestrator(Transport, Provider,
-			new AiEnrichmentOptions { MaxEnrichmentsPerRun = 2 });
+		using var enrichment = new AiEnrichmentOrchestrator(Transport, Provider);
 		await enrichment.InitializeAsync();
 
 		await IndexTestDocumentsAsync();
 
 		var secondaryAlias = TestMappingContext.AiDocumentationPageAiSecondary.Context.ResolveWriteAlias();
-		var result = await enrichment.EnrichAsync(secondaryAlias);
+		var result = await DrainEnrichAsync(enrichment, secondaryAlias,
+			new AiEnrichmentOptions { MaxEnrichmentsPerRun = 2 });
 
 		result.Should().NotBeNull();
-		result.TotalCandidates.Should().BeGreaterThan(0);
+		result!.TotalCandidates.Should().BeGreaterThan(0);
 		(result.Enriched + result.Failed).Should().BeLessThanOrEqualTo(2,
 			"should not process more than MaxEnrichmentsPerRun candidates");
-		result.ReachedLimit.Should().BeTrue(
-			"with 3 docs and limit=2, the limit should be reached");
 	}
 
 	// ── Purge ──
@@ -401,12 +400,12 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 
 		var secondaryAlias = TestMappingContext.AiDocumentationPageAiSecondary.Context.ResolveWriteAlias();
 
-		var first = await enrichment.EnrichAsync(secondaryAlias);
-		first.TotalCandidates.Should().BeGreaterThan(0,
+		var first = await DrainEnrichAsync(enrichment, secondaryAlias);
+		first!.TotalCandidates.Should().BeGreaterThan(0,
 			"first run should find candidates");
 
-		var second = await enrichment.EnrichAsync(secondaryAlias);
-		second.TotalCandidates.Should().BeLessThanOrEqualTo(first.TotalCandidates,
+		var second = await DrainEnrichAsync(enrichment, secondaryAlias);
+		second!.TotalCandidates.Should().BeLessThanOrEqualTo(first.TotalCandidates,
 			"second run should find fewer or equal candidates since first run enriched some");
 	}
 
@@ -462,10 +461,10 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 		await orch.CompleteAsync(drainMaxWait: TimeSpan.FromSeconds(30));
 
 		// The lookup still has the enrichment — run backfill
-		var result = await enrichment.EnrichAsync(secondaryAlias);
+		var result = await DrainEnrichAsync(enrichment, secondaryAlias);
 
 		// The document should be a candidate (no AI fields yet on fresh index)
-		result.TotalCandidates.Should().BeGreaterThan(0,
+		result!.TotalCandidates.Should().BeGreaterThan(0,
 			"freshly indexed document should need enrichment");
 
 		// Verify the lookup entry still exists
@@ -477,6 +476,15 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 	}
 
 	// ── Helpers ──
+
+	private static async Task<AiEnrichmentProgress?> DrainEnrichAsync(
+		AiEnrichmentOrchestrator orchestrator, string targetIndex, AiEnrichmentOptions? options = null)
+	{
+		AiEnrichmentProgress? last = null;
+		await foreach (var p in orchestrator.EnrichAsync(targetIndex, options))
+			last = p;
+		return last;
+	}
 
 	private async Task IndexTestDocumentsAsync(AiDocumentationPage[]? pages = null)
 	{

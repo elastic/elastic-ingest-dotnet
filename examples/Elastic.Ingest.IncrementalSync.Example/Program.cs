@@ -79,10 +79,7 @@ using var orchestrator = new IncrementalSyncOrchestrator<RecipeDocument>(
 		Console.WriteLine($"  [{label}] total={p.Total} deleted={p.Deleted} completed={p.IsCompleted}{(p.Error != null ? $" ERROR={p.Error}" : "")}"),
 };
 
-using var aiOrchestrator = new AiEnrichmentOrchestrator(transport, primaryContext)
-{
-	OnProgress = p => Console.WriteLine($"  [ai] {p.Phase}: enriched={p.Enriched} skipped={p.Skipped} failed={p.Failed} candidates={p.TotalCandidates}{(p.Message != null ? $" — {p.Message}" : "")}")
-};
+using var aiOrchestrator = new AiEnrichmentOrchestrator(transport, primaryContext);
 
 orchestrator.AddPreBootstrapTask(async (_, ct) =>
 {
@@ -147,8 +144,14 @@ Console.WriteLine($"Secondary count   : {secondaryCount}");
 Console.WriteLine();
 Console.WriteLine($"Running AI enrichment against: {secondaryAlias}");
 
-var enrichResult = await aiOrchestrator.EnrichAsync(secondaryAlias);
-Console.WriteLine($"AI enrichment     : {enrichResult.Enriched} enriched, {enrichResult.Skipped} skipped, {enrichResult.Failed} failed ({enrichResult.TotalCandidates} candidates)");
+AiEnrichmentProgress? lastProgress = null;
+await foreach (var p in aiOrchestrator.EnrichAsync(secondaryAlias, new AiEnrichmentOptions { MaxEnrichmentsPerRun = 200 }))
+{
+	Console.WriteLine($"  [ai] {p.Phase}: enriched={p.Enriched} failed={p.Failed} candidates={p.TotalCandidates}{(p.Message != null ? $" — {p.Message}" : "")}");
+	lastProgress = p;
+}
+if (lastProgress != null)
+	Console.WriteLine($"AI enrichment     : {lastProgress.Enriched} enriched, {lastProgress.Failed} failed ({lastProgress.TotalCandidates} candidates)");
 
 // ─── Validate: counts after enrichment ──────────────────────────────────────
 await transport.PostAsync<StringResponse>($"{secondaryAlias}/_refresh", PostData.Empty);

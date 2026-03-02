@@ -50,9 +50,10 @@ public class AiEnrichmentOrchestratorTests
 	{
 		var opts = new AiEnrichmentOptions();
 		opts.MaxEnrichmentsPerRun.Should().Be(100);
-		opts.MaxConcurrency.Should().Be(4);
 		opts.QueryBatchSize.Should().Be(50);
 		opts.InferenceEndpointId.Should().Be(".gp-llm-v2-completion");
+		opts.EsqlBatchSize.Should().Be(20);
+		opts.EsqlConcurrency.Should().Be(8);
 	}
 
 	[Test]
@@ -63,7 +64,7 @@ public class AiEnrichmentOrchestratorTests
 	}
 
 	[Test]
-	public async Task EnrichAsyncReturnsEmptyResultWhenNoCandidates()
+	public async Task EnrichAsyncYieldsCompleteWithZeroCandidates()
 	{
 		var transport = Virtual.Elasticsearch
 			.Bootstrap(1)
@@ -74,13 +75,15 @@ public class AiEnrichmentOrchestratorTests
 			.RequestHandler;
 
 		using var orchestrator = new AiEnrichmentOrchestrator(transport, CreateProvider());
-		var result = await orchestrator.EnrichAsync("test-index");
+		AiEnrichmentProgress? last = null;
+		await foreach (var p in orchestrator.EnrichAsync("test-index"))
+			last = p;
 
-		result.Should().NotBeNull();
-		result.Enriched.Should().Be(0);
-		result.Failed.Should().Be(0);
-		result.TotalCandidates.Should().Be(0);
-		result.ReachedLimit.Should().BeFalse();
+		last.Should().NotBeNull();
+		last!.Phase.Should().Be(AiEnrichmentPhase.Complete);
+		last.Enriched.Should().Be(0);
+		last.Failed.Should().Be(0);
+		last.TotalCandidates.Should().Be(0);
 	}
 
 	[Test]
@@ -92,13 +95,21 @@ public class AiEnrichmentOrchestratorTests
 	}
 
 	[Test]
-	public void AiEnrichmentResultInitializesWithDefaults()
+	public void AiEnrichmentProgressHasExpectedProperties()
 	{
-		var result = new AiEnrichmentResult();
-		result.TotalCandidates.Should().Be(0);
-		result.Enriched.Should().Be(0);
-		result.Failed.Should().Be(0);
-		result.ReachedLimit.Should().BeFalse();
+		var p = new AiEnrichmentProgress
+		{
+			Phase = AiEnrichmentPhase.Enriching,
+			Enriched = 10,
+			Failed = 2,
+			TotalCandidates = 50,
+			Message = "test"
+		};
+		p.Phase.Should().Be(AiEnrichmentPhase.Enriching);
+		p.Enriched.Should().Be(10);
+		p.Failed.Should().Be(2);
+		p.TotalCandidates.Should().Be(50);
+		p.Message.Should().Be("test");
 	}
 
 	[Test]
@@ -239,6 +250,15 @@ internal sealed class FakeAiEnrichmentProvider : IAiEnrichmentProvider
 	public string PipelineName => "test-ai-enrichment-pipeline";
 	public string PipelineBody => """{"description":"AI enrichment pipeline [fields_hash:abcd1234]","processors":[]}""";
 	public string FieldsHash => "abcd1234";
+
+	public string EsqlPromptExpression => """CONCAT(?p0, COALESCE(title, ""), ?p1, COALESCE(body, ""), ?p2)""";
+
+	public IReadOnlyList<KeyValuePair<string, string>> EsqlPromptParams { get; } = new KeyValuePair<string, string>[]
+	{
+		new("p0", "Summarize: <title>"),
+		new("p1", "</title><body>"),
+		new("p2", "</body>"),
+	};
 
 	public AiInfrastructure CreateInfrastructure(string lookupIndexName) =>
 		AiInfrastructure.FromProvider(this);

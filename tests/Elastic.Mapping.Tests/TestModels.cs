@@ -262,6 +262,9 @@ public class SelfConfiguredDocument : IConfigureElasticsearch<SelfConfiguredDocu
 
 	public MappingsBuilder<SelfConfiguredDocument> ConfigureMappings(MappingsBuilder<SelfConfiguredDocument> mappings) =>
 		mappings.AddRuntimeField("name_length", f => f.Long().Script("emit(doc['name'].value.length())"));
+
+	/// <inheritdoc />
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
 }
 
 /// <summary>
@@ -312,8 +315,14 @@ public class PartiallyConfiguredDocument
 
 public class PartialDocumentConfig : IConfigureElasticsearch<PartiallyConfiguredDocument>
 {
+	/// <inheritdoc />
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) => analysis;
+
 	public MappingsBuilder<PartiallyConfiguredDocument> ConfigureMappings(MappingsBuilder<PartiallyConfiguredDocument> mappings) =>
 		mappings.Title(f => f.Analyzer("standard").MultiField("keyword", mf => mf.Keyword().IgnoreAbove(256)));
+
+	/// <inheritdoc />
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
 }
 
 // ============================================================================
@@ -340,6 +349,12 @@ public class DiTestDocumentConfig : IConfigureElasticsearch<DiTestDocument>
 		analysis.Analyzer("di_analyzer", a => a.Custom()
 			.Tokenizer(BuiltInAnalysis.Tokenizers.Standard)
 			.Filters(BuiltInAnalysis.TokenFilters.Lowercase));
+
+	/// <inheritdoc />
+	public MappingsBuilder<DiTestDocument> ConfigureMappings(MappingsBuilder<DiTestDocument> mappings) => mappings;
+
+	/// <inheritdoc />
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
 }
 
 // ============================================================================

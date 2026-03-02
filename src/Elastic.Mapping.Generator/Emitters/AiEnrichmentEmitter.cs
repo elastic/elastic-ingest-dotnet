@@ -56,6 +56,7 @@ internal static class AiEnrichmentEmitter
 		EmitEnrichmentFields(sb, model, indent + "\t");
 		EmitRequiredSourceFields(sb, model, indent + "\t");
 		EmitBuildPrompt(sb, model, indent + "\t");
+		EmitEsqlPrompt(sb, model, indent + "\t");
 		EmitParseResponse(sb, model, indent + "\t");
 		EmitLookupInfrastructure(sb, model, lookupIndexName, policyName, pipelineName, fieldsHash, indent + "\t");
 
@@ -179,6 +180,87 @@ internal static class AiEnrichmentEmitter
 		sb.AppendLine($"{indent}\treturn \"{roleSection}<task>\\nReturn a single valid JSON object matching the schema. No markdown, no extra text, no trailing characters.\\n</task>\\n\\n<json-schema>\\n{{\\\"type\\\":\\\"object\\\",\\\"required\\\":[\" + reqJson + \"],\\\"additionalProperties\\\":false,\\\"properties\\\":{{\" + propJson + \"}}}}\\n</json-schema>\\n\\n<rules>\\n- Extract ONLY from provided content. Never hallucinate.\\n- Be specific. Avoid generic phrases.\\n- Output exactly one JSON object.\\n</rules>\\n\\n<document>\\n{inputSection}</document>\";");
 
 		sb.AppendLine($"{indent}}}");
+		sb.AppendLine();
+	}
+
+	private static void EmitEsqlPrompt(StringBuilder sb, AiEnrichmentModel model, string indent)
+	{
+		// Build the full JSON schema (all output fields, no per-field staleness)
+		var requiredJson = string.Join(",", model.Outputs.Select(o => $"\\\"" + o.FieldName + "\\\""));
+		var propsJsonParts = new List<string>();
+		foreach (var output in model.Outputs)
+		{
+			if (output.IsArray)
+			{
+				var s = $"\\\"{output.FieldName}\\\":{{\\\"type\\\":\\\"array\\\",\\\"items\\\":{{\\\"type\\\":\\\"string\\\"}}";
+				if (output.MinItems > 0) s += $",\\\"minItems\\\":{output.MinItems}";
+				if (output.MaxItems > 0) s += $",\\\"maxItems\\\":{output.MaxItems}";
+				s += $",\\\"description\\\":\\\"{EscapeForStringLiteral(output.Description)}\\\"}}";
+				propsJsonParts.Add(s);
+			}
+			else
+			{
+				propsJsonParts.Add($"\\\"{output.FieldName}\\\":{{\\\"type\\\":\\\"string\\\",\\\"description\\\":\\\"{EscapeForStringLiteral(output.Description)}\\\"}}");
+			}
+		}
+		var propsJson = string.Join(",", propsJsonParts);
+
+		var roleSection = !string.IsNullOrEmpty(model.Role)
+			? $"<role>\\n{EscapeForStringLiteral(model.Role!)}\\n</role>\\n\\n"
+			: "";
+
+		var schemaJson = $"{{\\\"type\\\":\\\"object\\\",\\\"required\\\":[{requiredJson}],\\\"additionalProperties\\\":false,\\\"properties\\\":{{{propsJson}}}}}";
+
+		var promptPrefix = $"{roleSection}<task>\\nReturn a single valid JSON object matching the schema. No markdown, no extra text, no trailing characters.\\n</task>\\n\\n<json-schema>\\n{schemaJson}\\n</json-schema>\\n\\n<rules>\\n- Extract ONLY from provided content. Never hallucinate.\\n- Be specific. Avoid generic phrases.\\n- Output exactly one JSON object.\\n</rules>\\n\\n<document>\\n";
+
+		// Build CONCAT expression parts and param values.
+		// Pattern: CONCAT(?p0, COALESCE(field0, ""), ?p1, COALESCE(field1, ""), ?p2)
+		// p0 = promptPrefix + "<field0_name>"
+		// p1 = "</field0_name>\n<field1_name>"
+		// pN = "</fieldN_name>\n</document>"
+		var concatArgs = new List<string>();
+		var paramEntries = new List<(string Name, string Value)>();
+		var paramIndex = 0;
+
+		for (var i = 0; i < model.Inputs.Length; i++)
+		{
+			var input = model.Inputs[i];
+			string staticText;
+
+			if (i == 0)
+				staticText = $"{promptPrefix}<{input.FieldName}>";
+			else
+				staticText = $"</{model.Inputs[i - 1].FieldName}>\\n<{input.FieldName}>";
+
+			var paramName = $"p{paramIndex++}";
+			paramEntries.Add((paramName, staticText));
+			concatArgs.Add($"?{paramName}");
+			concatArgs.Add($"COALESCE({input.FieldName}, \"\")");
+		}
+
+		// Final closing param
+		var closingParamName = $"p{paramIndex}";
+		var closingText = model.Inputs.Length > 0
+			? $"</{model.Inputs[model.Inputs.Length - 1].FieldName}>\\n</document>"
+			: "</document>";
+		paramEntries.Add((closingParamName, closingText));
+		concatArgs.Add($"?{closingParamName}");
+
+		var concatExpr = $"CONCAT({string.Join(", ", concatArgs)})";
+
+		// EsqlPromptExpression
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public string EsqlPromptExpression => \"{EscapeForStringLiteral(concatExpr)}\";");
+		sb.AppendLine();
+
+		// EsqlPromptParams
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<string, string>> EsqlPromptParams {{ get; }} =");
+		sb.AppendLine($"{indent}\tnew global::System.Collections.Generic.KeyValuePair<string, string>[]");
+		sb.AppendLine($"{indent}\t{{");
+		foreach (var (name, value) in paramEntries)
+			sb.AppendLine($"{indent}\t\tnew(\"{name}\", \"{value}\"),");
+		sb.AppendLine($"{indent}\t}};");
 		sb.AppendLine();
 	}
 

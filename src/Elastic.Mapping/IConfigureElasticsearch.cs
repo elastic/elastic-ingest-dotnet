@@ -19,15 +19,15 @@ namespace Elastic.Mapping;
 public interface IConfigureElasticsearch<TDocument> where TDocument : class
 {
 	/// <summary>Configures custom analysis components (analyzers, tokenizers, filters).</summary>
-	AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) => analysis;
+	AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis);
 
 	/// <summary>Configures custom field mappings, runtime fields, and dynamic templates.</summary>
-	MappingsBuilder<TDocument> ConfigureMappings(MappingsBuilder<TDocument> mappings) => mappings;
+	MappingsBuilder<TDocument> ConfigureMappings(MappingsBuilder<TDocument> mappings);
 
 	/// <summary>
 	/// Additional index settings to include in the settings component template
 	/// (e.g. <c>index.default_pipeline</c>).
 	/// </summary>
-	IReadOnlyDictionary<string, string>? IndexSettings => null;
+	IReadOnlyDictionary<string, string>? IndexSettings { get; }
 }
 #endif
