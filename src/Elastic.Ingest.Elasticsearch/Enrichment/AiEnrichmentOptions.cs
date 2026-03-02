@@ -2,6 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -42,6 +43,20 @@ public sealed class AiEnrichmentOptions
 	/// Combined with <see cref="EsqlBatchSize"/>=20, processes up to 160 docs in flight.
 	/// </summary>
 	public int EsqlConcurrency { get; set; } = 8;
+
+	/// <summary>
+	/// Per-request timeout for each ES|QL COMPLETION call. Default: 5 minutes.
+	/// LLM-backed completion can be slow for large batches; set this high enough
+	/// to avoid premature 408 responses from Elasticsearch.
+	/// </summary>
+	public TimeSpan CompletionTimeout { get; set; } = TimeSpan.FromMinutes(5);
+
+	/// <summary>
+	/// Maximum number of retries for a failed ES|QL COMPLETION call (e.g. HTTP 408/429/5xx).
+	/// Default: 2. The delay between retries equals <see cref="CompletionTimeout"/>
+	/// capped at 1 minute.
+	/// </summary>
+	public int CompletionMaxRetries { get; set; } = 2;
 }
 
 /// <summary>
@@ -94,7 +109,7 @@ internal sealed record LookupUpdate(string UrlHash, JsonElement Document);
 /// <summary>
 /// Result of a single ES|QL COMPLETION chunk.
 /// </summary>
-internal sealed record EsqlChunkResult(List<LookupUpdate> Updates, int Failed, string? Error);
+internal sealed record EsqlChunkResult(List<LookupUpdate> Updates, int Failed, string? Error, bool IsRetryable = false);
 
 /// <summary>
 /// Wraps a query body for <c>_search</c>, <c>_update_by_query</c>, etc.

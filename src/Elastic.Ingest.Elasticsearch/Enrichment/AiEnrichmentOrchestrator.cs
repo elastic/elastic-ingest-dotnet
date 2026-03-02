@@ -129,8 +129,10 @@ public class AiEnrichmentOrchestrator : IDisposable
 		// 2. Chunk IDs and run parallel ES|QL COMPLETION queries, yielding per-chunk
 		var chunks = ChunkList(candidateIds, opts.EsqlBatchSize);
 		var allUpdates = new List<LookupUpdate>();
+		var retryDelay = TimeSpan.FromSeconds(Math.Min(opts.CompletionTimeout.TotalSeconds, 60));
 
 		var activeTasks = new Dictionary<Task<EsqlChunkResult>, int>();
+		var chunkRetries = new Dictionary<int, int>();
 		var nextChunk = 0;
 
 		while (nextChunk < chunks.Count && activeTasks.Count < opts.EsqlConcurrency)
@@ -145,17 +147,37 @@ public class AiEnrichmentOrchestrator : IDisposable
 		{
 			ct.ThrowIfCancellationRequested();
 			var completed = await Task.WhenAny(activeTasks.Keys).ConfigureAwait(false);
+			var chunkIndex = activeTasks[completed];
 			activeTasks.Remove(completed);
-			completedChunks++;
 
 			var result = await completed.ConfigureAwait(false);
+
+			chunkRetries.TryGetValue(chunkIndex, out var previousRetries);
+			if (result.Error != null && result.IsRetryable
+				&& previousRetries < opts.CompletionMaxRetries)
+			{
+				var attempt = previousRetries + 1;
+				chunkRetries[chunkIndex] = attempt;
+
+				yield return Progress(AiEnrichmentPhase.Enriching, enriched, failed, totalCandidates,
+					$"Chunk {chunkIndex + 1}/{chunks.Count}: {result.Error} — waiting {retryDelay.TotalSeconds:N0}s before retry {attempt}/{opts.CompletionMaxRetries}...");
+
+				var retryTask = DelayThenRunAsync(targetIndex, chunks[chunkIndex], opts, retryDelay, ct);
+				activeTasks[retryTask] = chunkIndex;
+				continue;
+			}
+
+			completedChunks++;
 			allUpdates.AddRange(result.Updates);
 			failed += result.Failed;
 			enriched = allUpdates.Count;
 
+			chunkRetries.TryGetValue(chunkIndex, out var retried);
+			var retryNote = retried > 0 ? $" (after {retried} {(retried == 1 ? "retry" : "retries")})" : "";
+
 			var chunkMsg = result.Error != null
-				? $"Chunk {completedChunks}/{chunks.Count}: {result.Error}"
-				: $"Chunk {completedChunks}/{chunks.Count}: +{result.Updates.Count} enriched, +{result.Failed} failed";
+				? $"Chunk {completedChunks}/{chunks.Count}: {result.Error}{retryNote}"
+				: $"Chunk {completedChunks}/{chunks.Count}: +{result.Updates.Count} enriched, +{result.Failed} failed{retryNote}";
 
 			yield return Progress(AiEnrichmentPhase.Enriching, enriched, failed, totalCandidates, chunkMsg);
 
@@ -502,14 +524,17 @@ public class AiEnrichmentOrchestrator : IDisposable
 		sb.Append('}');
 		var body = sb.ToString();
 
+		var requestConfig = new RequestConfiguration { RequestTimeout = opts.CompletionTimeout };
 		var response = await _transport.RequestAsync<StringResponse>(
-			HttpMethod.POST, "_query", PostData.String(body), cancellationToken: ct).ConfigureAwait(false);
+			HttpMethod.POST, "_query", PostData.String(body), requestConfig, ct).ConfigureAwait(false);
 
 		if (response.ApiCallDetails.HttpStatusCode is not 200)
 		{
+			var status = response.ApiCallDetails.HttpStatusCode;
+			var retryable = status is 408 or 429 or >= 500;
 			var errorBody = Truncate(response.Body, 1000);
 			return new EsqlChunkResult(updates, docIds.Count,
-				$"ES|QL COMPLETION failed (HTTP {response.ApiCallDetails.HttpStatusCode}): {errorBody}");
+				$"ES|QL COMPLETION failed (HTTP {status}): {errorBody}", retryable);
 		}
 
 		JsonNode? rootNode;
@@ -575,6 +600,14 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 		chunkFailed += docIds.Count - (updates.Count + chunkFailed);
 		return new EsqlChunkResult(updates, chunkFailed, null);
+	}
+
+	private async Task<EsqlChunkResult> DelayThenRunAsync(
+		string targetIndex, List<string> docIds, AiEnrichmentOptions opts,
+		TimeSpan delay, CancellationToken ct)
+	{
+		await Task.Delay(delay, ct).ConfigureAwait(false);
+		return await RunEsqlCompletionAsync(targetIndex, docIds, opts, ct).ConfigureAwait(false);
 	}
 
 	private static List<List<T>> ChunkList<T>(List<T> source, int chunkSize)
