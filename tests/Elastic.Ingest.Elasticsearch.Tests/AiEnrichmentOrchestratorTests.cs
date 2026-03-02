@@ -54,6 +54,8 @@ public class AiEnrichmentOrchestratorTests
 		opts.InferenceEndpointId.Should().Be(".gp-llm-v2-completion");
 		opts.EsqlBatchSize.Should().Be(20);
 		opts.EsqlConcurrency.Should().Be(8);
+		opts.CompletionTimeout.Should().Be(TimeSpan.FromMinutes(5));
+		opts.CompletionMaxRetries.Should().Be(2);
 	}
 
 	[Test]
