@@ -116,8 +116,6 @@ public static class BulkRequestDataFactory
 				bufferWriter.Write(ScriptedHashUpsertAfterIfCheck);
 				writer.Reset();
 
-				bufferWriter.Write(ScriptedHashUpdateScript);
-				writer.Reset();
 				if (hashUpdate.UpdateInformation.UpdateScript is not null)
 				{
 					bufferWriter.Write(Encoding.UTF8.GetBytes(hashUpdate.UpdateInformation.UpdateScript));
@@ -125,9 +123,15 @@ public static class BulkRequestDataFactory
 				}
 				else
 				{
-					bufferWriter.Write(ScriptedHashAfterIfCheckOp);
+					bufferWriter.Write(ScriptedHashUpdateScript);
 					writer.Reset();
 				}
+				bufferWriter.Write(ScriptedHashElseBranchStart);
+				writer.Reset();
+				bufferWriter.Write(field);
+				writer.Reset();
+				bufferWriter.Write(ScriptedHashElseBranchEnd);
+				writer.Reset();
 				var hash = hashUpdate.UpdateInformation.Hash;
 				JsonSerializer.Serialize(writer, hash, options.SerializerOptions);
 
@@ -225,7 +229,9 @@ public static class BulkRequestDataFactory
 				else
 					await stream.WriteAsync(ScriptedHashUpdateScript, 0, ScriptedHashUpdateScript.Length, ctx).ConfigureAwait(false);
 
-				await stream.WriteAsync(ScriptedHashAfterIfCheckOp, 0, ScriptedHashAfterIfCheckOp.Length, ctx).ConfigureAwait(false);
+				await stream.WriteAsync(ScriptedHashElseBranchStart, 0, ScriptedHashElseBranchStart.Length, ctx).ConfigureAwait(false);
+				await stream.WriteAsync(field, 0, field.Length, ctx).ConfigureAwait(false);
+				await stream.WriteAsync(ScriptedHashElseBranchEnd, 0, ScriptedHashElseBranchEnd.Length, ctx).ConfigureAwait(false);
 
 				var hash = hashUpdate.UpdateInformation.Hash;
 				await JsonSerializer.SerializeAsync(stream, hash, options.SerializerOptions, ctx).ConfigureAwait(false);

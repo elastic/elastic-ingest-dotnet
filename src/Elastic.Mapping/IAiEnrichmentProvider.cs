@@ -59,6 +59,23 @@ public interface IAiEnrichmentProvider
 	/// </summary>
 	string? ParseResponse(string llmResponse, IReadOnlyCollection<string> enrichedFields);
 
+	// ── ES|QL COMPLETION support ──
+
+	/// <summary>
+	/// The ES|QL expression for building the LLM prompt from document fields,
+	/// suitable for use in <c>| EVAL prompt = {expression}</c>.
+	/// Uses named value params (<c>?p0</c>, <c>?p1</c>, …) for static text and
+	/// bare field names (wrapped in COALESCE) for document data.
+	/// Example: <c>CONCAT(?p0, COALESCE(title, ""), ?p1, COALESCE(description, ""), ?p2)</c>
+	/// </summary>
+	string EsqlPromptExpression { get; }
+
+	/// <summary>
+	/// Named parameter values for the static text segments referenced by
+	/// <see cref="EsqlPromptExpression"/>. Keys are <c>"p0"</c>, <c>"p1"</c>, etc.
+	/// </summary>
+	IReadOnlyList<KeyValuePair<string, string>> EsqlPromptParams { get; }
+
 	// ── Lookup infrastructure (generated from [AiField] declarations) ──
 
 	/// <summary>The name of the lookup index that stores enrichment data.</summary>
@@ -88,4 +105,11 @@ public interface IAiEnrichmentProvider
 	/// when the field set changes and update the resources without creating new ones.
 	/// </summary>
 	string FieldsHash { get; }
+
+	/// <summary>
+	/// Creates an <see cref="AiInfrastructure"/> with all infrastructure names and bodies
+	/// derived from the specified lookup index name. Use this when the index write target
+	/// is resolved at runtime (e.g., via <c>CreateContext</c>).
+	/// </summary>
+	AiInfrastructure CreateInfrastructure(string lookupIndexName);
 }

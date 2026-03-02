@@ -83,7 +83,7 @@ public class IncrementalSyncOrchestratorTests
 	{
 		using var orchestrator = CreateOrchestrator(Transport);
 
-		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Reindex);
+		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Multiplex);
 		orchestrator.LastUpdatedField.Should().Be("last_updated");
 		orchestrator.BatchIndexDateField.Should().Be("batch_index_date");
 		orchestrator.BatchTimestamp.Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromSeconds(5));
@@ -367,5 +367,22 @@ public class IncrementalSyncOrchestratorTests
 		var act = async () => await orchestrator.StartAsync(BootstrapMethod.Silent);
 		act.Should().ThrowAsync<InvalidOperationException>()
 			.WithMessage("*WriteTarget*");
+	}
+
+	[Test]
+	public async Task RawContextConstructorUsesBatchTimestampForIndexName()
+	{
+		var primary = CreateTypeContext("primary-docs", "primary-search", "primary-docs-*");
+		var secondary = CreateTypeContext("secondary-docs", "secondary-search", "secondary-docs-*");
+
+		using var orchestrator = new IncrementalSyncOrchestrator<TestDocument>(
+			Transport, primary, secondary);
+
+		var context = await orchestrator.StartAsync(BootstrapMethod.Silent);
+
+		context.BatchTimestamp.Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromSeconds(5),
+			"batch timestamp should be current time, not DateTimeOffset.MinValue");
+		context.BatchTimestamp.Year.Should().BeGreaterThan(2000,
+			"index names must use the batch timestamp, not default(DateTimeOffset) which produces 0001.01.01");
 	}
 }

@@ -119,7 +119,7 @@ public class AiEnrichmentGeneratorTests
 	public void FieldsHashIsNotEmpty()
 	{
 		Provider.FieldsHash.Should().NotBeNullOrEmpty();
-		Provider.FieldsHash.Should().HaveLength(8, "fields hash should be first 8 chars of SHA-256");
+		Provider.FieldsHash.Should().HaveLength(16, "fields hash should be first 16 chars of SHA-256");
 	}
 
 	[Test]
@@ -319,5 +319,66 @@ public class AiEnrichmentGeneratorTests
 		var source = JsonDocument.Parse("""{"title": "Title"}""").RootElement;
 		Provider.BuildPrompt(source, AllFields).Should().BeNull(
 			"missing body field should cause prompt to be skipped");
+	}
+
+	// ── CreateInfrastructure ──
+
+	[Test]
+	public void CreateInfrastructureResolvesAllNames()
+	{
+		var infra = AiTestMappingContext.AiEnrichment.CreateInfrastructure("docs-semantic-production-ai-cache");
+
+		infra.LookupIndexName.Should().Be("docs-semantic-production-ai-cache");
+		infra.EnrichPolicyName.Should().Be("docs-semantic-production-ai-cache-ai-policy");
+		infra.PipelineName.Should().Be("docs-semantic-production-ai-cache-ai-pipeline");
+	}
+
+	[Test]
+	public void CreateInfrastructurePreservesMatchFieldAndHash()
+	{
+		var infra = AiTestMappingContext.AiEnrichment.CreateInfrastructure("custom-cache");
+
+		infra.MatchField.Should().Be(Provider.MatchField);
+		infra.FieldsHash.Should().Be(Provider.FieldsHash);
+	}
+
+	[Test]
+	public void CreateInfrastructureMappingMatchesDefault()
+	{
+		var infra = AiTestMappingContext.AiEnrichment.CreateInfrastructure("custom-cache");
+
+		infra.LookupIndexMapping.Should().Be(Provider.LookupIndexMapping);
+	}
+
+	[Test]
+	public void CreateInfrastructurePolicyBodyReferencesCustomName()
+	{
+		var infra = AiTestMappingContext.AiEnrichment.CreateInfrastructure("my-env-cache");
+
+		infra.EnrichPolicyBody.Should().Contain("my-env-cache");
+		infra.EnrichPolicyBody.Should().NotContain(Provider.LookupIndexName);
+		infra.EnrichPolicyBody.Should().Contain("\"url\"");
+		infra.EnrichPolicyBody.Should().Contain("\"ai_summary\"");
+	}
+
+	[Test]
+	public void CreateInfrastructurePipelineBodyReferencesCustomPolicyName()
+	{
+		var infra = AiTestMappingContext.AiEnrichment.CreateInfrastructure("my-env-cache");
+
+		infra.PipelineBody.Should().Contain("my-env-cache-ai-policy");
+		infra.PipelineBody.Should().Contain($"[fields_hash:{Provider.FieldsHash}]");
+	}
+
+	[Test]
+	public void FromProviderCreatesDefaultInfrastructure()
+	{
+		var infra = AiInfrastructure.FromProvider(Provider);
+
+		infra.LookupIndexName.Should().Be(Provider.LookupIndexName);
+		infra.EnrichPolicyName.Should().Be(Provider.EnrichPolicyName);
+		infra.PipelineName.Should().Be(Provider.PipelineName);
+		infra.EnrichPolicyBody.Should().Be(Provider.EnrichPolicyBody);
+		infra.PipelineBody.Should().Be(Provider.PipelineBody);
 	}
 }

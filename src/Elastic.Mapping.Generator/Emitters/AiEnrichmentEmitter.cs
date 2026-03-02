@@ -56,6 +56,7 @@ internal static class AiEnrichmentEmitter
 		EmitEnrichmentFields(sb, model, indent + "\t");
 		EmitRequiredSourceFields(sb, model, indent + "\t");
 		EmitBuildPrompt(sb, model, indent + "\t");
+		EmitEsqlPrompt(sb, model, indent + "\t");
 		EmitParseResponse(sb, model, indent + "\t");
 		EmitLookupInfrastructure(sb, model, lookupIndexName, policyName, pipelineName, fieldsHash, indent + "\t");
 
@@ -182,6 +183,87 @@ internal static class AiEnrichmentEmitter
 		sb.AppendLine();
 	}
 
+	private static void EmitEsqlPrompt(StringBuilder sb, AiEnrichmentModel model, string indent)
+	{
+		// Build the full JSON schema (all output fields, no per-field staleness)
+		var requiredJson = string.Join(",", model.Outputs.Select(o => $"\\\"" + o.FieldName + "\\\""));
+		var propsJsonParts = new List<string>();
+		foreach (var output in model.Outputs)
+		{
+			if (output.IsArray)
+			{
+				var s = $"\\\"{output.FieldName}\\\":{{\\\"type\\\":\\\"array\\\",\\\"items\\\":{{\\\"type\\\":\\\"string\\\"}}";
+				if (output.MinItems > 0) s += $",\\\"minItems\\\":{output.MinItems}";
+				if (output.MaxItems > 0) s += $",\\\"maxItems\\\":{output.MaxItems}";
+				s += $",\\\"description\\\":\\\"{EscapeForStringLiteral(output.Description)}\\\"}}";
+				propsJsonParts.Add(s);
+			}
+			else
+			{
+				propsJsonParts.Add($"\\\"{output.FieldName}\\\":{{\\\"type\\\":\\\"string\\\",\\\"description\\\":\\\"{EscapeForStringLiteral(output.Description)}\\\"}}");
+			}
+		}
+		var propsJson = string.Join(",", propsJsonParts);
+
+		var roleSection = !string.IsNullOrEmpty(model.Role)
+			? $"<role>\\n{EscapeForStringLiteral(model.Role!)}\\n</role>\\n\\n"
+			: "";
+
+		var schemaJson = $"{{\\\"type\\\":\\\"object\\\",\\\"required\\\":[{requiredJson}],\\\"additionalProperties\\\":false,\\\"properties\\\":{{{propsJson}}}}}";
+
+		var promptPrefix = $"{roleSection}<task>\\nReturn a single valid JSON object matching the schema. No markdown, no extra text, no trailing characters.\\n</task>\\n\\n<json-schema>\\n{schemaJson}\\n</json-schema>\\n\\n<rules>\\n- Extract ONLY from provided content. Never hallucinate.\\n- Be specific. Avoid generic phrases.\\n- Output exactly one JSON object.\\n</rules>\\n\\n<document>\\n";
+
+		// Build CONCAT expression parts and param values.
+		// Pattern: CONCAT(?p0, COALESCE(field0, ""), ?p1, COALESCE(field1, ""), ?p2)
+		// p0 = promptPrefix + "<field0_name>"
+		// p1 = "</field0_name>\n<field1_name>"
+		// pN = "</fieldN_name>\n</document>"
+		var concatArgs = new List<string>();
+		var paramEntries = new List<(string Name, string Value)>();
+		var paramIndex = 0;
+
+		for (var i = 0; i < model.Inputs.Length; i++)
+		{
+			var input = model.Inputs[i];
+			string staticText;
+
+			if (i == 0)
+				staticText = $"{promptPrefix}<{input.FieldName}>";
+			else
+				staticText = $"</{model.Inputs[i - 1].FieldName}>\\n<{input.FieldName}>";
+
+			var paramName = $"p{paramIndex++}";
+			paramEntries.Add((paramName, staticText));
+			concatArgs.Add($"?{paramName}");
+			concatArgs.Add($"COALESCE({input.FieldName}, \"\")");
+		}
+
+		// Final closing param
+		var closingParamName = $"p{paramIndex}";
+		var closingText = model.Inputs.Length > 0
+			? $"</{model.Inputs[model.Inputs.Length - 1].FieldName}>\\n</document>"
+			: "</document>";
+		paramEntries.Add((closingParamName, closingText));
+		concatArgs.Add($"?{closingParamName}");
+
+		var concatExpr = $"CONCAT({string.Join(", ", concatArgs)})";
+
+		// EsqlPromptExpression
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public string EsqlPromptExpression => \"{EscapeForStringLiteral(concatExpr)}\";");
+		sb.AppendLine();
+
+		// EsqlPromptParams
+		sb.AppendLine($"{indent}/// <inheritdoc />");
+		sb.AppendLine($"{indent}public global::System.Collections.Generic.IReadOnlyList<global::System.Collections.Generic.KeyValuePair<string, string>> EsqlPromptParams {{ get; }} =");
+		sb.AppendLine($"{indent}\tnew global::System.Collections.Generic.KeyValuePair<string, string>[]");
+		sb.AppendLine($"{indent}\t{{");
+		foreach (var (name, value) in paramEntries)
+			sb.AppendLine($"{indent}\t\tnew(\"{name}\", \"{value}\"),");
+		sb.AppendLine($"{indent}\t}};");
+		sb.AppendLine();
+	}
+
 	private static void EmitParseResponse(StringBuilder sb, AiEnrichmentModel model, string indent)
 	{
 		sb.AppendLine($"{indent}/// <inheritdoc />");
@@ -245,7 +327,9 @@ internal static class AiEnrichmentEmitter
 
 		// LookupIndexMapping
 		sb.AppendLine($"{indent}/// <inheritdoc />");
-		sb.AppendLine($"{indent}public string LookupIndexMapping => @\"{{");
+		sb.AppendLine($"{indent}public string LookupIndexMapping => _lookupIndexMapping;");
+		sb.AppendLine();
+		sb.AppendLine($"{indent}private static readonly string _lookupIndexMapping = @\"{{");
 		sb.AppendLine($"{indent}  \"\"mappings\"\": {{");
 		sb.AppendLine($"{indent}    \"\"properties\"\": {{");
 		sb.AppendLine($"{indent}      \"\"{model.MatchFieldName}\"\": {{ \"\"type\"\": \"\"keyword\"\" }},");
@@ -275,7 +359,7 @@ internal static class AiEnrichmentEmitter
 		sb.AppendLine($"{indent}public string EnrichPolicyName => \"{policyName}\";");
 		sb.AppendLine();
 
-		// EnrichPolicyBody
+		// Enrich fields (shared between default body and CreateInfrastructure)
 		var enrichFields = new List<string>();
 		foreach (var output in model.Outputs)
 		{
@@ -284,6 +368,7 @@ internal static class AiEnrichmentEmitter
 		}
 		var enrichFieldsJson = string.Join(", ", enrichFields);
 
+		// EnrichPolicyBody
 		sb.AppendLine($"{indent}/// <inheritdoc />");
 		sb.AppendLine($"{indent}public string EnrichPolicyBody => @\"{{");
 		sb.AppendLine($"{indent}  \"\"match\"\": {{");
@@ -299,7 +384,7 @@ internal static class AiEnrichmentEmitter
 		sb.AppendLine($"{indent}public string PipelineName => \"{pipelineName}\";");
 		sb.AppendLine();
 
-		// PipelineBody — per-field copy script, with fields_hash in description for conditional update
+		// Pipeline script (shared between default body and CreateInfrastructure)
 		var scriptParts = new List<string>();
 		foreach (var output in model.Outputs)
 		{
@@ -307,6 +392,7 @@ internal static class AiEnrichmentEmitter
 		}
 		var script = $"def e = ctx._enrich; {string.Join(" ", scriptParts)} ctx.remove('_enrich');";
 
+		// PipelineBody
 		sb.AppendLine($"{indent}/// <inheritdoc />");
 		sb.AppendLine($"{indent}public string PipelineBody => @\"{{");
 		sb.AppendLine($"{indent}  \"\"description\"\": \"\"AI enrichment pipeline [fields_hash:{fieldsHash}]\"\",");
@@ -329,6 +415,52 @@ internal static class AiEnrichmentEmitter
 		sb.AppendLine($"{indent}  ]");
 		sb.AppendLine($"{indent}}}\";");
 		sb.AppendLine();
+
+		// CreateInfrastructure — builds AiInfrastructure with a runtime-resolved lookup index name
+		EmitCreateInfrastructure(sb, model, fieldsHash, enrichFieldsJson, script, indent);
+	}
+
+	private static void EmitCreateInfrastructure(
+		StringBuilder sb, AiEnrichmentModel model,
+		string fieldsHash, string enrichFieldsJson, string script,
+		string indent)
+	{
+		// Build the enrich fields JSON for the generated code (using regular string escaping)
+		var enrichFieldsEscaped = new List<string>();
+		foreach (var output in model.Outputs)
+		{
+			enrichFieldsEscaped.Add($"\\\"" + output.FieldName + "\\\"");
+			enrichFieldsEscaped.Add($"\\\"" + output.PromptHashFieldName + "\\\"");
+		}
+		var enrichFieldsForInterpolation = string.Join(", ", enrichFieldsEscaped);
+
+		var scriptEscaped = script.Replace("\"", "\\\"");
+
+		sb.AppendLine($"{indent}/// <summary>");
+		sb.AppendLine($"{indent}/// Creates an <see cref=\"global::Elastic.Mapping.AiInfrastructure\"/> with all infrastructure");
+		sb.AppendLine($"{indent}/// names and bodies derived from the specified lookup index name.");
+		sb.AppendLine($"{indent}/// Use this when the index write target is resolved at runtime (e.g., via <c>CreateContext</c>).");
+		sb.AppendLine($"{indent}/// </summary>");
+		sb.AppendLine($"{indent}public global::Elastic.Mapping.AiInfrastructure CreateInfrastructure(string lookupIndexName)");
+		sb.AppendLine($"{indent}{{");
+		sb.AppendLine($"{indent}\tvar policyName = lookupIndexName + \"-ai-policy\";");
+		sb.AppendLine($"{indent}\tvar pipelineName = lookupIndexName + \"-ai-pipeline\";");
+		sb.AppendLine();
+		sb.AppendLine($"{indent}\tvar policyBody = \"{{\\\"match\\\":{{\\\"indices\\\":\\\"\" + lookupIndexName + \"\\\",\\\"match_field\\\":\\\"{model.MatchFieldName}\\\",\\\"enrich_fields\\\":[{enrichFieldsForInterpolation}]}}}}\";");
+		sb.AppendLine();
+		sb.AppendLine($"{indent}\tvar pipelineBody = \"{{\\\"description\\\":\\\"AI enrichment pipeline [fields_hash:{fieldsHash}]\\\",\\\"processors\\\":[{{\\\"enrich\\\":{{\\\"policy_name\\\":\\\"\" + policyName + \"\\\",\\\"field\\\":\\\"{model.MatchFieldName}\\\",\\\"target_field\\\":\\\"_enrich\\\",\\\"max_matches\\\":1,\\\"ignore_missing\\\":true}}}},{{\\\"script\\\":{{\\\"if\\\":\\\"ctx._enrich != null\\\",\\\"source\\\":\\\"{scriptEscaped}\\\"}}}}]}}\";");
+		sb.AppendLine();
+		sb.AppendLine($"{indent}\treturn new global::Elastic.Mapping.AiInfrastructure(");
+		sb.AppendLine($"{indent}\t\tlookupIndexName,");
+		sb.AppendLine($"{indent}\t\t_lookupIndexMapping,");
+		sb.AppendLine($"{indent}\t\t\"{model.MatchFieldName}\",");
+		sb.AppendLine($"{indent}\t\t\"{fieldsHash}\",");
+		sb.AppendLine($"{indent}\t\tpolicyName,");
+		sb.AppendLine($"{indent}\t\tpolicyBody,");
+		sb.AppendLine($"{indent}\t\tpipelineName,");
+		sb.AppendLine($"{indent}\t\tpipelineBody);");
+		sb.AppendLine($"{indent}}}");
+		sb.AppendLine();
 	}
 
 	// ── Helpers ──
@@ -339,7 +471,7 @@ internal static class AiEnrichmentEmitter
 			model.Outputs.SelectMany(o => new[] { o.FieldName, o.PromptHashFieldName }));
 		using var sha = SHA256.Create();
 		var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(fieldsString));
-		return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant().Substring(0, 8);
+		return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant().Substring(0, 16);
 	}
 
 	private static string EscapeForStringLiteral(string value) =>

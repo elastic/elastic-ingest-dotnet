@@ -9,7 +9,7 @@ using System.Text.Json.Serialization;
 namespace Elastic.Ingest.Elasticsearch.Enrichment;
 
 /// <summary>
-/// Configuration for post-indexing AI enrichment.
+/// Per-call configuration for <see cref="AiEnrichmentOrchestrator.EnrichAsync"/>.
 /// </summary>
 public sealed class AiEnrichmentOptions
 {
@@ -20,59 +20,69 @@ public sealed class AiEnrichmentOptions
 	public int MaxEnrichmentsPerRun { get; set; } = 100;
 
 	/// <summary>
-	/// Maximum concurrent LLM inference calls. Default: 4.
-	/// </summary>
-	public int MaxConcurrency { get; set; } = 4;
-
-	/// <summary>
 	/// Documents to fetch per <c>search_after</c> page when querying for candidates. Default: 50.
 	/// </summary>
 	public int QueryBatchSize { get; set; } = 50;
 
 	/// <summary>
-	/// Elasticsearch inference endpoint ID for completion calls.
+	/// Elasticsearch inference endpoint ID for ES|QL COMPLETION calls.
 	/// Default: <c>.gp-llm-v2-completion</c>.
 	/// </summary>
 	public string InferenceEndpointId { get; set; } = ".gp-llm-v2-completion";
+
+	/// <summary>
+	/// Documents per ES|QL COMPLETION query. Each query processes rows
+	/// sequentially on the server, so keep this small and rely on
+	/// <see cref="EsqlConcurrency"/> for parallelism. Default: 20.
+	/// </summary>
+	public int EsqlBatchSize { get; set; } = 20;
+
+	/// <summary>
+	/// Maximum concurrent ES|QL COMPLETION queries. Default: 8.
+	/// Combined with <see cref="EsqlBatchSize"/>=20, processes up to 160 docs in flight.
+	/// </summary>
+	public int EsqlConcurrency { get; set; } = 8;
 }
 
 /// <summary>
-/// Result of an AI enrichment run.
+/// Progress snapshot yielded during <see cref="AiEnrichmentOrchestrator.EnrichAsync"/>.
+/// Iterate with <c>await foreach</c>. The final item always has <see cref="Phase"/> = <see cref="AiEnrichmentPhase.Complete"/>.
 /// </summary>
-public sealed class AiEnrichmentResult
+public sealed class AiEnrichmentProgress
 {
-	/// <summary>Total documents identified as needing enrichment.</summary>
-	public int TotalCandidates { get; set; }
+	/// <summary>The current phase of the enrichment run.</summary>
+	public required AiEnrichmentPhase Phase { get; init; }
 
-	/// <summary>Documents successfully enriched in this run.</summary>
-	public int Enriched { get; set; }
+	/// <summary>Running total of documents enriched so far.</summary>
+	public int Enriched { get; init; }
 
-	/// <summary>Documents skipped (e.g. empty input fields).</summary>
-	public int Skipped { get; set; }
+	/// <summary>Running total of documents failed so far.</summary>
+	public int Failed { get; init; }
 
-	/// <summary>Documents that failed enrichment (LLM error, parse failure).</summary>
-	public int Failed { get; set; }
+	/// <summary>Running total of candidates discovered so far.</summary>
+	public int TotalCandidates { get; init; }
 
-	/// <summary>Whether the run hit <see cref="AiEnrichmentOptions.MaxEnrichmentsPerRun"/>.</summary>
-	public bool ReachedLimit { get; set; }
+	/// <summary>Optional message with phase-specific detail.</summary>
+	public string? Message { get; init; }
 }
 
 /// <summary>
-/// Outcome of enriching a single candidate document.
+/// Phases reported by <see cref="AiEnrichmentProgress"/>.
 /// </summary>
-internal sealed record EnrichmentOutcome(string Id, EnrichmentStatus Status, LookupUpdate? Update = null);
-
-/// <summary>
-/// Distinguishes successful enrichment from legitimate skips and actual failures.
-/// </summary>
-internal enum EnrichmentStatus
+public enum AiEnrichmentPhase
 {
-	/// <summary>LLM returned valid enrichment data.</summary>
-	Enriched,
-	/// <summary>Document was skipped (empty input, no stale fields, null prompt).</summary>
-	Skipped,
-	/// <summary>Enrichment failed (LLM error, parse failure, exception).</summary>
-	Failed
+	/// <summary>Querying for candidate documents.</summary>
+	Querying,
+	/// <summary>An ES|QL COMPLETION chunk completed (yielded per-chunk).</summary>
+	Enriching,
+	/// <summary>Refreshing the lookup index.</summary>
+	Refreshing,
+	/// <summary>Executing the enrich policy.</summary>
+	ExecutingPolicy,
+	/// <summary>Backfilling enriched data into the target index.</summary>
+	Backfilling,
+	/// <summary>Enrichment run completed.</summary>
+	Complete
 }
 
 /// <summary>
@@ -82,31 +92,9 @@ internal enum EnrichmentStatus
 internal sealed record LookupUpdate(string UrlHash, JsonElement Document);
 
 /// <summary>
-/// Result of querying for candidate documents needing enrichment.
+/// Result of a single ES|QL COMPLETION chunk.
 /// </summary>
-internal sealed record CandidateQueryResult(List<CandidateDocument> Candidates, object[]? SearchAfter);
-
-/// <summary>
-/// Result of processing a batch of candidate documents.
-/// </summary>
-internal sealed record BatchResult(int Enriched, int Skipped, int Failed);
-
-/// <summary>
-/// A candidate document identified as needing enrichment.
-/// </summary>
-/// <summary>
-/// A candidate document identified as needing enrichment.
-/// </summary>
-internal sealed record CandidateDocument(string Id, JsonElement Source);
-
-/// <summary>
-/// Request body for the <c>_inference/completion</c> API.
-/// </summary>
-internal sealed class CompletionRequest
-{
-	[JsonPropertyName("input")]
-	public string Input { get; init; } = null!;
-}
+internal sealed record EsqlChunkResult(List<LookupUpdate> Updates, int Failed, string? Error);
 
 /// <summary>
 /// Wraps a query body for <c>_search</c>, <c>_update_by_query</c>, etc.

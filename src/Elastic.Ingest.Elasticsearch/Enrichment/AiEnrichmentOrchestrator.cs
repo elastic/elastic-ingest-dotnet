@@ -6,9 +6,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Ingest.Elasticsearch.Helpers;
@@ -22,7 +24,7 @@ namespace Elastic.Ingest.Elasticsearch.Enrichment;
 /// Post-indexing AI enrichment orchestrator. Manages the full lifecycle:
 /// <list type="bullet">
 ///   <item><see cref="InitializeAsync"/> — create lookup index, enrich policy, and pipeline before indexing</item>
-///   <item><see cref="EnrichAsync"/> — query for unenriched/stale docs, call LLM per-field, update lookup, backfill</item>
+///   <item><see cref="EnrichAsync"/> — stream progress as ES|QL COMPLETION queries run, update lookup, backfill</item>
 ///   <item><see cref="CleanupOrphanedAsync"/>, <see cref="CleanupOlderThanAsync"/>, <see cref="PurgeAsync"/> — manage stale cache entries</item>
 /// </list>
 /// </summary>
@@ -30,24 +32,50 @@ public class AiEnrichmentOrchestrator : IDisposable
 {
 	private readonly ITransport _transport;
 	private readonly IAiEnrichmentProvider _provider;
-	private readonly AiEnrichmentOptions _options;
-	private readonly SemaphoreSlim _throttle;
+	private readonly AiInfrastructure _infra;
 
 	private readonly JsonElement _stalenessQuery;
-	private readonly string[] _sourceFields;
+
+	/// <summary>
+	/// Creates the orchestrator from an <see cref="ElasticsearchTypeContext"/> that carries an
+	/// <see cref="IAiEnrichmentProvider"/>. The lookup index name is derived from the context's
+	/// write target (<c>{writeTarget}-ai-cache</c>).
+	/// </summary>
+	public AiEnrichmentOrchestrator(ITransport transport, ElasticsearchTypeContext context)
+	{
+		var provider = context.AiEnrichmentProvider
+			?? throw new ArgumentException(
+				"Context does not carry an AiEnrichmentProvider. " +
+				"Ensure the document type has an [AiEnrichment<T>] attribute.", nameof(context));
+		var writeTarget = context.IndexStrategy?.WriteTarget
+			?? throw new InvalidOperationException("No write target configured on the context.");
+		var infra = provider.CreateInfrastructure($"{writeTarget}-ai-cache");
+
+		_transport = transport ?? throw new ArgumentNullException(nameof(transport));
+		_provider = provider;
+		_infra = infra;
+		_stalenessQuery = BuildStalenessQuery();
+	}
 
 	/// <inheritdoc cref="AiEnrichmentOrchestrator"/>
+	public AiEnrichmentOrchestrator(ITransport transport, IAiEnrichmentProvider provider)
+		: this(transport, provider, null) { }
+
+	/// <summary>
+	/// Creates the orchestrator with explicit infrastructure names.
+	/// Use <paramref name="infrastructure"/> when the lookup index name must be resolved at runtime
+	/// (e.g., derived from a <c>CreateContext</c>-resolved write target to namespace per environment).
+	/// When <c>null</c>, the provider's compile-time default names are used.
+	/// </summary>
 	public AiEnrichmentOrchestrator(
 		ITransport transport,
 		IAiEnrichmentProvider provider,
-		AiEnrichmentOptions? options = null)
+		AiInfrastructure? infrastructure)
 	{
 		_transport = transport ?? throw new ArgumentNullException(nameof(transport));
 		_provider = provider ?? throw new ArgumentNullException(nameof(provider));
-		_options = options ?? new AiEnrichmentOptions();
-		_throttle = new SemaphoreSlim(_options.MaxConcurrency);
+		_infra = infrastructure ?? AiInfrastructure.FromProvider(provider);
 		_stalenessQuery = BuildStalenessQuery();
-		_sourceFields = BuildSourceFields();
 	}
 
 	/// <summary>
@@ -63,53 +91,107 @@ public class AiEnrichmentOrchestrator : IDisposable
 	}
 
 	/// <summary>
-	/// Post-indexing: queries the target index for documents needing enrichment,
-	/// calls the LLM for stale/missing fields, stores results in the lookup index,
-	/// then re-executes the enrich policy and backfills.
+	/// Post-indexing: streams <see cref="AiEnrichmentProgress"/> as enrichment proceeds.
+	/// Queries the target index for documents needing enrichment, sends parallel ES|QL
+	/// COMPLETION queries (yielding per-chunk progress), stores results in the lookup
+	/// index, then re-executes the enrich policy and backfills.
+	/// <para>
+	/// Callers can control execution with <see cref="AiEnrichmentOptions.MaxEnrichmentsPerRun"/>
+	/// or a <see cref="CancellationToken"/> with a timeout for time-boxed CI jobs.
+	/// </para>
 	/// </summary>
-	public async Task<AiEnrichmentResult> EnrichAsync(string targetIndex, CancellationToken ct = default)
+	public async IAsyncEnumerable<AiEnrichmentProgress> EnrichAsync(
+		string targetIndex,
+		AiEnrichmentOptions? options = null,
+		[EnumeratorCancellation] CancellationToken ct = default)
 	{
+		var opts = options ?? new AiEnrichmentOptions();
 		var enriched = 0;
-		var skipped = 0;
 		var failed = 0;
 		var totalCandidates = 0;
-		object[]? searchAfter = null;
 
-		while (enriched + failed < _options.MaxEnrichmentsPerRun)
+		// 1. Lightweight search: just _id for all candidates
+		yield return Progress(AiEnrichmentPhase.Querying, enriched, failed, totalCandidates,
+			$"Querying up to {opts.MaxEnrichmentsPerRun} candidates...");
+
+		var candidateIds = await QueryCandidateIdsAsync(targetIndex, opts, ct).ConfigureAwait(false);
+		totalCandidates = candidateIds.Count;
+
+		if (totalCandidates == 0)
 		{
-			var remaining = _options.MaxEnrichmentsPerRun - enriched - failed;
-			var batchSize = Math.Min(_options.QueryBatchSize, remaining);
-
-			var result = await QueryCandidatesAsync(
-				targetIndex, batchSize, searchAfter, ct).ConfigureAwait(false);
-
-			if (result.Candidates.Count == 0)
-				break;
-
-			totalCandidates += result.Candidates.Count;
-			searchAfter = result.SearchAfter;
-
-			var batch = await ProcessBatchAsync(result.Candidates, ct).ConfigureAwait(false);
-
-			enriched += batch.Enriched;
-			skipped += batch.Skipped;
-			failed += batch.Failed;
+			yield return Progress(AiEnrichmentPhase.Complete, 0, 0, 0, "No candidates found");
+			yield break;
 		}
 
+		yield return Progress(AiEnrichmentPhase.Querying, enriched, failed, totalCandidates,
+			$"Found {totalCandidates} candidates, sending ES|QL COMPLETION queries...");
+
+		// 2. Chunk IDs and run parallel ES|QL COMPLETION queries, yielding per-chunk
+		var chunks = ChunkList(candidateIds, opts.EsqlBatchSize);
+		var allUpdates = new List<LookupUpdate>();
+
+		var activeTasks = new Dictionary<Task<EsqlChunkResult>, int>();
+		var nextChunk = 0;
+
+		while (nextChunk < chunks.Count && activeTasks.Count < opts.EsqlConcurrency)
+		{
+			var task = RunEsqlCompletionAsync(targetIndex, chunks[nextChunk], opts, ct);
+			activeTasks[task] = nextChunk;
+			nextChunk++;
+		}
+
+		var completedChunks = 0;
+		while (activeTasks.Count > 0)
+		{
+			ct.ThrowIfCancellationRequested();
+			var completed = await Task.WhenAny(activeTasks.Keys).ConfigureAwait(false);
+			activeTasks.Remove(completed);
+			completedChunks++;
+
+			var result = await completed.ConfigureAwait(false);
+			allUpdates.AddRange(result.Updates);
+			failed += result.Failed;
+			enriched = allUpdates.Count;
+
+			var chunkMsg = result.Error != null
+				? $"Chunk {completedChunks}/{chunks.Count}: {result.Error}"
+				: $"Chunk {completedChunks}/{chunks.Count}: +{result.Updates.Count} enriched, +{result.Failed} failed";
+
+			yield return Progress(AiEnrichmentPhase.Enriching, enriched, failed, totalCandidates, chunkMsg);
+
+			if (nextChunk < chunks.Count)
+			{
+				var task = RunEsqlCompletionAsync(targetIndex, chunks[nextChunk], opts, ct);
+				activeTasks[task] = nextChunk;
+				nextChunk++;
+			}
+		}
+
+		// 3. Bulk upsert to lookup index
+		var bulkErrors = 0;
+		if (allUpdates.Count > 0)
+			bulkErrors = await BulkUpsertLookupAsync(allUpdates, ct).ConfigureAwait(false);
+
+		enriched -= bulkErrors;
+		failed += bulkErrors;
+
+		// 4. Refresh + execute policy + backfill
 		if (enriched > 0)
 		{
+			yield return Progress(AiEnrichmentPhase.Refreshing, enriched, failed, totalCandidates,
+				$"Refreshing lookup index '{_infra.LookupIndexName}'...");
+			await RefreshAsync(_infra.LookupIndexName, ct).ConfigureAwait(false);
+
+			yield return Progress(AiEnrichmentPhase.ExecutingPolicy, enriched, failed, totalCandidates,
+				$"Executing enrich policy '{_infra.EnrichPolicyName}'...");
 			await ExecuteEnrichPolicyAsync(ct).ConfigureAwait(false);
+
+			yield return Progress(AiEnrichmentPhase.Backfilling, enriched, failed, totalCandidates,
+				$"Backfilling {enriched} enriched docs into '{targetIndex}'...");
 			await BackfillAsync(targetIndex, ct).ConfigureAwait(false);
 		}
 
-		return new AiEnrichmentResult
-		{
-			TotalCandidates = totalCandidates,
-			Enriched = enriched,
-			Skipped = skipped,
-			Failed = failed,
-			ReachedLimit = enriched + failed >= _options.MaxEnrichmentsPerRun
-		};
+		yield return Progress(AiEnrichmentPhase.Complete, enriched, failed, totalCandidates, null);
 	}
 
 	/// <summary>
@@ -121,7 +203,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 	{
 		var pit = new PointInTimeSearch<JsonElement>(_transport, new PointInTimeSearchOptions
 		{
-			Index = _provider.LookupIndexName,
+			Index = _infra.LookupIndexName,
 			Size = 1000,
 			Slices = 1
 		});
@@ -133,7 +215,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 				var urls = new List<string>();
 				foreach (var source in page.Documents)
 				{
-					if (source.TryGetProperty(_provider.MatchField, out var urlProp)
+					if (source.TryGetProperty(_infra.MatchField, out var urlProp)
 						&& urlProp.GetString() is { } url)
 						urls.Add(url);
 				}
@@ -145,7 +227,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 				var orphans = urls.Where(u => !existing.Contains(u)).ToList();
 
 				if (orphans.Count > 0)
-					await DeleteByMatchFieldAsync(_provider.LookupIndexName, orphans, ct).ConfigureAwait(false);
+					await DeleteByMatchFieldAsync(_infra.LookupIndexName, orphans, ct).ConfigureAwait(false);
 			}
 		}
 		finally
@@ -163,7 +245,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 		var query = $"{{\"range\":{{\"created_at\":{{\"lt\":\"now-{seconds}s\"}}}}}}";
 		var dbq = new DeleteByQuery(_transport, new DeleteByQueryOptions
 		{
-			Index = _provider.LookupIndexName,
+			Index = _infra.LookupIndexName,
 			QueryBody = query
 		});
 		await dbq.RunAsync(ct).ConfigureAwait(false);
@@ -176,83 +258,108 @@ public class AiEnrichmentOrchestrator : IDisposable
 	{
 		var dbq = new DeleteByQuery(_transport, new DeleteByQueryOptions
 		{
-			Index = _provider.LookupIndexName,
+			Index = _infra.LookupIndexName,
 			QueryBody = "{\"match_all\":{}}"
 		});
 		await dbq.RunAsync(ct).ConfigureAwait(false);
 	}
 
 	/// <inheritdoc />
-	public void Dispose()
-	{
-		_throttle.Dispose();
-		GC.SuppressFinalize(this);
-	}
+	public void Dispose() => GC.SuppressFinalize(this);
 
 	// ── Private: initialization ──
 
 	private async Task EnsureLookupIndexAsync(CancellationToken ct)
 	{
 		var exists = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.HEAD, _provider.LookupIndexName, cancellationToken: ct).ConfigureAwait(false);
+			HttpMethod.HEAD, _infra.LookupIndexName, cancellationToken: ct).ConfigureAwait(false);
 
 		if (exists.ApiCallDetails.HttpStatusCode == 200)
 			return;
 
 		var put = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.PUT, _provider.LookupIndexName,
-			PostData.String(_provider.LookupIndexMapping), cancellationToken: ct).ConfigureAwait(false);
+			HttpMethod.PUT, _infra.LookupIndexName,
+			PostData.String(_infra.LookupIndexMapping), cancellationToken: ct).ConfigureAwait(false);
 
 		if (put.ApiCallDetails.HttpStatusCode is not (200 or 201))
-			throw new Exception($"Failed to create lookup index '{_provider.LookupIndexName}': HTTP {put.ApiCallDetails.HttpStatusCode}");
+			throw new Exception($"Failed to create lookup index '{_infra.LookupIndexName}': HTTP {put.ApiCallDetails.HttpStatusCode}");
 	}
 
 	private async Task EnsureEnrichPolicyAsync(CancellationToken ct)
 	{
 		var exists = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.GET, $"_enrich/policy/{_provider.EnrichPolicyName}",
+			HttpMethod.GET, $"_enrich/policy/{_infra.EnrichPolicyName}",
 			cancellationToken: ct).ConfigureAwait(false);
 
 		if (exists.ApiCallDetails.HttpStatusCode == 200)
 		{
-			// Check if the existing policy matches the current fields hash by
-			// inspecting the enrich_fields — if they differ, delete and recreate.
-			var existingFieldsMatch = PolicyMatchesCurrentFields(exists);
-			if (existingFieldsMatch)
+			var matchResult = PolicyMatchesCurrentFields(exists);
+			if (matchResult == PolicyMatch.Matches)
 				return;
 
-			await _transport.RequestAsync<JsonResponse>(
-				HttpMethod.DELETE, $"_enrich/policy/{_provider.EnrichPolicyName}",
-				cancellationToken: ct).ConfigureAwait(false);
+			if (matchResult == PolicyMatch.SchemaChanged)
+			{
+				await _transport.RequestAsync<StringResponse>(
+					HttpMethod.DELETE, $"_ingest/pipeline/{_infra.PipelineName}",
+					cancellationToken: ct).ConfigureAwait(false);
+
+				var del = await _transport.RequestAsync<StringResponse>(
+					HttpMethod.DELETE, $"_enrich/policy/{_infra.EnrichPolicyName}",
+					cancellationToken: ct).ConfigureAwait(false);
+
+				if (del.ApiCallDetails.HttpStatusCode is not (200 or 404))
+					throw new Exception(
+						$"Failed to delete stale enrich policy '{_infra.EnrichPolicyName}': " +
+						$"HTTP {del.ApiCallDetails.HttpStatusCode} — {del.Body}");
+			}
 		}
 
-		var put = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.PUT, $"_enrich/policy/{_provider.EnrichPolicyName}",
-			PostData.String(_provider.EnrichPolicyBody), cancellationToken: ct).ConfigureAwait(false);
+		var put = await _transport.RequestAsync<StringResponse>(
+			HttpMethod.PUT, $"_enrich/policy/{_infra.EnrichPolicyName}",
+			PostData.String(_infra.EnrichPolicyBody), cancellationToken: ct).ConfigureAwait(false);
 
 		if (put.ApiCallDetails.HttpStatusCode is not (200 or 201))
-			throw new Exception($"Failed to create enrich policy '{_provider.EnrichPolicyName}': HTTP {put.ApiCallDetails.HttpStatusCode}");
+			throw new Exception(
+				$"Failed to create enrich policy '{_infra.EnrichPolicyName}': " +
+				$"HTTP {put.ApiCallDetails.HttpStatusCode} — {put.Body}");
 	}
 
-	private bool PolicyMatchesCurrentFields(JsonResponse response)
-	{
-		var policies = response.Get<JsonElement>("policies");
-		if (policies.ValueKind != JsonValueKind.Array)
-			return false;
+	private enum PolicyMatch { NotFound, Matches, SchemaChanged }
 
-		foreach (var policy in policies.EnumerateArray())
+	private PolicyMatch PolicyMatchesCurrentFields(JsonResponse response)
+	{
+		if (response.Body is not JsonObject root)
+			return PolicyMatch.NotFound;
+
+		var policies = root["policies"]?.AsArray();
+		if (policies == null || policies.Count == 0)
+			return PolicyMatch.NotFound;
+
+		foreach (var policy in policies)
 		{
-			if (!policy.TryGetProperty("config", out var config))
+			var match = policy?["config"]?["match"];
+			if (match == null)
 				continue;
-			if (!config.TryGetProperty("match", out var match))
-				continue;
-			if (!match.TryGetProperty("enrich_fields", out var fields))
+
+			var indicesNode = match["indices"];
+			if (indicesNode != null)
+			{
+				var indexName = indicesNode is JsonArray arr
+					? arr.Count == 1 ? arr[0]?.GetValue<string>() : null
+					: indicesNode.GetValue<string>();
+
+				if (indexName != _infra.LookupIndexName)
+					return PolicyMatch.SchemaChanged;
+			}
+
+			var fields = match["enrich_fields"]?.AsArray();
+			if (fields == null)
 				continue;
 
 			var existingFields = new HashSet<string>();
-			foreach (var f in fields.EnumerateArray())
+			foreach (var f in fields)
 			{
-				if (f.GetString() is { } s)
+				if (f?.GetValue<string>() is { } s)
 					existingFields.Add(s);
 			}
 
@@ -264,229 +371,221 @@ public class AiEnrichmentOrchestrator : IDisposable
 					expectedFields.Add(phField);
 			}
 
-			return existingFields.SetEquals(expectedFields);
+			return existingFields.SetEquals(expectedFields)
+				? PolicyMatch.Matches
+				: PolicyMatch.SchemaChanged;
 		}
 
-		return false;
+		return PolicyMatch.NotFound;
 	}
 
 	private async Task ExecuteEnrichPolicyAsync(CancellationToken ct)
 	{
 		var response = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.POST, $"_enrich/policy/{_provider.EnrichPolicyName}/_execute",
+			HttpMethod.POST, $"_enrich/policy/{_infra.EnrichPolicyName}/_execute",
 			PostData.Empty, cancellationToken: ct).ConfigureAwait(false);
 
 		if (response.ApiCallDetails.HttpStatusCode is not 200)
-			throw new Exception($"Failed to execute enrich policy '{_provider.EnrichPolicyName}': HTTP {response.ApiCallDetails.HttpStatusCode}");
+			throw new Exception($"Failed to execute enrich policy '{_infra.EnrichPolicyName}': HTTP {response.ApiCallDetails.HttpStatusCode}");
 	}
 
 	private async Task EnsurePipelineAsync(CancellationToken ct)
 	{
-		var expectedTag = $"[fields_hash:{_provider.FieldsHash}]";
+		var expectedTag = $"[fields_hash:{_infra.FieldsHash}]";
 
 		var existing = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.GET, $"_ingest/pipeline/{_provider.PipelineName}",
+			HttpMethod.GET, $"_ingest/pipeline/{_infra.PipelineName}",
 			cancellationToken: ct).ConfigureAwait(false);
 
-		if (existing.ApiCallDetails.HttpStatusCode == 200)
+		if (existing.ApiCallDetails.HttpStatusCode == 200 && existing.Body is JsonObject pipelineRoot)
 		{
-			var desc = existing.Get<string>($"{_provider.PipelineName}.description");
+			var desc = pipelineRoot[_infra.PipelineName]?["description"]?.GetValue<string>();
 			if (desc != null && desc.Contains(expectedTag))
 				return;
 		}
 
 		var response = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.PUT, $"_ingest/pipeline/{_provider.PipelineName}",
-			PostData.String(_provider.PipelineBody), cancellationToken: ct).ConfigureAwait(false);
+			HttpMethod.PUT, $"_ingest/pipeline/{_infra.PipelineName}",
+			PostData.String(_infra.PipelineBody), cancellationToken: ct).ConfigureAwait(false);
 
 		if (response.ApiCallDetails.HttpStatusCode is not 200)
-			throw new Exception($"Failed to create pipeline '{_provider.PipelineName}': HTTP {response.ApiCallDetails.HttpStatusCode}");
+			throw new Exception($"Failed to create pipeline '{_infra.PipelineName}': HTTP {response.ApiCallDetails.HttpStatusCode}");
 	}
 
-	// ── Private: candidate querying ──
+	// ── Private: candidate ID querying ──
 
-	private async Task<CandidateQueryResult> QueryCandidatesAsync(
-		string index, int size, object[]? searchAfter, CancellationToken ct)
+	private async Task<List<string>> QueryCandidateIdsAsync(
+		string index, AiEnrichmentOptions opts, CancellationToken ct)
 	{
-		var searchAfterClause = searchAfter != null
-			? $",\"search_after\":[{string.Join(",", searchAfter.Select(v => $"\"{v}\""))}]"
-			: "";
+		var ids = new List<string>();
+		object[]? searchAfter = null;
 
-		var sourceJson = string.Join(",", _sourceFields.Select(f => $"\"{f}\""));
+		while (ids.Count < opts.MaxEnrichmentsPerRun)
+		{
+			var remaining = opts.MaxEnrichmentsPerRun - ids.Count;
+			var batchSize = Math.Min(opts.QueryBatchSize, remaining);
+			var searchAfterClause = searchAfter != null
+				? $",\"search_after\":[{string.Join(",", searchAfter.Select(v => $"\"{v}\""))}]"
+				: "";
 
-		var query = $"{{\"size\":{size},\"query\":{_stalenessQuery.GetRawText()},\"_source\":[{sourceJson}],\"sort\":[{{\"_doc\":\"asc\"}}]{searchAfterClause}}}";
-		var response = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.POST, $"{index}/_search", PostData.String(query), cancellationToken: ct).ConfigureAwait(false);
+			var query = $"{{\"size\":{batchSize},\"query\":{_stalenessQuery.GetRawText()},\"_source\":false,\"sort\":[{{\"_doc\":\"asc\"}}]{searchAfterClause}}}";
+			var response = await _transport.RequestAsync<JsonResponse>(
+				HttpMethod.POST, $"{index}/_search", PostData.String(query), cancellationToken: ct).ConfigureAwait(false);
+
+			if (response.ApiCallDetails.HttpStatusCode is not 200)
+				break;
+
+			if (response.Body is not JsonObject root)
+				break;
+
+			var hitsArray = root["hits"]?["hits"]?.AsArray();
+			if (hitsArray == null || hitsArray.Count == 0)
+				break;
+
+			foreach (var hitNode in hitsArray)
+			{
+				var id = hitNode?["_id"]?.GetValue<string>();
+				if (id != null)
+					ids.Add(id);
+
+				var sortArray = hitNode?["sort"]?.AsArray();
+				if (sortArray != null)
+					searchAfter = sortArray.Select(e => (object)(e?.ToString() ?? "")).ToArray();
+			}
+
+			if (hitsArray.Count < batchSize)
+				break;
+		}
+
+		return ids;
+	}
+
+	// ── Private: ES|QL COMPLETION ──
+
+	private async Task<EsqlChunkResult> RunEsqlCompletionAsync(
+		string targetIndex, List<string> docIds, AiEnrichmentOptions opts, CancellationToken ct)
+	{
+		var updates = new List<LookupUpdate>();
+
+		var idPlaceholders = string.Join(", ", docIds.Select((_, i) => $"?id_{i}"));
+		var inferenceId = opts.InferenceEndpointId;
+		var esqlQuery = $"FROM {targetIndex} METADATA _id"
+			+ $" | WHERE _id IN ({idPlaceholders})"
+			+ $" | EVAL prompt = {_provider.EsqlPromptExpression}"
+			+ $" | COMPLETION result = prompt WITH {{\"inference_id\": \"{inferenceId}\"}}"
+			+ $" | KEEP _id, {_infra.MatchField}, result";
+
+		var sb = new StringBuilder();
+		sb.Append("{\"query\":\"").Append(JsonEncodedText.Encode(esqlQuery)).Append('"');
+
+		var hasParams = _provider.EsqlPromptParams.Count > 0 || docIds.Count > 0;
+		if (hasParams)
+		{
+			sb.Append(",\"params\":[");
+			var first = true;
+			foreach (var kv in _provider.EsqlPromptParams)
+			{
+				if (!first) sb.Append(',');
+				first = false;
+				sb.Append("{\"").Append(JsonEncodedText.Encode(kv.Key))
+				  .Append("\":\"").Append(JsonEncodedText.Encode(kv.Value)).Append("\"}");
+			}
+			for (var i = 0; i < docIds.Count; i++)
+			{
+				if (!first) sb.Append(',');
+				first = false;
+				sb.Append("{\"id_").Append(i).Append("\":\"")
+				  .Append(JsonEncodedText.Encode(docIds[i])).Append("\"}");
+			}
+			sb.Append(']');
+		}
+		sb.Append('}');
+		var body = sb.ToString();
+
+		var response = await _transport.RequestAsync<StringResponse>(
+			HttpMethod.POST, "_query", PostData.String(body), cancellationToken: ct).ConfigureAwait(false);
 
 		if (response.ApiCallDetails.HttpStatusCode is not 200)
-			return new CandidateQueryResult([], null);
-
-		return ParseCandidateResponse(response);
-	}
-
-	private static CandidateQueryResult ParseCandidateResponse(JsonResponse response)
-	{
-		var candidates = new List<CandidateDocument>();
-		object[]? lastSort = null;
-
-		var hits = response.Get<JsonElement>("hits.hits");
-		if (hits.ValueKind != JsonValueKind.Array)
-			return new CandidateQueryResult(candidates, null);
-
-		foreach (var hit in hits.EnumerateArray())
 		{
-			var id = hit.GetProperty("_id").GetString()!;
-			var source = hit.GetProperty("_source");
-			candidates.Add(new CandidateDocument(id, source.Clone()));
-
-			if (hit.TryGetProperty("sort", out var sort))
-				lastSort = sort.EnumerateArray().Select(e => (object)e.ToString()).ToArray();
+			var errorBody = Truncate(response.Body, 1000);
+			return new EsqlChunkResult(updates, docIds.Count,
+				$"ES|QL COMPLETION failed (HTTP {response.ApiCallDetails.HttpStatusCode}): {errorBody}");
 		}
 
-		return new CandidateQueryResult(candidates, lastSort);
-	}
+		JsonNode? rootNode;
+		try { rootNode = JsonNode.Parse(response.Body); }
+		catch { return new EsqlChunkResult(updates, docIds.Count, "ES|QL response was not valid JSON"); }
 
-	// ── Private: enrichment processing ──
+		if (rootNode is not JsonObject root)
+			return new EsqlChunkResult(updates, docIds.Count, "ES|QL response root was not a JSON object");
 
-	private async Task<BatchResult> ProcessBatchAsync(
-		List<CandidateDocument> candidates, CancellationToken ct)
-	{
-		var tasks = candidates.Select(c => EnrichOneAsync(c, ct)).ToList();
-		var pendingUpdates = new List<LookupUpdate>();
-		var batchSkipped = 0;
-		var batchFailed = 0;
+		var columns = root["columns"]?.AsArray();
+		var values = root["values"]?.AsArray();
+		if (columns == null || values == null)
+			return new EsqlChunkResult(updates, docIds.Count,
+				$"ES|QL response missing columns/values: {Truncate(response.Body, 500)}");
 
-#if NET9_0_OR_GREATER
-		await foreach (var completedTask in Task.WhenEach(tasks).WithCancellation(ct).ConfigureAwait(false))
+		int idCol = -1, matchCol = -1, resultCol = -1;
+		for (var i = 0; i < columns.Count; i++)
 		{
-			var outcome = await completedTask.ConfigureAwait(false);
-			switch (outcome.Status)
+			var name = columns[i]?["name"]?.GetValue<string>();
+			if (name == "_id") idCol = i;
+			else if (name == _infra.MatchField) matchCol = i;
+			else if (name == "result") resultCol = i;
+		}
+
+		if (idCol < 0 || matchCol < 0 || resultCol < 0)
+		{
+			var colNames = string.Join(", ", columns.Select(c => c?["name"]?.GetValue<string>() ?? "?"));
+			return new EsqlChunkResult(updates, docIds.Count,
+				$"Expected columns [_id, {_infra.MatchField}, result] but got [{colNames}]");
+		}
+
+		var chunkFailed = 0;
+		var allFields = (IReadOnlyCollection<string>)_provider.EnrichmentFields;
+
+		foreach (var row in values)
+		{
+			if (row is not JsonArray rowArr)
 			{
-				case EnrichmentStatus.Enriched:
-					pendingUpdates.Add(outcome.Update!);
-					break;
-				case EnrichmentStatus.Skipped:
-					batchSkipped++;
-					break;
-				case EnrichmentStatus.Failed:
-					batchFailed++;
-					break;
-			}
-		}
-#else
-		var pending = new HashSet<Task<EnrichmentOutcome>>(tasks);
-		while (pending.Count > 0)
-		{
-			ct.ThrowIfCancellationRequested();
-			var completed = await Task.WhenAny(pending).ConfigureAwait(false);
-			pending.Remove(completed);
-			var outcome = await completed.ConfigureAwait(false);
-			switch (outcome.Status)
-			{
-				case EnrichmentStatus.Enriched:
-					pendingUpdates.Add(outcome.Update!);
-					break;
-				case EnrichmentStatus.Skipped:
-					batchSkipped++;
-					break;
-				case EnrichmentStatus.Failed:
-					batchFailed++;
-					break;
-			}
-		}
-#endif
-
-		var bulkErrors = 0;
-		if (pendingUpdates.Count > 0)
-			bulkErrors = await BulkUpsertLookupAsync(pendingUpdates, ct).ConfigureAwait(false);
-
-		return new BatchResult(
-			Enriched: pendingUpdates.Count - bulkErrors,
-			Skipped: batchSkipped,
-			Failed: batchFailed + bulkErrors);
-	}
-
-	private async Task<EnrichmentOutcome> EnrichOneAsync(
-		CandidateDocument candidate, CancellationToken ct)
-	{
-		await _throttle.WaitAsync(ct).ConfigureAwait(false);
-		try
-		{
-			var staleFields = DetermineStaleFields(candidate.Source);
-			if (staleFields.Count == 0)
-				return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Skipped);
-
-			var prompt = _provider.BuildPrompt(candidate.Source, staleFields);
-			if (prompt == null)
-				return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Skipped);
-
-			var completion = await CallCompletionAsync(prompt, ct).ConfigureAwait(false);
-			if (completion == null)
-				return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Failed);
-
-			var partialDoc = _provider.ParseResponse(completion, staleFields);
-			if (partialDoc == null)
-				return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Failed);
-
-			string? matchValue = null;
-			if (candidate.Source.TryGetProperty(_provider.MatchField, out var mv))
-				matchValue = mv.GetString();
-
-			if (matchValue == null)
-				return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Skipped);
-
-			var urlHash = UrlHash(matchValue);
-			var lookupDoc = BuildLookupDocument(matchValue, partialDoc);
-			var update = new LookupUpdate(urlHash, lookupDoc);
-			return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Enriched, update);
-		}
-		catch (Exception ex) when (ex is not OperationCanceledException)
-		{
-			return new EnrichmentOutcome(candidate.Id, EnrichmentStatus.Failed);
-		}
-		finally
-		{
-			_throttle.Release();
-		}
-	}
-
-	private List<string> DetermineStaleFields(JsonElement source)
-	{
-		var stale = new List<string>();
-		foreach (var field in _provider.EnrichmentFields)
-		{
-			if (!_provider.FieldPromptHashFieldNames.TryGetValue(field, out var phField)
-				|| !_provider.FieldPromptHashes.TryGetValue(field, out var currentHash))
-			{
-				stale.Add(field);
+				chunkFailed++;
 				continue;
 			}
 
-			if (!source.TryGetProperty(phField, out var existingHash) || existingHash.ValueKind != JsonValueKind.String || existingHash.GetString() != currentHash)
-				stale.Add(field);
+			var matchValue = rowArr[matchCol]?.GetValue<string>();
+			var resultText = rowArr[resultCol]?.GetValue<string>();
+
+			if (matchValue == null || resultText == null)
+			{
+				chunkFailed++;
+				continue;
+			}
+
+			var partialDoc = _provider.ParseResponse(resultText, allFields);
+			if (partialDoc == null)
+			{
+				chunkFailed++;
+				continue;
+			}
+
+			var urlHash = UrlHash(matchValue);
+			var lookupDoc = BuildLookupDocument(matchValue, partialDoc);
+			updates.Add(new LookupUpdate(urlHash, lookupDoc));
 		}
-		return stale;
+
+		chunkFailed += docIds.Count - (updates.Count + chunkFailed);
+		return new EsqlChunkResult(updates, chunkFailed, null);
 	}
 
-	private async Task<string?> CallCompletionAsync(string prompt, CancellationToken ct)
+	private static List<List<T>> ChunkList<T>(List<T> source, int chunkSize)
 	{
-		var url = $"_inference/completion/{_options.InferenceEndpointId}";
-
-		var response = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.POST, url,
-			PostData.Serializable(new CompletionRequest { Input = prompt }),
-			cancellationToken: ct).ConfigureAwait(false);
-
-		if (response.ApiCallDetails.HttpStatusCode is not 200)
-			return null;
-
-		return ExtractCompletionText(response);
-	}
-
-	private static string? ExtractCompletionText(JsonResponse response)
-	{
-		var result = response.Get<string>("completion.0.result");
-		return string.IsNullOrEmpty(result) ? null : result;
+		var chunks = new List<List<T>>();
+		for (var i = 0; i < source.Count; i += chunkSize)
+		{
+			var size = Math.Min(chunkSize, source.Count - i);
+			chunks.Add(source.GetRange(i, size));
+		}
+		return chunks;
 	}
 
 	// ── Private: lookup index updates ──
@@ -498,7 +597,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 		var sb = new StringBuilder();
 		sb.Append('{');
-		sb.Append('"').Append(_provider.MatchField).Append("\":");
+		sb.Append('"').Append(_infra.MatchField).Append("\":");
 		sb.Append('"').Append(JsonEncodedText.Encode(matchValue)).Append("\",");
 		sb.Append("\"created_at\":\"").Append(now).Append('"');
 
@@ -538,7 +637,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 		var response = await _transport.RequestAsync<BulkResponse>(
 			HttpMethod.POST,
-			$"{_provider.LookupIndexName}/_bulk?filter_path=errors,items.*.status,items.*.error",
+			$"{_infra.LookupIndexName}/_bulk?filter_path=errors,items.*.status,items.*.error",
 			body, cancellationToken: ct).ConfigureAwait(false);
 
 		if (response.ApiCallDetails.HttpStatusCode is not 200)
@@ -553,11 +652,15 @@ public class AiEnrichmentOrchestrator : IDisposable
 		return errors;
 	}
 
+	private async Task RefreshAsync(string index, CancellationToken ct) =>
+		await _transport.RequestAsync<StringResponse>(
+			HttpMethod.POST, $"{index}/_refresh", PostData.Empty, cancellationToken: ct).ConfigureAwait(false);
+
 	// ── Private: backfill ──
 
 	private async Task BackfillAsync(string targetIndex, CancellationToken ct)
 	{
-		var url = $"/{targetIndex}/_update_by_query?wait_for_completion=false&pipeline={_provider.PipelineName}";
+		var url = $"/{targetIndex}/_update_by_query?wait_for_completion=false&pipeline={_infra.PipelineName}";
 
 		var response = await _transport.RequestAsync<JsonResponse>(
 			HttpMethod.POST, url,
@@ -590,9 +693,9 @@ public class AiEnrichmentOrchestrator : IDisposable
 		}));
 
 		var query = $"{{\"size\":{urls.Count}"
-			+ $",\"_source\":[\"{_provider.MatchField}\"]"
-			+ $",\"query\":{{\"terms\":{{\"{_provider.MatchField}\":[{terms}]}}}}"
-			+ $",\"collapse\":{{\"field\":\"{_provider.MatchField}\"}}"
+			+ $",\"_source\":[\"{_infra.MatchField}\"]"
+			+ $",\"query\":{{\"terms\":{{\"{_infra.MatchField}\":[{terms}]}}}}"
+			+ $",\"collapse\":{{\"field\":\"{_infra.MatchField}\"}}"
 			+ "}";
 
 		var response = await _transport.RequestAsync<JsonResponse>(
@@ -601,15 +704,17 @@ public class AiEnrichmentOrchestrator : IDisposable
 		if (response.ApiCallDetails.HttpStatusCode is not 200)
 			return existing;
 
-		var hits = response.Get<JsonElement>("hits.hits");
-		if (hits.ValueKind != JsonValueKind.Array)
+		if (response.Body is not JsonObject root)
 			return existing;
 
-		foreach (var hit in hits.EnumerateArray())
+		var hitsArray = root["hits"]?["hits"]?.AsArray();
+		if (hitsArray == null)
+			return existing;
+
+		foreach (var hitNode in hitsArray)
 		{
-			if (hit.TryGetProperty("_source", out var source)
-				&& source.TryGetProperty(_provider.MatchField, out var urlProp)
-				&& urlProp.GetString() is { } url)
+			var url = hitNode?["_source"]?[_infra.MatchField]?.GetValue<string>();
+			if (url != null)
 				existing.Add(url);
 		}
 
@@ -623,7 +728,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 			var encoded = JsonEncodedText.Encode(u);
 			return $"\"{encoded}\"";
 		}));
-		var deleteQuery = $"{{\"terms\":{{\"{_provider.MatchField}\":[{terms}]}}}}";
+		var deleteQuery = $"{{\"terms\":{{\"{_infra.MatchField}\":[{terms}]}}}}";
 		var dbq = new DeleteByQuery(_transport, new DeleteByQueryOptions
 		{
 			Index = index,
@@ -649,15 +754,29 @@ public class AiEnrichmentOrchestrator : IDisposable
 		return JsonDocument.Parse(json).RootElement.Clone();
 	}
 
-	private string[] BuildSourceFields()
-	{
-		var fields = new List<string>(_provider.RequiredSourceFields) { _provider.MatchField };
-		foreach (var phField in _provider.FieldPromptHashFieldNames.Values)
-			fields.Add(phField);
-		return fields.ToArray();
-	}
-
 	// ── Private: helpers ──
+
+	private static AiEnrichmentProgress Progress(
+		AiEnrichmentPhase phase, int enriched, int failed, int totalCandidates, string? message) =>
+		new()
+		{
+			Phase = phase,
+			Enriched = enriched,
+			Failed = failed,
+			TotalCandidates = totalCandidates,
+			Message = message
+		};
+
+	private static string Truncate(string? value, int maxLength)
+	{
+		if (value == null) return "(null)";
+		if (value.Length <= maxLength) return value;
+#if NET8_0_OR_GREATER
+		return string.Concat(value.AsSpan(0, maxLength), "…");
+#else
+		return value.Substring(0, maxLength) + "…";
+#endif
+	}
 
 	private static string UrlHash(string url)
 	{

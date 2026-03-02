@@ -27,6 +27,7 @@
     <Project Path="examples/Elastic.Ingest.OpenTelemetry.Example/Elastic.Ingest.OpenTelemetry.Example.csproj" />
     <Project Path="examples/ingest-aot-smoketest/ingest-aot-smoketest.csproj" />
     <Project Path="examples/playground/playground.csproj" />
+    <Project Path="examples/Elastic.Ingest.IncrementalSync.Example/Elastic.Ingest.IncrementalSync.Example.csproj" />
     <Project Path="examples/Elastic.Ingest.MultiChannel/Elastic.Ingest.MultiChannel.csproj" />
   </Folder>
   <Folder Name="/src/">

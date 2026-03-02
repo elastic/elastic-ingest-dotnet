@@ -277,6 +277,12 @@ public class DiOverrideConfig : IConfigureElasticsearch<DiTestDocument>
 	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
 		analysis.Analyzer("overridden_analyzer", a => a.Custom()
 			.Tokenizer(BuiltInAnalysis.Tokenizers.Whitespace));
+
+	/// <inheritdoc />
+	public MappingsBuilder<DiTestDocument> ConfigureMappings(MappingsBuilder<DiTestDocument> mappings) => mappings;
+
+	/// <inheritdoc />
+	public IReadOnlyDictionary<string, string>? IndexSettings { get; }
 }
 
 /// <summary>

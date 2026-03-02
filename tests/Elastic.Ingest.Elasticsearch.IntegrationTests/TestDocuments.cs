@@ -97,6 +97,9 @@ public class ServerMetricsEventV2Config : IConfigureElasticsearch<ServerMetricsE
 	public MappingsBuilder<ServerMetricsEventV2> ConfigureMappings(MappingsBuilder<ServerMetricsEventV2> mappings) =>
 		mappings
 			.AddRuntimeField("is_error", f => f.Boolean().Script("emit(doc['log_level.keyword'].size() > 0 && doc['log_level.keyword'].value == 'error')"));
+
+	/// <inheritdoc />
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
 }
 
 /// <summary>
@@ -195,6 +198,9 @@ public class ProductCatalogV2Config : IConfigureElasticsearch<ProductCatalogV2>
 		mappings
 			.AddRuntimeField("discount_eligible", f => f.Boolean()
 				.Script("emit(doc['price'].value < 25)"));
+
+	/// <inheritdoc />
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
 }
 
 /// <summary>
@@ -239,6 +245,9 @@ public class HashableArticleConfig : IConfigureElasticsearch<HashableArticle>
 
 	public MappingsBuilder<HashableArticle> ConfigureMappings(MappingsBuilder<HashableArticle> mappings) =>
 		mappings.Title(f => f.MultiField("keyword", mf => mf.Keyword().IgnoreAbove(256)));
+
+	/// <inheritdoc />
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
 }
 
 /// <summary>
@@ -320,4 +329,7 @@ public class SemanticArticleConfig : IConfigureElasticsearch<SemanticArticle>
 
 	public MappingsBuilder<SemanticArticle> ConfigureMappings(MappingsBuilder<SemanticArticle> mappings) =>
 		mappings.Title(f => f.MultiField("keyword", mf => mf.Keyword().IgnoreAbove(256)));
+
+	/// <inheritdoc />
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
 }

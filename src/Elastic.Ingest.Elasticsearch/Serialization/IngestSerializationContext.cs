@@ -18,7 +18,6 @@ namespace Elastic.Ingest.Elasticsearch.Serialization;
 [JsonSerializable(typeof(BulkResponse))]
 [JsonSerializable(typeof(BulkResponseItem))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
-[JsonSerializable(typeof(CompletionRequest))]
 [JsonSerializable(typeof(QueryRequest))]
 [JsonSerializable(typeof(JsonElement))]
 internal sealed partial class IngestSerializationContext : JsonSerializerContext

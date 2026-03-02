@@ -21,10 +21,12 @@ public class IngestChannelOptions<TEvent> : IngestChannelOptionsBase<TEvent>
 	/// Zero-config: auto-infers strategy from the <see cref="ElasticsearchTypeContext"/>.
 	/// When <paramref name="batchTimestamp"/> is provided and <c>IndexPatternUseBatchDate</c> is true,
 	/// the channel uses that timestamp instead of capturing <c>DateTimeOffset.UtcNow</c> at creation time.
+	/// When <paramref name="indexNameOverride"/> is provided, it is used verbatim as the write target
+	/// (useful for reusing an existing index behind a write alias).
 	/// </summary>
 	public IngestChannelOptions(ITransport transport, ElasticsearchTypeContext typeContext,
-		DateTimeOffset? batchTimestamp = null)
-		: this(transport, IngestStrategies.ForContext<TEvent>(typeContext, batchTimestamp), typeContext) { }
+		DateTimeOffset? batchTimestamp = null, string? indexNameOverride = null)
+		: this(transport, IngestStrategies.ForContext<TEvent>(typeContext, batchTimestamp, indexNameOverride), typeContext) { }
 
 	/// <summary>
 	/// Explicit strategy with optional mapping context.

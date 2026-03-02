@@ -28,8 +28,11 @@ internal static class IngestChannelStatics
 	public static readonly byte[] ScriptedHashParamComma = ", "u8.ToArray();
 	public static readonly byte[] ScriptedHashKeySeparator = ": "u8.ToArray();
 
-	public static readonly byte[] ScriptedHashAfterIfCheckOp =
-		" } else { ctx._source = params.doc } \", \"params\": { \"hash\": "u8.ToArray();
+	public static readonly byte[] ScriptedHashElseBranchStart =
+		" } else { ctx._source = params.doc; ctx._source."u8.ToArray();
+
+	public static readonly byte[] ScriptedHashElseBranchEnd =
+		" = params.hash } \", \"params\": { \"hash\": "u8.ToArray();
 
 	public static readonly byte[] ScriptHashDocAsParameter =
 		", \"doc\":"u8.ToArray();
