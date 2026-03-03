@@ -100,13 +100,13 @@ public class IncrementalSyncOrchestratorTests
 	}
 
 	[Test]
-	public async Task StartSelectsReindexWhenSecondaryExistsDespiteHashMismatch()
+	public async Task StartSelectsMultiplexWhenSecondaryRolledOver()
 	{
 		using var orchestrator = CreateOrchestrator(Transport);
 
 		var context = await orchestrator.StartAsync(BootstrapMethod.Silent);
-		context.Strategy.Should().Be(IngestSyncStrategy.Reindex);
-		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Reindex);
+		context.Strategy.Should().Be(IngestSyncStrategy.Multiplex);
+		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Multiplex);
 	}
 
 	[Test]
@@ -182,12 +182,12 @@ public class IncrementalSyncOrchestratorTests
 	}
 
 	[Test]
-	public async Task ReindexWritesToPrimaryOnly()
+	public async Task MultiplexWritesToBothChannels()
 	{
 		using var orchestrator = CreateOrchestrator(Transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
-		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Reindex);
+		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Multiplex);
 
 		var result = orchestrator.TryWrite(new TestDocument { Timestamp = DateTimeOffset.UtcNow });
 		result.Should().BeTrue();
@@ -322,12 +322,12 @@ public class IncrementalSyncOrchestratorTests
 	}
 
 	[Test]
-	public async Task CompleteAsyncReindexDrainsPrimaryAndReindexes()
+	public async Task CompleteAsyncMultiplexDrainsBothChannels()
 	{
 		using var orchestrator = CreateSimpleOrchestrator(Transport);
 
 		await orchestrator.StartAsync(BootstrapMethod.Silent);
-		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Reindex);
+		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Multiplex);
 
 		orchestrator.TryWrite(new TestDocument { Timestamp = DateTimeOffset.UtcNow });
 
