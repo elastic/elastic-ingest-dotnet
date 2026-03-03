@@ -219,6 +219,7 @@ public sealed class TextMultiFieldBuilder
 	private readonly MultiFieldBuilder _parent;
 	private string? _analyzer;
 	private string? _searchAnalyzer;
+	private string? _termVector;
 
 	internal TextMultiFieldBuilder(MultiFieldBuilder parent) => _parent = parent;
 
@@ -236,12 +237,20 @@ public sealed class TextMultiFieldBuilder
 		return this;
 	}
 
+	/// <summary>Sets the term_vector option (e.g. "with_positions_offsets").</summary>
+	public TextMultiFieldBuilder TermVector(string termVector)
+	{
+		_termVector = termVector;
+		return this;
+	}
+
 	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
 	public static implicit operator MultiFieldBuilder(TextMultiFieldBuilder builder)
 	{
 		builder._parent.SetDefinition(new TextFieldDefinition(
 			builder._analyzer,
-			builder._searchAnalyzer
+			builder._searchAnalyzer,
+			TermVector: builder._termVector
 		));
 		return builder._parent;
 	}
@@ -254,6 +263,7 @@ public sealed class SearchAsYouTypeMultiFieldBuilder
 	private string? _analyzer;
 	private string? _searchAnalyzer;
 	private int? _maxShingleSize;
+	private string? _indexOptions;
 
 	internal SearchAsYouTypeMultiFieldBuilder(MultiFieldBuilder parent) => _parent = parent;
 
@@ -278,13 +288,21 @@ public sealed class SearchAsYouTypeMultiFieldBuilder
 		return this;
 	}
 
+	/// <summary>Sets the index_options (e.g. "offsets" for highlighting).</summary>
+	public SearchAsYouTypeMultiFieldBuilder IndexOptions(string indexOptions)
+	{
+		_indexOptions = indexOptions;
+		return this;
+	}
+
 	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
 	public static implicit operator MultiFieldBuilder(SearchAsYouTypeMultiFieldBuilder builder)
 	{
 		builder._parent.SetDefinition(new SearchAsYouTypeFieldDefinition(
 			builder._analyzer,
 			builder._searchAnalyzer,
-			builder._maxShingleSize
+			builder._maxShingleSize,
+			builder._indexOptions
 		));
 		return builder._parent;
 	}

@@ -478,3 +478,67 @@ public class SnakeCaseDocument
 	public int PageCount { get; set; }
 	public DateTime CreatedAt { get; set; }
 }
+
+// ============================================================================
+// MAPPING BUG-FIX CONTEXT: covers Bugs 1-3 and Gaps 1-2
+// ============================================================================
+
+/// <summary>Sub-type whose attribute-declared mappings should be emitted within [Object] parents.</summary>
+public class IndexedProduct
+{
+	[Keyword(Normalizer = "keyword_normalizer")]
+	public string Id { get; set; } = string.Empty;
+
+	[Keyword(Normalizer = "keyword_normalizer")]
+	public string Repository { get; set; } = string.Empty;
+
+	[Text]
+	public string DisplayName { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Document exercising Bug 1 (string[] with [Text]), Bug 2 ([Object] sub-type),
+/// and Bug 3 (attribute-only fields with no builder call).
+/// </summary>
+public class MappingBugDocument : IConfigureElasticsearch<MappingBugDocument>
+{
+	[Id]
+	[Keyword]
+	public string Url { get; set; } = string.Empty;
+
+	[Object]
+	public IndexedProduct? Product { get; set; }
+
+	[Text]
+	[JsonPropertyName("ai_questions")]
+	public string[]? AiQuestions { get; set; }
+
+	[Text]
+	[JsonPropertyName("ai_short_summary")]
+	public string? AiShortSummary { get; set; }
+
+	[Keyword]
+	[JsonPropertyName("ai_search_query")]
+	public string? AiSearchQuery { get; set; }
+
+	[Text]
+	[JsonPropertyName("ai_rag_summary")]
+	public string? AiRagSummary { get; set; }
+
+	public string[]? Tags { get; set; }
+
+	public List<int>? Scores { get; set; }
+
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) => analysis;
+
+	public MappingsBuilder<MappingBugDocument> ConfigureMappings(MappingsBuilder<MappingBugDocument> mappings) =>
+		mappings
+			.AiRagSummary(f => f.Analyzer("standard"))
+			.AddField("ai_questions.semantic", f => f.SemanticText().InferenceId("my-elser"));
+
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
+}
+
+[ElasticsearchMappingContext]
+[Index<MappingBugDocument>(Name = "mapping-bug-test")]
+public static partial class MappingBugMappingContext;

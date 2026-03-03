@@ -67,30 +67,8 @@ internal static class SharedEmitterHelpers
 			var prop = props[i];
 			var isLast = i == props.Count - 1;
 
-			if (prop.FieldType == FieldTypes.Text)
-			{
-				sb.Append($"\t\t\"{prop.FieldName}\": {{ \"type\": \"text\"");
-
-				foreach (var opt in prop.Options)
-				{
-					var jsonKey = ToSnakeCase(opt.Key);
-					sb.Append($", \"{jsonKey}\": {opt.Value}");
-				}
-
-				sb.Append(", \"fields\": { \"keyword\": { \"type\": \"keyword\", \"ignore_above\": 256 } } }");
-			}
-			else
-			{
-				sb.Append($"\t\t\"{prop.FieldName}\": {{ \"type\": \"{prop.FieldType}\"");
-
-				foreach (var opt in prop.Options)
-				{
-					var jsonKey = ToSnakeCase(opt.Key);
-					sb.Append($", \"{jsonKey}\": {opt.Value}");
-				}
-
-				sb.Append(" }");
-			}
+			sb.Append("\t\t");
+			EmitFieldJson(sb, prop);
 
 			sb.AppendLine(isLast ? "" : ",");
 		}
@@ -99,6 +77,46 @@ internal static class SharedEmitterHelpers
 		sb.Append("}");
 
 		return sb.ToString();
+	}
+
+	private static void EmitFieldJson(StringBuilder sb, PropertyMappingModel prop)
+	{
+		if (prop.FieldType == FieldTypes.Text)
+		{
+			sb.Append($"\"{prop.FieldName}\": {{ \"type\": \"text\"");
+			EmitOptions(sb, prop);
+			sb.Append(", \"fields\": { \"keyword\": { \"type\": \"keyword\", \"ignore_above\": 256 } } }");
+		}
+		else if (prop.NestedType != null && prop.NestedType.Properties.Any(p => !p.IsIgnored))
+		{
+			sb.Append($"\"{prop.FieldName}\": {{ \"type\": \"{prop.FieldType}\"");
+			EmitOptions(sb, prop);
+			sb.Append(", \"properties\": { ");
+
+			var nestedProps = prop.NestedType.Properties.Where(p => !p.IsIgnored).ToList();
+			for (var j = 0; j < nestedProps.Count; j++)
+			{
+				EmitFieldJson(sb, nestedProps[j]);
+				if (j < nestedProps.Count - 1) sb.Append(", ");
+			}
+
+			sb.Append(" } }");
+		}
+		else
+		{
+			sb.Append($"\"{prop.FieldName}\": {{ \"type\": \"{prop.FieldType}\"");
+			EmitOptions(sb, prop);
+			sb.Append(" }");
+		}
+	}
+
+	private static void EmitOptions(StringBuilder sb, PropertyMappingModel prop)
+	{
+		foreach (var opt in prop.Options)
+		{
+			var jsonKey = ToSnakeCase(opt.Key);
+			sb.Append($", \"{jsonKey}\": {opt.Value}");
+		}
 	}
 
 	public static string GenerateIndexJson(string settingsJson, string mappingsJson)

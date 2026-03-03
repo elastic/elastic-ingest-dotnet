@@ -16,6 +16,7 @@ public sealed class TextFieldBuilder
 	private bool? _norms;
 	private bool? _index;
 	private string? _copyTo;
+	private string? _termVector;
 	private readonly List<(string Name, IFieldDefinition Definition)> _multiFields = [];
 
 	internal TextFieldBuilder(FieldBuilder parent) => _parent = parent;
@@ -55,6 +56,13 @@ public sealed class TextFieldBuilder
 		return this;
 	}
 
+	/// <summary>Sets the term_vector option (e.g. "with_positions_offsets").</summary>
+	public TextFieldBuilder TermVector(string termVector)
+	{
+		_termVector = termVector;
+		return this;
+	}
+
 	/// <summary>Adds a multi-field.</summary>
 	public TextFieldBuilder MultiField(string name, Func<MultiFieldBuilder, MultiFieldBuilder> configure)
 	{
@@ -73,6 +81,7 @@ public sealed class TextFieldBuilder
 			builder._norms,
 			builder._index,
 			builder._copyTo,
+			builder._termVector,
 			builder._multiFields.Count > 0
 				? builder._multiFields.ToDictionary(x => x.Name, x => x.Definition)
 				: null
@@ -693,6 +702,7 @@ public sealed class SearchAsYouTypeFieldBuilder
 	private string? _analyzer;
 	private string? _searchAnalyzer;
 	private int? _maxShingleSize;
+	private string? _indexOptions;
 
 	internal SearchAsYouTypeFieldBuilder(FieldBuilder parent) => _parent = parent;
 
@@ -717,13 +727,21 @@ public sealed class SearchAsYouTypeFieldBuilder
 		return this;
 	}
 
+	/// <summary>Sets the index_options (e.g. "offsets" for highlighting).</summary>
+	public SearchAsYouTypeFieldBuilder IndexOptions(string indexOptions)
+	{
+		_indexOptions = indexOptions;
+		return this;
+	}
+
 	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
 	public static implicit operator FieldBuilder(SearchAsYouTypeFieldBuilder builder)
 	{
 		builder._parent.SetDefinition(new SearchAsYouTypeFieldDefinition(
 			builder._analyzer,
 			builder._searchAnalyzer,
-			builder._maxShingleSize
+			builder._maxShingleSize,
+			builder._indexOptions
 		));
 		return builder._parent;
 	}

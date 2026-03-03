@@ -322,4 +322,80 @@ public class MappingsBuilderTests
 		fields.GetProperty("keyword").GetProperty("type").GetString().Should().Be("keyword");
 		fields.GetProperty("completion").GetProperty("type").GetString().Should().Be("search_as_you_type");
 	}
+
+	[Test]
+	public void TextFieldBuilder_TermVector_AppearsInJson()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("stripped_body", f => f.Text()
+				.Analyzer("standard")
+				.TermVector("with_positions_offsets"));
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var field = doc.RootElement.GetProperty("properties").GetProperty("stripped_body");
+		field.GetProperty("type").GetString().Should().Be("text");
+		field.GetProperty("term_vector").GetString().Should().Be("with_positions_offsets");
+	}
+
+	[Test]
+	public void TextMultiFieldBuilder_TermVector_AppearsInJson()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.Message(f => f
+				.Analyzer("standard")
+				.MultiField("highlight", mf => mf.Text()
+					.Analyzer("standard")
+					.TermVector("with_positions_offsets")));
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var highlight = doc.RootElement.GetProperty("properties").GetProperty("message")
+			.GetProperty("fields").GetProperty("highlight");
+		highlight.GetProperty("term_vector").GetString().Should().Be("with_positions_offsets");
+	}
+
+	[Test]
+	public void SearchAsYouTypeFieldBuilder_IndexOptions_AppearsInJson()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("search_title", f => f.SearchAsYouType()
+				.Analyzer("standard")
+				.IndexOptions("offsets"));
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var field = doc.RootElement.GetProperty("properties").GetProperty("search_title");
+		field.GetProperty("type").GetString().Should().Be("search_as_you_type");
+		field.GetProperty("index_options").GetString().Should().Be("offsets");
+	}
+
+	[Test]
+	public void SearchAsYouTypeMultiFieldBuilder_IndexOptions_AppearsInJson()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.Message(f => f
+				.Analyzer("standard")
+				.MultiField("completion", mf => mf.SearchAsYouType()
+					.Analyzer("standard")
+					.IndexOptions("offsets")));
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var completion = doc.RootElement.GetProperty("properties").GetProperty("message")
+			.GetProperty("fields").GetProperty("completion");
+		completion.GetProperty("index_options").GetString().Should().Be("offsets");
+	}
 }

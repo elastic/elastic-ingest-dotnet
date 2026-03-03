@@ -23,6 +23,7 @@ public sealed record TextFieldDefinition(
 	bool? Norms = null,
 	bool? Index = null,
 	string? CopyTo = null,
+	string? TermVector = null,
 	IReadOnlyDictionary<string, IFieldDefinition>? MultiFields = null
 ) : IFieldDefinition
 {
@@ -46,6 +47,9 @@ public sealed record TextFieldDefinition(
 
 		if (CopyTo != null)
 			obj["copy_to"] = CopyTo;
+
+		if (TermVector != null)
+			obj["term_vector"] = TermVector;
 
 		if (MultiFields is { Count: > 0 })
 		{
@@ -473,7 +477,8 @@ public sealed record SemanticTextFieldDefinition(
 public sealed record SearchAsYouTypeFieldDefinition(
 	string? Analyzer = null,
 	string? SearchAnalyzer = null,
-	int? MaxShingleSize = null
+	int? MaxShingleSize = null,
+	string? IndexOptions = null
 ) : IFieldDefinition
 {
 	public string Type => "search_as_you_type";
@@ -490,6 +495,9 @@ public sealed record SearchAsYouTypeFieldDefinition(
 
 		if (MaxShingleSize.HasValue)
 			obj["max_shingle_size"] = MaxShingleSize.Value;
+
+		if (IndexOptions != null)
+			obj["index_options"] = IndexOptions;
 
 		return obj;
 	}

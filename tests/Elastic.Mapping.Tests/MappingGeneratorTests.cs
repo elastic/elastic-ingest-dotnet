@@ -210,4 +210,72 @@ public class MappingGeneratorTests
 		foreach (var (_, metadata) in TestMappingContext.All)
 			metadata.PropertyToField.Should().NotBeEmpty();
 	}
+
+	[Test]
+	public void Bug1_TextOnStringArray_EmitsTextNotObject()
+	{
+		var json = MappingBugMappingContext.MappingBugDocument.GetMappingJson();
+		using var doc = System.Text.Json.JsonDocument.Parse(json);
+		var props = doc.RootElement.GetProperty("properties");
+
+		var aiQuestions = props.GetProperty("ai_questions");
+		aiQuestions.GetProperty("type").GetString().Should().Be("text");
+		aiQuestions.GetProperty("fields").GetProperty("keyword").GetProperty("type").GetString().Should().Be("keyword");
+
+		var semantic = aiQuestions.GetProperty("fields").GetProperty("semantic");
+		semantic.GetProperty("type").GetString().Should().Be("semantic_text");
+	}
+
+	[Test]
+	public void Bug2_ObjectSubTypeAttributes_EmitNestedProperties()
+	{
+		var json = MappingBugMappingContext.MappingBugDocument.GetMappingJson();
+		using var doc = System.Text.Json.JsonDocument.Parse(json);
+		var product = doc.RootElement.GetProperty("properties").GetProperty("product");
+
+		product.GetProperty("type").GetString().Should().Be("object");
+		var subProps = product.GetProperty("properties");
+		subProps.GetProperty("id").GetProperty("type").GetString().Should().Be("keyword");
+		subProps.GetProperty("id").GetProperty("normalizer").GetString().Should().Be("keyword_normalizer");
+		subProps.GetProperty("repository").GetProperty("normalizer").GetString().Should().Be("keyword_normalizer");
+		subProps.GetProperty("displayName").GetProperty("type").GetString().Should().Be("text");
+	}
+
+	[Test]
+	public void Bug3_AttributeOnlyFields_EmittedWithoutBuilderCall()
+	{
+		var json = MappingBugMappingContext.MappingBugDocument.GetMappingJson();
+		using var doc = System.Text.Json.JsonDocument.Parse(json);
+		var props = doc.RootElement.GetProperty("properties");
+
+		props.GetProperty("ai_short_summary").GetProperty("type").GetString().Should().Be("text");
+		props.GetProperty("ai_search_query").GetProperty("type").GetString().Should().Be("keyword");
+	}
+
+	[Test]
+	public void StringArray_WithoutAttribute_InfersTextNotObject()
+	{
+		var json = MappingBugMappingContext.MappingBugDocument.GetMappingJson();
+		using var doc = System.Text.Json.JsonDocument.Parse(json);
+		var props = doc.RootElement.GetProperty("properties");
+
+		props.GetProperty("tags").GetProperty("type").GetString().Should().Be("text");
+	}
+
+	[Test]
+	public void ListOfInt_WithoutAttribute_InfersIntegerNotObject()
+	{
+		var json = MappingBugMappingContext.MappingBugDocument.GetMappingJson();
+		using var doc = System.Text.Json.JsonDocument.Parse(json);
+		var props = doc.RootElement.GetProperty("properties");
+
+		props.GetProperty("scores").GetProperty("type").GetString().Should().Be("integer");
+	}
+
+	[Test]
+	public void InterfaceProperty_IndexSettings_NotInMapping()
+	{
+		var json = MappingBugMappingContext.MappingBugDocument.GetMappingJson();
+		json.Should().NotContain("indexSettings");
+	}
 }
