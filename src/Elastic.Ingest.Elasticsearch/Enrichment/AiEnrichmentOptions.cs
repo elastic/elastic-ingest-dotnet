@@ -53,10 +53,18 @@ public sealed class AiEnrichmentOptions
 
 	/// <summary>
 	/// Maximum number of retries for a failed ES|QL COMPLETION call (e.g. HTTP 408/429/5xx).
-	/// Default: 2. The delay between retries equals <see cref="CompletionTimeout"/>
-	/// capped at 1 minute.
+	/// Default: 2. Each retry halves the batch size (down to <see cref="MinCompletionBatchSize"/>)
+	/// and fans out the sub-chunks concurrently. The delay between retries equals
+	/// <see cref="CompletionTimeout"/> capped at 1 minute.
 	/// </summary>
 	public int CompletionMaxRetries { get; set; } = 2;
+
+	/// <summary>
+	/// Floor for batch size reduction during timeout retries. When a COMPLETION query
+	/// times out, the batch is halved and retried; this sets the minimum chunk size.
+	/// Must be at least 1. Default: 5.
+	/// </summary>
+	public int MinCompletionBatchSize { get; set; } = 5;
 }
 
 /// <summary>
@@ -110,6 +118,11 @@ internal sealed record LookupUpdate(string UrlHash, JsonElement Document);
 /// Result of a single ES|QL COMPLETION chunk.
 /// </summary>
 internal sealed record EsqlChunkResult(List<LookupUpdate> Updates, int Failed, string? Error, bool IsRetryable = false);
+
+/// <summary>
+/// Tracks a chunk of doc IDs and its current retry depth for binary-split retries.
+/// </summary>
+internal sealed record ChunkMeta(List<string> DocIds, int Depth);
 
 /// <summary>
 /// Wraps a query body for <c>_search</c>, <c>_update_by_query</c>, etc.
