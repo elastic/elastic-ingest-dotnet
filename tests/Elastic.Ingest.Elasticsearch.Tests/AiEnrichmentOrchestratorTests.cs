@@ -56,6 +56,7 @@ public class AiEnrichmentOrchestratorTests
 		opts.EsqlConcurrency.Should().Be(8);
 		opts.CompletionTimeout.Should().Be(TimeSpan.FromMinutes(5));
 		opts.CompletionMaxRetries.Should().Be(2);
+		opts.MinCompletionBatchSize.Should().Be(5);
 	}
 
 	[Test]

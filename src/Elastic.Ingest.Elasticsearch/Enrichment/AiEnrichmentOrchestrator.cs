@@ -128,18 +128,21 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 		// 2. Chunk IDs and run parallel ES|QL COMPLETION queries, yielding per-chunk
 		var chunks = ChunkList(candidateIds, opts.EsqlBatchSize);
+		var totalChunks = chunks.Count;
 		var allUpdates = new List<LookupUpdate>();
-		var retryDelay = TimeSpan.FromSeconds(Math.Min(opts.CompletionTimeout.TotalSeconds, 60));
+		var retryDelay = TimeSpan.FromSeconds(Math.Min(opts.CompletionTimeout.TotalSeconds, 30));
+		var minBatch = Math.Max(opts.MinCompletionBatchSize, 1);
 
-		var activeTasks = new Dictionary<Task<EsqlChunkResult>, int>();
-		var chunkRetries = new Dictionary<int, int>();
-		var nextChunk = 0;
+		var activeTasks = new Dictionary<Task<EsqlChunkResult>, ChunkMeta>();
+		var pendingChunks = new Queue<ChunkMeta>();
+		for (var i = 0; i < chunks.Count; i++)
+			pendingChunks.Enqueue(new ChunkMeta(chunks[i], 0));
 
-		while (nextChunk < chunks.Count && activeTasks.Count < opts.EsqlConcurrency)
+		while (pendingChunks.Count > 0 && activeTasks.Count < opts.EsqlConcurrency)
 		{
-			var task = RunEsqlCompletionAsync(targetIndex, chunks[nextChunk], opts, ct);
-			activeTasks[task] = nextChunk;
-			nextChunk++;
+			var meta = pendingChunks.Dequeue();
+			var task = RunEsqlCompletionAsync(targetIndex, meta.DocIds, opts, ct);
+			activeTasks[task] = meta;
 		}
 
 		var completedChunks = 0;
@@ -147,45 +150,63 @@ public class AiEnrichmentOrchestrator : IDisposable
 		{
 			ct.ThrowIfCancellationRequested();
 			var completed = await Task.WhenAny(activeTasks.Keys).ConfigureAwait(false);
-			var chunkIndex = activeTasks[completed];
+			var meta = activeTasks[completed];
 			activeTasks.Remove(completed);
 
 			var result = await completed.ConfigureAwait(false);
 
-			chunkRetries.TryGetValue(chunkIndex, out var previousRetries);
 			if (result.Error != null && result.IsRetryable
-				&& previousRetries < opts.CompletionMaxRetries)
+				&& meta.Depth < opts.CompletionMaxRetries)
 			{
-				var attempt = previousRetries + 1;
-				chunkRetries[chunkIndex] = attempt;
+				var currentSize = meta.DocIds.Count;
+				var retrySize = Math.Max((currentSize + 1) / 2, minBatch);
+
+				if (retrySize < currentSize)
+				{
+					var subChunks = ChunkList(meta.DocIds, retrySize);
+					var newDepth = meta.Depth + 1;
+
+					yield return Progress(AiEnrichmentPhase.Enriching, enriched, failed, totalCandidates,
+						$"Chunk timed out ({currentSize} docs) — splitting into {subChunks.Count} × {retrySize} (depth {newDepth}/{opts.CompletionMaxRetries}), waiting {retryDelay.TotalSeconds:N0}s...");
+
+					foreach (var sub in subChunks)
+						pendingChunks.Enqueue(new ChunkMeta(sub, newDepth));
+					totalChunks += subChunks.Count - 1;
+
+					await SchedulePendingAfterDelayAsync(
+						targetIndex, opts, retryDelay, pendingChunks, activeTasks, ct).ConfigureAwait(false);
+					continue;
+				}
 
 				yield return Progress(AiEnrichmentPhase.Enriching, enriched, failed, totalCandidates,
-					$"Chunk {chunkIndex + 1}/{chunks.Count}: {result.Error} — waiting {retryDelay.TotalSeconds:N0}s before retry {attempt}/{opts.CompletionMaxRetries}...");
+					$"Chunk failed ({currentSize} docs, already at minimum batch size): {result.Error}");
+				failed += meta.DocIds.Count;
+			}
+			else if (result.Error != null)
+			{
+				failed += meta.DocIds.Count;
+				completedChunks++;
+				var depthNote = meta.Depth > 0 ? $" (depth {meta.Depth})" : "";
+				yield return Progress(AiEnrichmentPhase.Enriching, enriched, failed, totalCandidates,
+					$"Chunk {completedChunks}/{totalChunks}: {result.Error}{depthNote}");
+			}
+			else
+			{
+				completedChunks++;
+				allUpdates.AddRange(result.Updates);
+				failed += result.Failed;
+				enriched = allUpdates.Count;
 
-				var retryTask = DelayThenRunAsync(targetIndex, chunks[chunkIndex], opts, retryDelay, ct);
-				activeTasks[retryTask] = chunkIndex;
-				continue;
+				var depthNote = meta.Depth > 0 ? $" (depth {meta.Depth})" : "";
+				yield return Progress(AiEnrichmentPhase.Enriching, enriched, failed, totalCandidates,
+					$"Chunk {completedChunks}/{totalChunks}: +{result.Updates.Count} enriched, +{result.Failed} failed{depthNote}");
 			}
 
-			completedChunks++;
-			allUpdates.AddRange(result.Updates);
-			failed += result.Failed;
-			enriched = allUpdates.Count;
-
-			chunkRetries.TryGetValue(chunkIndex, out var retried);
-			var retryNote = retried > 0 ? $" (after {retried} {(retried == 1 ? "retry" : "retries")})" : "";
-
-			var chunkMsg = result.Error != null
-				? $"Chunk {completedChunks}/{chunks.Count}: {result.Error}{retryNote}"
-				: $"Chunk {completedChunks}/{chunks.Count}: +{result.Updates.Count} enriched, +{result.Failed} failed{retryNote}";
-
-			yield return Progress(AiEnrichmentPhase.Enriching, enriched, failed, totalCandidates, chunkMsg);
-
-			if (nextChunk < chunks.Count)
+			while (pendingChunks.Count > 0 && activeTasks.Count < opts.EsqlConcurrency)
 			{
-				var task = RunEsqlCompletionAsync(targetIndex, chunks[nextChunk], opts, ct);
-				activeTasks[task] = nextChunk;
-				nextChunk++;
+				var next = pendingChunks.Dequeue();
+				var task = RunEsqlCompletionAsync(targetIndex, next.DocIds, opts, ct);
+				activeTasks[task] = next;
 			}
 		}
 
@@ -602,12 +623,18 @@ public class AiEnrichmentOrchestrator : IDisposable
 		return new EsqlChunkResult(updates, chunkFailed, null);
 	}
 
-	private async Task<EsqlChunkResult> DelayThenRunAsync(
-		string targetIndex, List<string> docIds, AiEnrichmentOptions opts,
-		TimeSpan delay, CancellationToken ct)
+	private async Task SchedulePendingAfterDelayAsync(
+		string targetIndex, AiEnrichmentOptions opts, TimeSpan delay,
+		Queue<ChunkMeta> pendingChunks, Dictionary<Task<EsqlChunkResult>, ChunkMeta> activeTasks,
+		CancellationToken ct)
 	{
 		await Task.Delay(delay, ct).ConfigureAwait(false);
-		return await RunEsqlCompletionAsync(targetIndex, docIds, opts, ct).ConfigureAwait(false);
+		while (pendingChunks.Count > 0 && activeTasks.Count < opts.EsqlConcurrency)
+		{
+			var next = pendingChunks.Dequeue();
+			var task = RunEsqlCompletionAsync(targetIndex, next.DocIds, opts, ct);
+			activeTasks[task] = next;
+		}
 	}
 
 	private static List<List<T>> ChunkList<T>(List<T> source, int chunkSize)
