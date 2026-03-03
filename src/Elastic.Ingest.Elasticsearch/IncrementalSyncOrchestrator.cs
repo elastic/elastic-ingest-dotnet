@@ -18,6 +18,15 @@ using Elastic.Transport;
 namespace Elastic.Ingest.Elasticsearch;
 
 /// <summary>
+/// Captures the rollover decision for a single index (primary or secondary).
+/// </summary>
+/// <param name="Label">Identifies the index — <c>"primary"</c> or <c>"secondary"</c>.</param>
+/// <param name="LocalHash">The hash computed locally from the current mappings/settings.</param>
+/// <param name="RemoteHash">The hash stored in the existing index template's <c>_meta.hash</c>.</param>
+/// <param name="RolledOver">Whether a new backing index was created (hashes differed).</param>
+public record IndexRolloverInfo(string Label, string LocalHash, string RemoteHash, bool RolledOver);
+
+/// <summary>
 /// Context returned by <see cref="IncrementalSyncOrchestrator{TEvent}.StartAsync"/> and passed
 /// to <see cref="IncrementalSyncOrchestrator{TEvent}.OnPostComplete"/> hooks.
 /// </summary>
@@ -40,14 +49,21 @@ public class OrchestratorContext<TEvent> where TEvent : class
 
 	/// <summary> The resolved secondary read target (ReadAlias or fallback to write alias). </summary>
 	public string SecondaryReadAlias { get; init; } = null!;
+
+	/// <summary> Rollover decision details for the primary index. </summary>
+	public IndexRolloverInfo? PrimaryRollover { get; init; }
+
+	/// <summary> Rollover decision details for the secondary index. </summary>
+	public IndexRolloverInfo? SecondaryRollover { get; init; }
 }
 
 /// <summary>
 /// Orchestrates two Elasticsearch channels (primary + secondary) sharing the same document type
-/// for incremental sync workflows. Always uses Reindex (write to primary, reindex changed docs to
-/// secondary) when the secondary index already exists, because the secondary may contain
-/// semantic_text fields that reject scripted bulk upserts. Multiplex (write to both) is only
-/// used when creating entirely new backing indices.
+/// for incremental sync workflows. Uses Reindex (write to primary, reindex changed docs to
+/// secondary) when the secondary alias already exists, because the secondary may contain
+/// semantic_text fields that reject scripted bulk upserts. When the secondary's template hash
+/// has changed, a new backing index is created and all data is reindexed from primary.
+/// Multiplex (write to both) is only used when creating entirely new backing indices.
 /// </summary>
 public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDisposable
 	where TEvent : class
@@ -139,6 +155,12 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	/// </summary>
 	public Action<string, DeleteByQueryProgress>? OnDeleteByQueryProgress { get; init; }
 
+	/// <summary>
+	/// Callback invoked when a rollover decision is made for an index during <see cref="StartAsync"/>.
+	/// Fired once for the primary and once for the secondary index.
+	/// </summary>
+	public Action<IndexRolloverInfo>? OnRolloverDecision { get; init; }
+
 	/// <summary> The resolved ingest strategy after <see cref="StartAsync"/> completes. </summary>
 	public IngestSyncStrategy Strategy => _strategy;
 
@@ -157,10 +179,10 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 
 	/// <summary>
 	/// Creates channels, runs bootstrap, and determines the ingest strategy.
-	/// Returns the orchestrator context with resolved aliases and strategy.
-	/// Multiplex (write to both) is only used when creating new backing indices —
-	/// if the secondary already exists, Reindex is always used because the secondary
-	/// may contain semantic_text fields that reject scripted bulk upserts.
+	/// Returns the orchestrator context with resolved aliases, strategy, and rollover info.
+	/// If the secondary alias already exists, Reindex is used. When the secondary's template
+	/// hash changed, a new backing index is created and all data is reindexed from primary.
+	/// Multiplex (write to both) is only used when creating entirely new backing indices.
 	/// </summary>
 	public async Task<OrchestratorContext<TEvent>> StartAsync(BootstrapMethod method, CancellationToken ctx = default)
 	{
@@ -209,8 +231,12 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		}
 
 		_primaryIndexName = _primaryChannel.IndexName;
-		if (primaryServerHash != _primaryChannel.ChannelHash)
+		var primaryRolledOver = primaryServerHash != _primaryChannel.ChannelHash;
+		if (primaryRolledOver)
 			_strategy = IngestSyncStrategy.Multiplex;
+
+		var primaryRolloverInfo = new IndexRolloverInfo("primary", _primaryChannel.ChannelHash, primaryServerHash, primaryRolledOver);
+		OnRolloverDecision?.Invoke(primaryRolloverInfo);
 
 		// 3. Check secondary alias existence
 		_secondaryWriteAlias = ResolveSecondaryWriteAlias();
@@ -241,23 +267,36 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			reuseSecondary = null;
 		}
 
-		if (secondaryServerHash != _secondaryChannel.ChannelHash)
-			_strategy = IngestSyncStrategy.Multiplex;
+		var secondaryRolledOver = secondaryServerHash != _secondaryChannel.ChannelHash;
 
-		// 5. If the secondary index already exists we must use Reindex — Multiplex
+		// 5. If the secondary alias already exists we must use Reindex — Multiplex
 		// would write directly to the secondary via scripted bulk upserts, which
 		// fails on indices containing semantic_text fields.
 		if (secondaryExists)
 			_strategy = IngestSyncStrategy.Reindex;
+		else if (primaryRolledOver || secondaryRolledOver)
+			_strategy = IngestSyncStrategy.Multiplex;
+
+		var secondaryRolloverInfo = new IndexRolloverInfo("secondary", _secondaryChannel.ChannelHash, secondaryServerHash, secondaryRolledOver);
+		OnRolloverDecision?.Invoke(secondaryRolloverInfo);
 
 		// 6. Resolve reindex target and cutoff for Reindex mode.
 		if (_strategy == IngestSyncStrategy.Reindex)
 		{
-			_secondaryReindexTarget = await ResolveExistingIndexAsync(_secondaryWriteAlias, ctx).ConfigureAwait(false);
-			_reindexCutoff = await QueryMaxBatchDateAsync(_secondaryWriteAlias!, ctx).ConfigureAwait(false);
+			if (secondaryRolledOver)
+			{
+				// Hash changed: create a new backing index and reindex ALL data from primary.
+				_secondaryReindexTarget = _secondaryIndexName;
+				_reindexCutoff = DateTimeOffset.MinValue;
+			}
+			else
+			{
+				_secondaryReindexTarget = await ResolveExistingIndexAsync(_secondaryWriteAlias, ctx).ConfigureAwait(false);
+				_reindexCutoff = await QueryMaxBatchDateAsync(_secondaryWriteAlias!, ctx).ConfigureAwait(false);
+			}
 		}
 
-		_context = BuildContext();
+		_context = BuildContext(primaryRolloverInfo, secondaryRolloverInfo);
 		return _context;
 	}
 
@@ -426,7 +465,8 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		return primary && secondary;
 	}
 
-	private OrchestratorContext<TEvent> BuildContext() =>
+	private OrchestratorContext<TEvent> BuildContext(
+		IndexRolloverInfo primaryRollover, IndexRolloverInfo secondaryRollover) =>
 		new()
 		{
 			Strategy = _strategy,
@@ -435,6 +475,8 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 			SecondaryWriteAlias = _secondaryWriteAlias!,
 			PrimaryReadAlias = _primaryTypeContext.ResolveReadTarget(),
 			SecondaryReadAlias = _secondaryTypeContext.ResolveReadTarget(),
+			PrimaryRollover = primaryRollover,
+			SecondaryRollover = secondaryRollover,
 		};
 
 	private string ResolvePrimaryWriteAlias() =>
