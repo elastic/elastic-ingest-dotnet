@@ -404,6 +404,58 @@ public class DocumentationPage
 public static partial class AiTestMappingContext;
 
 // ============================================================================
+// AI ENRICHMENT CONTEXT WITH INDEX VARIANT: tests IndexVariant targeting
+// ============================================================================
+
+public class VariantDocumentationPage
+{
+	[Id]
+	[Keyword]
+	public string Url { get; set; } = string.Empty;
+
+	[AiInput]
+	[Text]
+	[JsonPropertyName("title")]
+	public string Title { get; set; } = string.Empty;
+
+	[AiInput]
+	[Text]
+	[JsonPropertyName("body")]
+	public string Body { get; set; } = string.Empty;
+
+	[AiField("A concise two-sentence summary of the document content.")]
+	[Text]
+	[JsonPropertyName("ai_summary")]
+	public string? AiSummary { get; set; }
+
+	[AiField("3 to 5 questions this document answers, phrased as a user would ask.", MinItems = 3, MaxItems = 5)]
+	[Keyword]
+	[JsonPropertyName("ai_questions")]
+	public string[]? AiQuestions { get; set; }
+}
+
+[ElasticsearchMappingContext]
+[Index<VariantDocumentationPage>(
+	Name = "docs-primary",
+	WriteAlias = "docs-primary",
+	ReadAlias = "docs-primary-read",
+	DatePattern = "yyyy.MM.dd.HHmmss"
+)]
+[Index<VariantDocumentationPage>(
+	Name = "docs-secondary",
+	Variant = "Secondary",
+	WriteAlias = "docs-secondary",
+	ReadAlias = "docs-secondary-read",
+	DatePattern = "yyyy.MM.dd.HHmmss"
+)]
+[AiEnrichment<VariantDocumentationPage>(
+	Role = "You are a documentation analysis assistant.",
+	MatchField = "url",
+	IndexVariant = "Secondary"
+)]
+public static partial class AiVariantTestMappingContext;
+
+// ============================================================================
 // STJ CONTEXT: tests JsonContext integration with naming policies
 // ============================================================================
 

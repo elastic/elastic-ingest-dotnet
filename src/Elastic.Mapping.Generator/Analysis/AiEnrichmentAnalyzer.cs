@@ -26,6 +26,7 @@ internal static class AiEnrichmentAnalyzer
 		string? lookupIndexName,
 		string? writeAlias,
 		string? matchField,
+		string? indexVariant,
 		StjContextConfig? stjConfig,
 		CancellationToken ct)
 	{
@@ -96,7 +97,8 @@ internal static class AiEnrichmentAnalyzer
 			writeAlias,
 			resolvedMatchField,
 			inputs.ToImmutable(),
-			outputs.ToImmutable()
+			outputs.ToImmutable(),
+			indexVariant
 		);
 	}
 

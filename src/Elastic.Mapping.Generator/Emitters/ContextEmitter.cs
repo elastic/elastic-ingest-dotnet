@@ -261,8 +261,10 @@ internal static class ContextEmitter
 		else
 			sb.AppendLine($"{indent}\t\tLastUpdatedFieldName: null,");
 
-		// AI enrichment provider
-		if (model.AiEnrichment != null && model.AiEnrichment.DocumentTypeFullyQualifiedName == reg.TypeFullyQualifiedName)
+		// AI enrichment provider — when IndexVariant is set, only attach to the matching variant
+		if (model.AiEnrichment != null
+			&& model.AiEnrichment.DocumentTypeFullyQualifiedName == reg.TypeFullyQualifiedName
+			&& (model.AiEnrichment.IndexVariant == null || model.AiEnrichment.IndexVariant == reg.Variant))
 			sb.AppendLine($"{indent}\t\tAiEnrichmentProvider: new {model.AiEnrichment.DocumentTypeName}AiEnrichmentProvider()");
 		else
 			sb.AppendLine($"{indent}\t\tAiEnrichmentProvider: null");

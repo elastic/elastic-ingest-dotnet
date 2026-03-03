@@ -22,7 +22,12 @@ internal sealed record AiEnrichmentModel(
 	string? WriteAlias,
 	string MatchFieldName,
 	ImmutableArray<AiInputFieldModel> Inputs,
-	ImmutableArray<AiOutputFieldModel> Outputs
+	ImmutableArray<AiOutputFieldModel> Outputs,
+	/// <summary>
+	/// When set, restricts which <c>[Index&lt;T&gt;]</c> variant the provider is attached to
+	/// and which variant's write alias is used for the default lookup index name.
+	/// </summary>
+	string? IndexVariant = null
 );
 
 /// <summary>

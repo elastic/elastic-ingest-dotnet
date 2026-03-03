@@ -381,4 +381,51 @@ public class AiEnrichmentGeneratorTests
 		infra.EnrichPolicyBody.Should().Be(Provider.EnrichPolicyBody);
 		infra.PipelineBody.Should().Be(Provider.PipelineBody);
 	}
+
+	// ── IndexVariant tests ──
+
+	[Test]
+	public void IndexVariantDerivesLookupNameFromTargetedVariant()
+	{
+		var provider = AiVariantTestMappingContext.AiEnrichment;
+		provider.LookupIndexName.Should().Be("docs-secondary-ai-cache",
+			"lookup index name should derive from the Secondary variant's write alias, not the primary");
+	}
+
+	[Test]
+	public void IndexVariantAttachesProviderOnlyToTargetedVariant()
+	{
+		AiVariantTestMappingContext.VariantDocumentationPageSecondary.Context.AiEnrichmentProvider.Should().NotBeNull(
+			"provider should be attached to the Secondary variant context");
+
+		AiVariantTestMappingContext.VariantDocumentationPage.Context.AiEnrichmentProvider.Should().BeNull(
+			"provider should NOT be attached to the primary (non-targeted) variant context");
+	}
+
+	[Test]
+	public void IndexVariantPolicyAndPipelineDeriveFromSecondary()
+	{
+		var provider = AiVariantTestMappingContext.AiEnrichment;
+		provider.EnrichPolicyName.Should().Be("docs-secondary-ai-cache-ai-policy");
+		provider.PipelineName.Should().Be("docs-secondary-ai-cache-ai-pipeline");
+		provider.EnrichPolicyBody.Should().Contain("docs-secondary-ai-cache");
+	}
+
+	[Test]
+	public void IndexVariantCreateInfrastructureOverridesLookupName()
+	{
+		var provider = AiVariantTestMappingContext.AiEnrichment;
+		var infra = provider.CreateInfrastructure("custom-env-ai-cache");
+
+		infra.LookupIndexName.Should().Be("custom-env-ai-cache");
+		infra.EnrichPolicyName.Should().Be("custom-env-ai-cache-ai-policy");
+		infra.PipelineName.Should().Be("custom-env-ai-cache-ai-pipeline");
+	}
+
+	[Test]
+	public void WithoutIndexVariantProviderAttachesToAllMatchingContexts()
+	{
+		AiTestMappingContext.DocumentationPage.Context.AiEnrichmentProvider.Should().NotBeNull(
+			"without IndexVariant, the provider should be attached to all matching contexts");
+	}
 }

@@ -96,5 +96,6 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 	DatePattern = "yyyy.MM.dd.HHmmss")]
 [AiEnrichment<AiDocumentationPage>(
 	Role = "You are a documentation analysis assistant.",
-	MatchField = "url")]
+	MatchField = "url",
+	IndexVariant = "AiSecondary")]
 public static partial class TestMappingContext;
