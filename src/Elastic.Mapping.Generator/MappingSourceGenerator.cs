@@ -548,6 +548,11 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		// multiple contexts within the same namespace.
 		var emittedExtensionKeys = new HashSet<string>();
 
+		// Track emitted nested builder classes globally to avoid duplicate
+		// definitions when multiple document types in the same namespace
+		// reference the same nested type (e.g. IndexedProduct).
+		var emittedNestedBuilders = new HashSet<string>();
+
 		// Enforce: only one [AiEnrichment<T>] per document type across all contexts
 		var aiEnrichmentTypes = new Dictionary<string, string>();
 		foreach (var model in models)
@@ -581,7 +586,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 				var extensionKey = $"{model.Namespace}.{reg.TypeFullyQualifiedName}";
 				if (emittedExtensionKeys.Add(extensionKey))
 				{
-					var mappingsExtensionsSource = MappingsBuilderEmitter.EmitForContext(model, reg);
+					var mappingsExtensionsSource = MappingsBuilderEmitter.EmitForContext(model, reg, emittedNestedBuilders);
 					context.AddSource($"{model.ContextTypeName}.{reg.TypeName}MappingsExtensions.g.cs", mappingsExtensionsSource);
 				}
 

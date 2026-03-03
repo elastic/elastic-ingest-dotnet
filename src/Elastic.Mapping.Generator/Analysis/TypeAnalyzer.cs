@@ -148,11 +148,34 @@ internal static class TypeAnalyzer
 	{
 		var attrs = property.GetAttributes();
 
-		// Check for [JsonIgnore]
-		var isIgnored = attrs.Any(a => a.AttributeClass?.ToDisplayString() == JsonIgnoreAttributeName);
+		// Check for [JsonIgnore] — only treat as fully ignored when Condition is Always
+		// (the default when Condition is not specified). Conditional ignores like
+		// WhenWritingNull/WhenWritingDefault still serialize the field, so the
+		// mapping must include them.
+		var isIgnored = false;
+		var jsonIgnoreAttr = attrs.FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == JsonIgnoreAttributeName);
+		if (jsonIgnoreAttr != null)
+		{
+			var conditionArg = jsonIgnoreAttr.NamedArguments.FirstOrDefault(a => a.Key == "Condition");
+			if (conditionArg.Key == null)
+			{
+				// [JsonIgnore] without Condition defaults to Always
+				isIgnored = true;
+			}
+			else if (conditionArg.Value.Value is int condition)
+			{
+				// JsonIgnoreCondition.Always = 1
+				isIgnored = condition == 1;
+			}
+			else
+			{
+				isIgnored = true;
+			}
+		}
 
-		// Check global DefaultIgnoreCondition.Always
-		if (!isIgnored && stjConfig?.IgnoreCondition == DefaultIgnoreCondition.Always)
+		// Check global DefaultIgnoreCondition.Always — but per-property [JsonIgnore]
+		// takes precedence (e.g. Condition=Never overrides a global Always)
+		if (!isIgnored && jsonIgnoreAttr == null && stjConfig?.IgnoreCondition == DefaultIgnoreCondition.Always)
 			isIgnored = true;
 
 		// Get field name from [JsonPropertyName] or apply naming policy

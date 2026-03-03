@@ -542,3 +542,54 @@ public class MappingBugDocument : IConfigureElasticsearch<MappingBugDocument>
 [ElasticsearchMappingContext]
 [Index<MappingBugDocument>(Name = "mapping-bug-test")]
 public static partial class MappingBugMappingContext;
+
+// ============================================================================
+// GAP-FIX CONTEXT: covers remaining gaps — conditional [JsonIgnore] + dot-path
+// merge, and [Object] array traversal
+// ============================================================================
+
+/// <summary>
+/// Document exercising Gap 1 ([Text] + [JsonIgnore(WhenWritingNull)] + dot-path AddField)
+/// and Gap 2 ([Object] array with sub-type attributes).
+/// </summary>
+public class GapFixDocument : IConfigureElasticsearch<GapFixDocument>
+{
+	[Id]
+	[Keyword]
+	public string Url { get; set; } = string.Empty;
+
+	[Text]
+	[JsonPropertyName("ai_questions")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string[]? AiQuestions { get; set; }
+
+	[Text]
+	[JsonPropertyName("ai_use_cases")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string[]? AiUseCases { get; set; }
+
+	[Object]
+	[JsonPropertyName("product")]
+	public IndexedProduct? Product { get; set; }
+
+	[Object]
+	[JsonPropertyName("related_products")]
+	public IndexedProduct[]? RelatedProducts { get; set; }
+
+	[JsonIgnore]
+	public string InternalOnly { get; set; } = string.Empty;
+
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) => analysis;
+
+	public MappingsBuilder<GapFixDocument> ConfigureMappings(MappingsBuilder<GapFixDocument> mappings) =>
+		mappings
+			.AddField("ai_questions.semantic_text", f => f.SemanticText().InferenceId("my-elser"))
+			.AddField("ai_questions.jina", f => f.SemanticText().InferenceId("my-jina"))
+			.AddField("ai_use_cases.semantic_text", f => f.SemanticText().InferenceId("my-elser"));
+
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
+}
+
+[ElasticsearchMappingContext]
+[Index<GapFixDocument>(Name = "gap-fix-test")]
+public static partial class GapFixMappingContext;

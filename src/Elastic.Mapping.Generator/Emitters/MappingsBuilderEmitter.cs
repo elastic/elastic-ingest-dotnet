@@ -36,7 +36,11 @@ internal static class MappingsBuilderEmitter
 	/// <summary>
 	/// Emits extension methods on MappingsBuilder&lt;T&gt; for a type registration within a context.
 	/// </summary>
-	public static string EmitForContext(ContextMappingModel context, TypeRegistration reg)
+	/// <param name="emittedNestedBuilders">
+	/// Tracks nested builder class names already emitted in this namespace to avoid
+	/// duplicate definitions when multiple document types reference the same nested type.
+	/// </param>
+	public static string EmitForContext(ContextMappingModel context, TypeRegistration reg, HashSet<string> emittedNestedBuilders)
 	{
 		var sb = new StringBuilder();
 
@@ -48,7 +52,7 @@ internal static class MappingsBuilderEmitter
 			sb.AppendLine();
 		}
 
-		EmitExtensionMethodsClass(sb, reg.TypeModel, reg.TypeFullyQualifiedName, reg.TypeName, reg.AnalysisComponents);
+		EmitExtensionMethodsClass(sb, reg.TypeModel, reg.TypeFullyQualifiedName, reg.TypeName, reg.AnalysisComponents, emittedNestedBuilders);
 
 		return sb.ToString();
 	}
@@ -106,7 +110,8 @@ internal static class MappingsBuilderEmitter
 		TypeMappingModel model,
 		string typeFqn,
 		string resolverName,
-		AnalysisComponentsModel analysisComponents
+		AnalysisComponentsModel analysisComponents,
+		HashSet<string> globalEmittedNestedBuilders
 	)
 	{
 		var builderType = $"{MappingsBuilderFqn}<global::{typeFqn}>";
@@ -140,11 +145,12 @@ internal static class MappingsBuilderEmitter
 		sb.AppendLine("}");
 		sb.AppendLine();
 
-		// Generate nested builder classes (these remain as helper classes, not extensions)
-		var emittedNestedBuilders = new HashSet<string>();
+		// Generate nested builder classes — deduplicate across document types
+		// within the same namespace to avoid CS0101 when multiple types reference
+		// the same nested type (e.g. IndexedProduct used by two documents).
 		foreach (var (propertyName, fieldName, nestedType) in nestedBuilders)
 		{
-			if (emittedNestedBuilders.Add(nestedType.TypeName))
+			if (globalEmittedNestedBuilders.Add(nestedType.TypeName))
 				EmitNestedBuilderClass(sb, resolverName, propertyName, fieldName, nestedType);
 		}
 	}
