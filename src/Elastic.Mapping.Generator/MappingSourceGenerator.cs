@@ -140,12 +140,18 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			var role = GetNamedArg<string>(attr, "Role");
 			var lookupIndexName = GetNamedArg<string>(attr, "LookupIndexName");
 			var matchField = GetNamedArg<string>(attr, "MatchField");
+			var indexVariant = GetNamedArg<string>(attr, "IndexVariant");
 
-			// Resolve the WriteAlias from the matching [Index<T>] registration for this document type
+			// Resolve the WriteAlias from the matching [Index<T>] registration for this document type.
+			// When IndexVariant is specified, only consider the registration with that variant.
 			string? writeAlias = null;
 			foreach (var reg in registrations)
 			{
-				if (reg.TypeFullyQualifiedName == documentType.ToDisplayString() && reg.IndexConfig?.WriteAlias != null)
+				if (reg.TypeFullyQualifiedName != documentType.ToDisplayString())
+					continue;
+				if (indexVariant != null && reg.Variant != indexVariant)
+					continue;
+				if (reg.IndexConfig?.WriteAlias != null)
 				{
 					writeAlias = reg.IndexConfig.WriteAlias;
 					break;
@@ -153,7 +159,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			}
 
 			aiEnrichment = AiEnrichmentAnalyzer.Analyze(
-				documentType, role, lookupIndexName, writeAlias, matchField, stjConfig, ct);
+				documentType, role, lookupIndexName, writeAlias, matchField, indexVariant, stjConfig, ct);
 		}
 
 		return new ContextMappingModel(

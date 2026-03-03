@@ -41,7 +41,7 @@ var secondaryContext = RecipeMappingContext.RecipeDocumentSemantic.CreateContext
 Console.WriteLine($"Primary target    : {primaryContext.IndexStrategy!.WriteTarget}");
 Console.WriteLine($"Secondary target  : {secondaryContext.IndexStrategy!.WriteTarget}");
 
-Console.WriteLine($"AI enrichment     : {(primaryContext.AiEnrichmentProvider != null ? "configured" : "none")}");
+Console.WriteLine($"AI enrichment     : {(secondaryContext.AiEnrichmentProvider != null ? "configured" : "none")}");
 Console.WriteLine();
 
 // ─── Channel diagnostics ─────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ using var orchestrator = new IncrementalSyncOrchestrator<RecipeDocument>(
 		Console.WriteLine($"  [{label}] total={p.Total} deleted={p.Deleted} completed={p.IsCompleted}{(p.Error != null ? $" ERROR={p.Error}" : "")}"),
 };
 
-using var aiOrchestrator = new AiEnrichmentOrchestrator(transport, primaryContext);
+using var aiOrchestrator = new AiEnrichmentOrchestrator(transport, secondaryContext);
 
 orchestrator.AddPreBootstrapTask(async (_, ct) =>
 {
@@ -156,7 +156,7 @@ if (lastProgress != null)
 // ─── Validate: counts after enrichment ──────────────────────────────────────
 await transport.PostAsync<StringResponse>($"{secondaryAlias}/_refresh", PostData.Empty);
 
-var lookupIndexName = $"{primaryContext.IndexStrategy!.WriteTarget}-ai-cache";
+var lookupIndexName = $"{secondaryContext.IndexStrategy!.WriteTarget}-ai-cache";
 var lookupCount = await CountAsync(transport, lookupIndexName);
 Console.WriteLine($"AI lookup count   : {lookupCount}");
 

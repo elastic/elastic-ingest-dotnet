@@ -32,4 +32,13 @@ public sealed class AiEnrichmentAttribute<TDocument> : Attribute
 	/// Defaults to <c>"url"</c>.
 	/// </summary>
 	public string? MatchField { get; init; }
+
+	/// <summary>
+	/// Specifies which <c>[Index&lt;T&gt;]</c> variant to use when deriving the default
+	/// lookup index name and when attaching the <c>IAiEnrichmentProvider</c> to a context.
+	/// Must match the <c>Variant</c> value on one of the <c>[Index&lt;T&gt;]</c> registrations
+	/// for the same document type.
+	/// When <c>null</c>, the first matching registration is used.
+	/// </summary>
+	public string? IndexVariant { get; init; }
 }

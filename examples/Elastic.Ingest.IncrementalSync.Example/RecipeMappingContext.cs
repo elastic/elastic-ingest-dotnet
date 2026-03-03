@@ -21,7 +21,8 @@ namespace Elastic.Ingest.IncrementalSync.Example;
 )]
 [AiEnrichment<RecipeDocument>(
 	Role = "You are a culinary assistant that analyzes recipe content.",
-	MatchField = "slug"
+	MatchField = "slug",
+	IndexVariant = "Semantic"
 )]
 public static partial class RecipeMappingContext;
 
