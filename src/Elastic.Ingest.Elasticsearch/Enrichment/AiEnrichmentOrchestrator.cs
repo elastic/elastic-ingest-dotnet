@@ -130,7 +130,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 		var chunks = ChunkList(candidateIds, opts.EsqlBatchSize);
 		var totalChunks = chunks.Count;
 		var allUpdates = new List<LookupUpdate>();
-		var retryDelay = TimeSpan.FromSeconds(Math.Min(opts.CompletionTimeout.TotalSeconds, 60));
+		var retryDelay = TimeSpan.FromSeconds(Math.Min(opts.CompletionTimeout.TotalSeconds, 30));
 		var minBatch = Math.Max(opts.MinCompletionBatchSize, 1);
 
 		var activeTasks = new Dictionary<Task<EsqlChunkResult>, ChunkMeta>();

@@ -55,7 +55,7 @@ public sealed class AiEnrichmentOptions
 	/// Maximum number of retries for a failed ES|QL COMPLETION call (e.g. HTTP 408/429/5xx).
 	/// Default: 2. Each retry halves the batch size (down to <see cref="MinCompletionBatchSize"/>)
 	/// and fans out the sub-chunks concurrently. The delay between retries equals
-	/// <see cref="CompletionTimeout"/> capped at 1 minute.
+	/// <see cref="CompletionTimeout"/> capped at 30 seconds.
 	/// </summary>
 	public int CompletionMaxRetries { get; set; } = 2;
 
