@@ -42,7 +42,7 @@ public sealed class DataStreamAttribute<T> : Attribute where T : class
 	/// When omitted, resolved at runtime from environment variables via
 	/// <see cref="ElasticsearchTypeContext.ResolveDefaultNamespace"/>:
 	/// <c>DOTNET_ENVIRONMENT</c> → <c>ASPNETCORE_ENVIRONMENT</c> →
-	/// <c>ENVIRONMENT</c> → <c>"development"</c>.
+	/// <c>ENVIRONMENT</c> → <see cref="ElasticsearchTypeContext.DefaultNamespaceFallback"/>.
 	/// Set explicitly to pin to a specific namespace.
 	/// </para>
 	/// </summary>
