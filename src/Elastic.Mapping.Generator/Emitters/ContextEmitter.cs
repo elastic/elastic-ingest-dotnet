@@ -353,7 +353,7 @@ internal static class ContextEmitter
 			interpolated = interpolated.Replace($"{{{p.Name}}}", $"{{{paramName}}}");
 		}
 
-		sb.AppendLine($"{indent}\tvar name = $\"{interpolated}\";");
+		sb.AppendLine($"{indent}\tvar name = $\"{interpolated}\".ToLowerInvariant();");
 
 		// Build the new context with resolved name
 		var datePattern = reg.IndexConfig.DatePattern;

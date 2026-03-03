@@ -82,9 +82,9 @@ public record ElasticsearchTypeContext(
 	{
 		var wt = IndexStrategy?.WriteTarget
 			?? throw new InvalidOperationException("No write target configured");
-		return IndexStrategy?.DatePattern is { } pattern
+		return (IndexStrategy?.DatePattern is { } pattern
 			? $"{wt}-{timestamp.ToString(pattern, CultureInfo.InvariantCulture)}"
-			: wt;
+			: wt).ToLowerInvariant();
 	}
 
 	/// <summary>
@@ -98,8 +98,8 @@ public record ElasticsearchTypeContext(
 	/// </summary>
 	public string ResolveIndexFormat(DateTimeOffset? batchTimestamp = null)
 	{
-		var wt = IndexStrategy?.WriteTarget
-			?? throw new InvalidOperationException("No write target configured");
+		var wt = (IndexStrategy?.WriteTarget
+			?? throw new InvalidOperationException("No write target configured")).ToLowerInvariant();
 		if (IndexStrategy?.DatePattern is { } pattern)
 		{
 			return batchTimestamp is { } ts
@@ -118,8 +118,8 @@ public record ElasticsearchTypeContext(
 	/// </summary>
 	public string ResolveWriteAlias()
 	{
-		var wt = IndexStrategy?.WriteTarget
-			?? throw new InvalidOperationException("No write target configured");
+		var wt = (IndexStrategy?.WriteTarget
+			?? throw new InvalidOperationException("No write target configured")).ToLowerInvariant();
 		return IndexStrategy?.DatePattern != null ? $"{wt}-latest" : wt;
 	}
 
@@ -130,7 +130,7 @@ public record ElasticsearchTypeContext(
 	public string ResolveReadTarget()
 	{
 		var readAlias = SearchStrategy?.ReadAlias;
-		return !string.IsNullOrEmpty(readAlias) ? readAlias! : ResolveWriteAlias();
+		return !string.IsNullOrEmpty(readAlias) ? readAlias!.ToLowerInvariant() : ResolveWriteAlias();
 	}
 
 	/// <summary>
@@ -143,7 +143,7 @@ public record ElasticsearchTypeContext(
 	/// </summary>
 	public string ResolveSearchPattern()
 	{
-		return EntityTarget switch
+		return (EntityTarget switch
 		{
 			EntityTarget.DataStream or EntityTarget.WiredStream
 				when IndexStrategy?.Type != null && IndexStrategy?.Dataset != null =>
@@ -154,7 +154,7 @@ public record ElasticsearchTypeContext(
 				$"{IndexStrategy.WriteTarget}*",
 			_ => MappedType?.Name.ToLowerInvariant() + "-*"
 				?? throw new InvalidOperationException("Cannot resolve search pattern from context.")
-		};
+		}).ToLowerInvariant();
 	}
 
 	/// <summary>
@@ -167,8 +167,8 @@ public record ElasticsearchTypeContext(
 	/// </summary>
 	public string ResolveAliasFormat()
 	{
-		var wt = IndexStrategy?.WriteTarget
-			?? throw new InvalidOperationException("No write target configured");
+		var wt = (IndexStrategy?.WriteTarget
+			?? throw new InvalidOperationException("No write target configured")).ToLowerInvariant();
 		return IndexStrategy?.DatePattern != null ? $"{wt}-{{0}}" : wt;
 	}
 
@@ -182,12 +182,12 @@ public record ElasticsearchTypeContext(
 	public string ResolveDataStreamName()
 	{
 		if (IndexStrategy?.DataStreamName != null)
-			return IndexStrategy.DataStreamName;
+			return IndexStrategy.DataStreamName.ToLowerInvariant();
 
 		if (IndexStrategy?.Type != null && IndexStrategy?.Dataset != null)
 		{
 			var ns = IndexStrategy.Namespace ?? ResolveDefaultNamespace();
-			return $"{IndexStrategy.Type}-{IndexStrategy.Dataset}-{ns}";
+			return $"{IndexStrategy.Type}-{IndexStrategy.Dataset}-{ns}".ToLowerInvariant();
 		}
 
 		throw new InvalidOperationException(
@@ -198,7 +198,7 @@ public record ElasticsearchTypeContext(
 	/// Resolves the component/index template name.
 	/// </summary>
 	public string ResolveTemplateName() =>
-		EntityTarget switch
+		(EntityTarget switch
 		{
 			EntityTarget.DataStream or EntityTarget.WiredStream
 				when IndexStrategy?.Type != null && IndexStrategy?.Dataset != null =>
@@ -207,7 +207,7 @@ public record ElasticsearchTypeContext(
 				$"{IndexStrategy.WriteTarget}-template",
 			_ => MappedType?.Name.ToLowerInvariant() + "-template"
 				?? throw new InvalidOperationException("Cannot resolve template name from context.")
-		};
+		}).ToLowerInvariant();
 
 	// ── With* methods ────────────────────────────────────────────────────
 
@@ -219,19 +219,19 @@ public record ElasticsearchTypeContext(
 		{
 			IndexStrategy = IndexStrategy == null ? null : new IndexStrategy
 			{
-				DataStreamName = IndexStrategy.Type != null && IndexStrategy.Dataset != null
+				DataStreamName = (IndexStrategy.Type != null && IndexStrategy.Dataset != null
 					? $"{IndexStrategy.Type}-{IndexStrategy.Dataset}-{ns}"
-					: IndexStrategy.DataStreamName,
-				Type = IndexStrategy.Type,
-				Dataset = IndexStrategy.Dataset,
-				Namespace = ns,
-				WriteTarget = IndexStrategy.WriteTarget,
+					: IndexStrategy.DataStreamName)?.ToLowerInvariant(),
+				Type = IndexStrategy.Type?.ToLowerInvariant(),
+				Dataset = IndexStrategy.Dataset?.ToLowerInvariant(),
+				Namespace = ns.ToLowerInvariant(),
+				WriteTarget = IndexStrategy.WriteTarget?.ToLowerInvariant(),
 				DatePattern = IndexStrategy.DatePattern,
 			},
 			SearchStrategy = SearchStrategy == null ? null : new SearchStrategy
 			{
-				Pattern = SearchStrategy.Pattern,
-				ReadAlias = SearchStrategy.ReadAlias,
+				Pattern = SearchStrategy.Pattern?.ToLowerInvariant(),
+				ReadAlias = SearchStrategy.ReadAlias?.ToLowerInvariant(),
 			}
 		};
 
@@ -244,17 +244,17 @@ public record ElasticsearchTypeContext(
 		{
 			IndexStrategy = IndexStrategy == null ? null : new IndexStrategy
 			{
-				WriteTarget = writeTarget,
+				WriteTarget = writeTarget.ToLowerInvariant(),
 				DatePattern = IndexStrategy.DatePattern,
-				DataStreamName = IndexStrategy.DataStreamName,
-				Type = IndexStrategy.Type,
-				Dataset = IndexStrategy.Dataset,
-				Namespace = IndexStrategy.Namespace,
+				DataStreamName = IndexStrategy.DataStreamName?.ToLowerInvariant(),
+				Type = IndexStrategy.Type?.ToLowerInvariant(),
+				Dataset = IndexStrategy.Dataset?.ToLowerInvariant(),
+				Namespace = IndexStrategy.Namespace?.ToLowerInvariant(),
 			},
 			SearchStrategy = new SearchStrategy
 			{
-				ReadAlias = SearchStrategy?.ReadAlias,
-				Pattern = IndexStrategy?.DatePattern != null ? $"{writeTarget}-*" : null,
+				ReadAlias = SearchStrategy?.ReadAlias?.ToLowerInvariant(),
+				Pattern = IndexStrategy?.DatePattern != null ? $"{writeTarget.ToLowerInvariant()}-*" : null,
 			}
 		};
 
