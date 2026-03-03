@@ -110,6 +110,49 @@ public class IncrementalSyncOrchestratorTests
 	}
 
 	[Test]
+	public async Task RolloverInfoIsPopulatedOnContext()
+	{
+		using var orchestrator = CreateOrchestrator(Transport);
+
+		var context = await orchestrator.StartAsync(BootstrapMethod.Silent);
+
+		context.PrimaryRollover.Should().NotBeNull();
+		context.PrimaryRollover!.Label.Should().Be("primary");
+		context.PrimaryRollover.LocalHash.Should().NotBeNullOrEmpty();
+		context.PrimaryRollover.RolledOver.Should().BeTrue(
+			"mock transport returns empty hash → local != remote → rolled over");
+
+		context.SecondaryRollover.Should().NotBeNull();
+		context.SecondaryRollover!.Label.Should().Be("secondary");
+		context.SecondaryRollover.LocalHash.Should().NotBeNullOrEmpty();
+		context.SecondaryRollover.RolledOver.Should().BeTrue();
+	}
+
+	[Test]
+	public async Task OnRolloverDecisionIsInvokedForBothIndices()
+	{
+		var primary = CreateTypeContext("primary-docs", "primary-search", "primary-docs-*");
+		var secondary = CreateTypeContext("secondary-docs", "secondary-search", "secondary-docs-*");
+
+		var decisions = new List<IndexRolloverInfo>();
+		using var orchestrator = new IncrementalSyncOrchestrator<TestDocument>(Transport, primary, secondary)
+		{
+			OnRolloverDecision = info => decisions.Add(info)
+		};
+
+		await orchestrator.StartAsync(BootstrapMethod.Silent);
+
+		decisions.Should().HaveCount(2);
+		decisions[0].Label.Should().Be("primary");
+		decisions[1].Label.Should().Be("secondary");
+		decisions.Should().AllSatisfy(d =>
+		{
+			d.LocalHash.Should().NotBeNullOrEmpty();
+			d.RolledOver.Should().BeTrue("mock returns empty hash → always rolled over");
+		});
+	}
+
+	[Test]
 	public async Task StartExecutesPreBootstrapTasks()
 	{
 		using var orchestrator = CreateOrchestrator(Transport);
