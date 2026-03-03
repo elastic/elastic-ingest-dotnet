@@ -146,10 +146,6 @@ internal static class ContextEmitter
 		var mappingsJson = SharedEmitterHelpers.GenerateMappingsJson(typeModel);
 		var indexJson = SharedEmitterHelpers.GenerateIndexJson(settingsJson, mappingsJson);
 
-		var settingsHash = SharedEmitterHelpers.ComputeHash(settingsJson);
-		var mappingsHash = SharedEmitterHelpers.ComputeHash(mappingsJson);
-		var combinedHash = SharedEmitterHelpers.ComputeHash(indexJson);
-
 		var hasInterfaceConfig = reg.ConfigurationClassName != null;
 		var templated = IsTemplated(reg);
 
@@ -166,12 +162,6 @@ internal static class ContextEmitter
 			sb.AppendLine($"{indent}\tinternal static {configInterfaceType}? _configOverride;");
 			sb.AppendLine();
 		}
-
-		// Hashes
-		sb.AppendLine($"{indent}\tprivate const string _hash = \"{combinedHash}\";");
-		sb.AppendLine($"{indent}\tprivate const string _settingsHash = \"{settingsHash}\";");
-		sb.AppendLine($"{indent}\tprivate const string _mappingsHash = \"{mappingsHash}\";");
-		sb.AppendLine();
 		var contextFieldName = templated ? "_baseContext" : "Context";
 		var contextVisibility = templated ? "private" : "public";
 
@@ -201,6 +191,10 @@ internal static class ContextEmitter
 			}
 		}
 
+		// Runtime context: Lazy computation of full index JSON and hashes
+		// that include ConfigureMappings, ConfigureAnalysis, and IndexSettings
+		EmitRuntimeContext(sb, reg, indent + "\t");
+
 		// Context instance
 		if (templated)
 			sb.AppendLine($"{indent}\t/// <summary>Base context with mappings and settings. Use <see cref=\"CreateContext\"/> to resolve the name template.</summary>");
@@ -210,9 +204,9 @@ internal static class ContextEmitter
 		sb.AppendLine($"{indent}\t\t_GetSettingsJson,");
 		sb.AppendLine($"{indent}\t\t_GetMappingJson,");
 		sb.AppendLine($"{indent}\t\t_GetIndexJson,");
-		sb.AppendLine($"{indent}\t\t_hash,");
-		sb.AppendLine($"{indent}\t\t_settingsHash,");
-		sb.AppendLine($"{indent}\t\t_mappingsHash,");
+		sb.AppendLine($"{indent}\t\t_runtimeContext.Value.Hash,");
+		sb.AppendLine($"{indent}\t\t_runtimeContext.Value.SettingsHash,");
+		sb.AppendLine($"{indent}\t\t_runtimeContext.Value.MappingsHash,");
 		sb.AppendLine($"{indent}\t\tnew global::Elastic.Mapping.IndexStrategy()");
 		EmitIndexStrategyInit(sb, reg, indent + "\t\t");
 		sb.AppendLine(",");
@@ -272,15 +266,15 @@ internal static class ContextEmitter
 		sb.AppendLine($"{indent}\t);");
 		sb.AppendLine();
 
-		// Hash accessors
-		sb.AppendLine($"{indent}\t/// <summary>Combined hash of settings and mappings.</summary>");
-		sb.AppendLine($"{indent}\tpublic string Hash => _hash;");
+		// Hash accessors — delegate to runtime-computed values that include all overrides
+		sb.AppendLine($"{indent}\t/// <summary>Combined hash of settings and mappings (includes ConfigureMappings, ConfigureAnalysis, IndexSettings).</summary>");
+		sb.AppendLine($"{indent}\tpublic string Hash => _runtimeContext.Value.Hash;");
 		sb.AppendLine();
-		sb.AppendLine($"{indent}\t/// <summary>Hash of settings JSON only.</summary>");
-		sb.AppendLine($"{indent}\tpublic string SettingsHash => _settingsHash;");
+		sb.AppendLine($"{indent}\t/// <summary>Hash of full settings JSON (includes ConfigureAnalysis, IndexSettings).</summary>");
+		sb.AppendLine($"{indent}\tpublic string SettingsHash => _runtimeContext.Value.SettingsHash;");
 		sb.AppendLine();
-		sb.AppendLine($"{indent}\t/// <summary>Hash of mappings JSON only.</summary>");
-		sb.AppendLine($"{indent}\tpublic string MappingsHash => _mappingsHash;");
+		sb.AppendLine($"{indent}\t/// <summary>Hash of mappings JSON (includes ConfigureMappings).</summary>");
+		sb.AppendLine($"{indent}\tpublic string MappingsHash => _runtimeContext.Value.MappingsHash;");
 		sb.AppendLine();
 
 		// Strategies
@@ -382,6 +376,36 @@ internal static class ContextEmitter
 		sb.AppendLine($"{indent}\t\t}},");
 		sb.AppendLine($"{indent}\t}};");
 		sb.AppendLine($"{indent}}}");
+	}
+
+	private static void EmitRuntimeContext(StringBuilder sb, TypeRegistration reg, string indent)
+	{
+		var analysisRef = reg.ConfigureAnalysisReference;
+		var indexSettingsRef = reg.IndexSettingsReference;
+
+		// Build the expression for the ConfigureAnalysis parameter
+		string analysisExpr;
+		if (analysisRef != null)
+			analysisExpr = $"(global::System.Func<global::Elastic.Mapping.Analysis.AnalysisBuilder, global::Elastic.Mapping.Analysis.AnalysisBuilder>){analysisRef}";
+		else
+			analysisExpr = "null";
+
+		// Build the expression for the IndexSettings parameter
+		var indexSettingsExpr = indexSettingsRef ?? "null";
+
+		sb.AppendLine($"{indent}private static readonly global::System.Lazy<(string IndexJson, string Hash, string SettingsHash, string MappingsHash)> _runtimeContext = new(static () =>");
+		sb.AppendLine($"{indent}{{");
+		sb.AppendLine($"{indent}\tvar fullSettings = global::Elastic.Mapping.ElasticsearchTypeContext.BuildFullSettingsJson(");
+		sb.AppendLine($"{indent}\t\t_GetSettingsJson(), {analysisExpr}, {indexSettingsExpr});");
+		sb.AppendLine($"{indent}\tvar mappings = _GetMappingJson();");
+		sb.AppendLine($"{indent}\tvar indexJson = \"{{\\\"settings\\\":\" + fullSettings + \",\\\"mappings\\\":\" + mappings + \"}}\";");
+		sb.AppendLine($"{indent}\treturn (");
+		sb.AppendLine($"{indent}\t\tindexJson,");
+		sb.AppendLine($"{indent}\t\tglobal::Elastic.Mapping.ElasticsearchTypeContext.ComputeHash(indexJson),");
+		sb.AppendLine($"{indent}\t\tglobal::Elastic.Mapping.ElasticsearchTypeContext.ComputeHash(fullSettings),");
+		sb.AppendLine($"{indent}\t\tglobal::Elastic.Mapping.ElasticsearchTypeContext.ComputeHash(mappings));");
+		sb.AppendLine($"{indent}}});");
+		sb.AppendLine();
 	}
 
 	private static void EmitBatchTrackingMembers(StringBuilder sb, TypeRegistration reg, string typeFqn, string indent)
@@ -617,8 +641,7 @@ internal static class ContextEmitter
 		}
 		sb.AppendLine();
 
-		sb.AppendLine($"{indent}private static string _GetIndexJson() =>");
-		SharedEmitterHelpers.EmitRawStringLiteral(sb, indexJson, indent + "\t");
+		sb.AppendLine($"{indent}private static string _GetIndexJson() => _runtimeContext.Value.IndexJson;");
 		sb.AppendLine();
 
 		sb.AppendLine($"{indent}/// <summary>Returns the index settings JSON.</summary>");

@@ -4,6 +4,11 @@
 
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Elastic.Mapping.Analysis;
 
 namespace Elastic.Mapping;
@@ -278,4 +283,77 @@ public record ElasticsearchTypeContext(
 		?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
 		?? Environment.GetEnvironmentVariable("ENVIRONMENT")
 		?? DefaultNamespaceFallback;
+
+	// ── Hash computation ────────────────────────────────────────────────
+
+	/// <summary>
+	/// The hash version marker, matching <c>SharedEmitterHelpers.GeneratorMajorVersion</c>.
+	/// Ensures hashes change on generator major version bumps.
+	/// </summary>
+	public const int HashVersion = 1;
+
+	/// <summary>
+	/// Computes a 16-character hex SHA-256 hash of the given content,
+	/// prefixed with a version marker for cache-busting across generator major versions.
+	/// </summary>
+	public static string ComputeHash(string content)
+	{
+		var input = $"v{HashVersion}:{Minify(content)}";
+#if NET8_0_OR_GREATER
+		var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+		return Convert.ToHexString(bytes)[..16].ToLowerInvariant();
+#else
+		using var sha = SHA256.Create();
+		var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(input));
+		return BitConverter.ToString(bytes).Replace("-", "").Substring(0, 16).ToLowerInvariant();
+#endif
+	}
+
+	/// <summary>
+	/// Builds full settings JSON by merging analysis configuration and index settings
+	/// into the base settings JSON. Returns the base settings unchanged when no overrides are present.
+	/// </summary>
+	public static string BuildFullSettingsJson(
+		string baseSettingsJson,
+		Func<AnalysisBuilder, AnalysisBuilder>? configureAnalysis,
+		IReadOnlyDictionary<string, string>? indexSettings)
+	{
+		var settings = baseSettingsJson;
+
+		if (configureAnalysis != null)
+		{
+			var builder = new AnalysisBuilder();
+			var result = configureAnalysis(builder);
+			if (result.HasConfiguration)
+				settings = result.Build().MergeIntoSettings(settings);
+		}
+
+		if (indexSettings != null && indexSettings.Count > 0)
+		{
+			var node = JsonNode.Parse(settings) ?? new JsonObject();
+			var obj = node.AsObject();
+			foreach (var kv in indexSettings.OrderBy(x => x.Key))
+				obj[kv.Key] = kv.Value;
+			settings = node.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
+		}
+
+		return settings;
+	}
+
+	private static string Minify(string json)
+	{
+		var sb = new StringBuilder();
+		var inString = false;
+
+		for (var i = 0; i < json.Length; i++)
+		{
+			var c = json[i];
+			if (c == '"' && (i == 0 || json[i - 1] != '\\'))
+				inString = !inString;
+			if (inString || !char.IsWhiteSpace(c))
+				sb.Append(c);
+		}
+
+		return sb.ToString();
+	}
 }
