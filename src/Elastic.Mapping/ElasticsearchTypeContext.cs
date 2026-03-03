@@ -262,13 +262,20 @@ public record ElasticsearchTypeContext(
 	// ── Static helpers ───────────────────────────────────────────────────
 
 	/// <summary>
+	/// The fallback namespace used when no environment variable is set.
+	/// Defaults to <c>"dev"</c>. Set this to override the fallback for all
+	/// subsequent calls to <see cref="ResolveDefaultNamespace"/>.
+	/// </summary>
+	public static string DefaultNamespaceFallback { get; set; } = "dev";
+
+	/// <summary>
 	/// Resolves the default namespace from environment variables in priority order:
 	/// <c>DOTNET_ENVIRONMENT</c> &gt; <c>ASPNETCORE_ENVIRONMENT</c> &gt; <c>ENVIRONMENT</c>,
-	/// falling back to <c>"development"</c>.
+	/// falling back to <see cref="DefaultNamespaceFallback"/>.
 	/// </summary>
 	public static string ResolveDefaultNamespace() =>
 		Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
 		?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
 		?? Environment.GetEnvironmentVariable("ENVIRONMENT")
-		?? "development";
+		?? DefaultNamespaceFallback;
 }
