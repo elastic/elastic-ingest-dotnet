@@ -101,6 +101,9 @@ internal static class TypeAnalyzer
 			if (property.IsStatic || property.IsIndexer)
 				continue;
 
+			if (IsConfigureElasticsearchProperty(property))
+				continue;
+
 			// IgnoreReadOnlyProperties: skip properties with no setter
 			if (stjConfig?.IgnoreReadOnlyProperties == true && property.SetMethod == null && !property.IsReadOnly)
 				continue;
@@ -113,6 +116,27 @@ internal static class TypeAnalyzer
 		}
 
 		return builder.ToImmutable();
+	}
+
+	private static bool IsConfigureElasticsearchProperty(IPropertySymbol property)
+	{
+		var containingType = property.ContainingType;
+		foreach (var iface in containingType.AllInterfaces)
+		{
+			if (!iface.ToDisplayString().StartsWith(ConfigureElasticsearchInterfacePrefix, StringComparison.Ordinal))
+				continue;
+
+			foreach (var member in iface.GetMembers())
+			{
+				if (member is not IPropertySymbol)
+					continue;
+
+				var impl = containingType.FindImplementationForInterfaceMember(member);
+				if (SymbolEqualityComparer.Default.Equals(impl, property))
+					return true;
+			}
+		}
+		return false;
 	}
 
 	private static PropertyMappingModel? AnalyzeProperty(
@@ -337,6 +361,9 @@ internal static class TypeAnalyzer
 			namedType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
 			type = namedType.TypeArguments[0];
 
+		// Unwrap array/collection element types — ES doesn't distinguish single values from arrays
+		type = UnwrapCollectionElementType(type);
+
 		// Use WithNullableAnnotation to strip nullable reference type annotations (e.g. string? → string)
 		var typeName = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
 
@@ -356,6 +383,21 @@ internal static class TypeAnalyzer
 			_ when type.TypeKind == TypeKind.Enum => InferEnumFieldType(type, property, stjConfig),
 			_ => FieldTypes.Object
 		};
+	}
+
+	private static ITypeSymbol UnwrapCollectionElementType(ITypeSymbol type)
+	{
+		if (type is IArrayTypeSymbol arrayType)
+			return arrayType.ElementType;
+
+		if (type is INamedTypeSymbol namedType && namedType.IsGenericType && namedType.TypeArguments.Length == 1)
+		{
+			var originalDef = namedType.OriginalDefinition.ToDisplayString();
+			if (originalDef.StartsWith("System.Collections.Generic.", StringComparison.Ordinal))
+				return namedType.TypeArguments[0];
+		}
+
+		return type;
 	}
 
 	private static string InferEnumFieldType(ITypeSymbol enumType, IPropertySymbol? property, StjContextConfig? stjConfig)
