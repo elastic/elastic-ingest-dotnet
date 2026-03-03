@@ -272,7 +272,9 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		// 5. If the secondary alias already exists we must use Reindex — Multiplex
 		// would write directly to the secondary via scripted bulk upserts, which
 		// fails on indices containing semantic_text fields.
-		if (secondaryExists)
+		// Exception: when both indices rolled over, both backing indices are fresh
+		// so Multiplex is safe and avoids an unnecessary full reindex.
+		if (secondaryExists && !secondaryRolledOver)
 			_strategy = IngestSyncStrategy.Reindex;
 		else if (primaryRolledOver || secondaryRolledOver)
 			_strategy = IngestSyncStrategy.Multiplex;
