@@ -278,4 +278,94 @@ public class MappingGeneratorTests
 		var json = MappingBugMappingContext.MappingBugDocument.GetMappingJson();
 		json.Should().NotContain("indexSettings");
 	}
+
+	// ========================================================================
+	// Gap 1: [Text] + [JsonIgnore(Condition = WhenWritingNull)] + dot-path merge
+	// ========================================================================
+
+	[Test]
+	public void Gap1_ConditionalJsonIgnore_PreservesBaseTextType()
+	{
+		var json = GapFixMappingContext.GapFixDocument.GetMappingJson();
+		using var doc = System.Text.Json.JsonDocument.Parse(json);
+		var props = doc.RootElement.GetProperty("properties");
+
+		var aiQuestions = props.GetProperty("ai_questions");
+		aiQuestions.GetProperty("type").GetString().Should().Be("text",
+			"[Text] + [JsonIgnore(WhenWritingNull)] should still emit 'text' type in mapping");
+	}
+
+	[Test]
+	public void Gap1_DotPathSubFields_UseMultiFieldsNotProperties()
+	{
+		var json = GapFixMappingContext.GapFixDocument.GetMappingJson();
+		using var doc = System.Text.Json.JsonDocument.Parse(json);
+		var props = doc.RootElement.GetProperty("properties");
+
+		var aiQuestions = props.GetProperty("ai_questions");
+		aiQuestions.TryGetProperty("properties", out _).Should().BeFalse(
+			"sub-fields under a text type should be multi-fields, not object properties");
+
+		var fields = aiQuestions.GetProperty("fields");
+		fields.GetProperty("semantic_text").GetProperty("type").GetString().Should().Be("semantic_text");
+		fields.GetProperty("jina").GetProperty("type").GetString().Should().Be("semantic_text");
+	}
+
+	[Test]
+	public void Gap1_SecondConditionalField_AlsoPreservesType()
+	{
+		var json = GapFixMappingContext.GapFixDocument.GetMappingJson();
+		using var doc = System.Text.Json.JsonDocument.Parse(json);
+		var props = doc.RootElement.GetProperty("properties");
+
+		var aiUseCases = props.GetProperty("ai_use_cases");
+		aiUseCases.GetProperty("type").GetString().Should().Be("text");
+		aiUseCases.GetProperty("fields").GetProperty("semantic_text")
+			.GetProperty("type").GetString().Should().Be("semantic_text");
+	}
+
+	[Test]
+	public void Gap1_UnconditionalJsonIgnore_StillExcluded()
+	{
+		var json = GapFixMappingContext.GapFixDocument.GetMappingJson();
+		using var doc = System.Text.Json.JsonDocument.Parse(json);
+		var props = doc.RootElement.GetProperty("properties");
+
+		props.TryGetProperty("internalOnly", out _).Should().BeFalse(
+			"[JsonIgnore] without condition should still exclude the property");
+	}
+
+	// ========================================================================
+	// Gap 2: [Object] with typed sub-class (scalar + array) attribute traversal
+	// ========================================================================
+
+	[Test]
+	public void Gap2_ObjectProperty_EmitsSubTypeAttributes()
+	{
+		var json = GapFixMappingContext.GapFixDocument.GetMappingJson();
+		using var doc = System.Text.Json.JsonDocument.Parse(json);
+		var product = doc.RootElement.GetProperty("properties").GetProperty("product");
+
+		product.GetProperty("type").GetString().Should().Be("object");
+		var subProps = product.GetProperty("properties");
+		subProps.GetProperty("id").GetProperty("type").GetString().Should().Be("keyword");
+		subProps.GetProperty("id").GetProperty("normalizer").GetString().Should().Be("keyword_normalizer");
+		subProps.GetProperty("repository").GetProperty("normalizer").GetString().Should().Be("keyword_normalizer");
+		subProps.GetProperty("displayName").GetProperty("type").GetString().Should().Be("text");
+	}
+
+	[Test]
+	public void Gap2_ObjectArray_EmitsSubTypeAttributes()
+	{
+		var json = GapFixMappingContext.GapFixDocument.GetMappingJson();
+		using var doc = System.Text.Json.JsonDocument.Parse(json);
+		var related = doc.RootElement.GetProperty("properties").GetProperty("related_products");
+
+		related.GetProperty("type").GetString().Should().Be("object");
+		var subProps = related.GetProperty("properties");
+		subProps.GetProperty("id").GetProperty("type").GetString().Should().Be("keyword");
+		subProps.GetProperty("id").GetProperty("normalizer").GetString().Should().Be("keyword_normalizer");
+		subProps.GetProperty("repository").GetProperty("type").GetString().Should().Be("keyword");
+		subProps.GetProperty("displayName").GetProperty("type").GetString().Should().Be("text");
+	}
 }
