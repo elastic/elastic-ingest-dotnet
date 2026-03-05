@@ -62,6 +62,7 @@ public class AiEnrichmentOrchestratorTests
 		opts.MinCompletionBatchSize.Should().Be(5);
 		opts.Timeout.Should().BeNull();
 		opts.DrainTimeout.Should().BeNull();
+		opts.SkipBackfill.Should().BeFalse();
 	}
 
 	[Test]
@@ -394,6 +395,66 @@ public class AiEnrichmentOrchestratorTests
 		phases.Should().Contain(p => p.Phase == AiEnrichmentPhase.Backfilling);
 		var backfill = phases.First(p => p.Phase == AiEnrichmentPhase.Backfilling);
 		backfill.Message.Should().Contain("10 enriched docs");
+	}
+
+	[Test]
+	public async Task SkipBackfillOmitsUpdateByQueryButStillRefreshesAndExecutesPolicy()
+	{
+		var candidateHits = new object[5];
+		for (var i = 0; i < 5; i++)
+			candidateHits[i] = new { _id = $"doc-{i}", sort = new[] { i.ToString(CultureInfo.InvariantCulture) } };
+
+		var esqlResponse = new
+		{
+			columns = new[]
+			{
+				new { name = "_id", type = "keyword" },
+				new { name = "url", type = "keyword" },
+				new { name = "result", type = "keyword" }
+			},
+			values = new[]
+			{
+				new object[] { "doc-0", "/page-0", """{"ai_summary":"Summary 0"}""" },
+				new object[] { "doc-1", "/page-1", """{"ai_summary":"Summary 1"}""" },
+				new object[] { "doc-2", "/page-2", """{"ai_summary":"Summary 2"}""" },
+				new object[] { "doc-3", "/page-3", """{"ai_summary":"Summary 3"}""" },
+				new object[] { "doc-4", "/page-4", """{"ai_summary":"Summary 4"}""" },
+			}
+		};
+
+		var transport = Virtual.Elasticsearch
+			.Bootstrap(1)
+			.ClientCalls(r => r.OnPath("_search").SucceedAlways()
+				.ReturnResponse(new { hits = new { hits = candidateHits } }))
+			.ClientCalls(r => r.OnPath("_query").SucceedAlways()
+				.ReturnResponse(esqlResponse))
+			.ClientCalls(r => r.OnPath("_bulk").SucceedAlways()
+				.ReturnResponse(new { errors = false, items = new[] { new { update = new { status = 200 } } } }))
+			.ClientCalls(r => r.SucceedAlways().ReturnResponse(new { }))
+			.StaticNodePool()
+			.Settings(s => s.DisablePing().EnableDebugMode())
+			.RequestHandler;
+
+		var opts = new AiEnrichmentOptions
+		{
+			MaxEnrichmentsPerRun = 5,
+			EsqlBatchSize = 5,
+			EsqlConcurrency = 1,
+			SkipBackfill = true,
+		};
+
+		using var orchestrator = new AiEnrichmentOrchestrator(transport, CreateProvider());
+		var phases = new List<AiEnrichmentProgress>();
+		await foreach (var p in orchestrator.EnrichAsync("test-index", opts))
+			phases.Add(p);
+
+		phases.Last().Phase.Should().Be(AiEnrichmentPhase.Complete);
+		phases.Last().Enriched.Should().Be(5);
+
+		phases.Should().Contain(p => p.Phase == AiEnrichmentPhase.Refreshing);
+		phases.Should().Contain(p => p.Phase == AiEnrichmentPhase.ExecutingPolicy);
+		phases.Should().NotContain(p => p.Phase == AiEnrichmentPhase.Backfilling,
+			"SkipBackfill=true should omit the _update_by_query step");
 	}
 
 	[Test]

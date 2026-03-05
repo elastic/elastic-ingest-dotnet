@@ -110,6 +110,29 @@ public sealed class AiEnrichmentOptions
 	/// </summary>
 	public TimeSpan? DrainTimeout { get; set; }
 
+	/// <summary>
+	/// When <c>true</c>, <see cref="AiEnrichmentOrchestrator.EnrichAsync"/> skips the
+	/// per-document <c>_update_by_query</c> backfill at the end of the run. The lookup
+	/// index is still refreshed and the enrich policy is still executed, so a subsequent
+	/// call to <see cref="AiEnrichmentOrchestrator.BackfillAllAsync"/> will pick up the
+	/// latest enrichments.
+	/// <para>
+	/// Set this when you plan to run a full <see cref="AiEnrichmentOrchestrator.BackfillAllAsync"/>
+	/// immediately after enrichment — there is no point running a scoped backfill first.
+	/// </para>
+	/// <para><b>Example:</b></para>
+	/// <code>
+	/// var options = new AiEnrichmentOptions { SkipBackfill = true };
+	/// await foreach (var p in orchestrator.EnrichAsync("my-index", options))
+	///     logger.LogInformation("[{Phase}] {Message}", p.Phase, p.Message);
+	///
+	/// // Now backfill ALL documents in one go
+	/// await foreach (var p in orchestrator.BackfillAllAsync("my-index"))
+	///     logger.LogInformation("[{Phase}] {Message}", p.Phase, p.Message);
+	/// </code>
+	/// </summary>
+	public bool SkipBackfill { get; set; }
+
 #if NET8_0_OR_GREATER
 	/// <summary>
 	/// Clock used to measure <see cref="Timeout"/> and <see cref="DrainTimeout"/>.

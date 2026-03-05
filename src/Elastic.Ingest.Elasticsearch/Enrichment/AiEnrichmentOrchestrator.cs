@@ -272,9 +272,12 @@ public class AiEnrichmentOrchestrator : IDisposable
 				$"Executing enrich policy '{_infra.EnrichPolicyName}'...");
 			await ExecuteEnrichPolicyAsync(hardToken).ConfigureAwait(false);
 
-			yield return Progress(AiEnrichmentPhase.Backfilling, enriched, failed, totalCandidates,
-				$"Backfilling {enriched} enriched docs into '{targetIndex}'...");
-			await BackfillAsync(targetIndex, allEnrichedDocIds, hardToken).ConfigureAwait(false);
+			if (!opts.SkipBackfill)
+			{
+				yield return Progress(AiEnrichmentPhase.Backfilling, enriched, failed, totalCandidates,
+					$"Backfilling {enriched} enriched docs into '{targetIndex}'...");
+				await BackfillAsync(targetIndex, allEnrichedDocIds, hardToken).ConfigureAwait(false);
+			}
 		}
 
 		yield return Progress(AiEnrichmentPhase.Complete, enriched, failed, totalCandidates, null);
