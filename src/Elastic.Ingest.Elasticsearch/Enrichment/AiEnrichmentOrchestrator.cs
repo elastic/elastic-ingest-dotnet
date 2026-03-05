@@ -818,15 +818,33 @@ public class AiEnrichmentOrchestrator : IDisposable
 		return JsonDocument.Parse(sb.ToString()).RootElement.Clone();
 	}
 
+	private static readonly JsonSerializerOptions BulkSerializerOptions = new()
+	{
+		DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault,
+		Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+	};
+
 	private async Task<int> BulkUpsertLookupAsync(List<LookupUpdate> updates, CancellationToken ct)
 	{
+		PostData body;
+
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
+		var items = updates.ToArray();
+		var bytes = BulkRequestDataFactory.GetBytes(
+			items.AsSpan(),
+			BulkSerializerOptions,
+			static u => new UpdateOperation { Id = u.UrlHash },
+			static u => u.Document);
+		body = PostData.ReadOnlyMemory(bytes);
+#else
 		var sb = new StringBuilder();
 		foreach (var update in updates)
 		{
 			sb.Append("{\"update\":{\"_id\":\"").Append(update.UrlHash).Append("\"}}\n");
 			sb.Append("{\"doc_as_upsert\":true,\"doc\":").Append(update.Document.GetRawText()).Append("}\n");
 		}
-		var body = PostData.String(sb.ToString());
+		body = PostData.String(sb.ToString());
+#endif
 
 		var response = await _transport.RequestAsync<StringResponse>(
 			HttpMethod.POST,
