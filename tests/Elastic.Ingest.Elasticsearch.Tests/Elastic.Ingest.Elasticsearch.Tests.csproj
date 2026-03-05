@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="Elastic.Transport.VirtualizedCluster" Version="0.14.0" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.3.0" />
   </ItemGroup>
 
   <ItemGroup>
