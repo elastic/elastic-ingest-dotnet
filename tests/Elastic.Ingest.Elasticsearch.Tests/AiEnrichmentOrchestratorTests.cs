@@ -396,6 +396,42 @@ public class AiEnrichmentOrchestratorTests
 		backfill.Message.Should().Contain("10 enriched docs");
 	}
 
+	[Test]
+	public async Task BackfillAllAsyncYieldsProgressAndCompletes()
+	{
+		var transport = Virtual.Elasticsearch
+			.Bootstrap(1)
+			.ClientCalls(r => r.OnPath("_update_by_query").SucceedAlways()
+				.ReturnResponse(new { task = "node:42" }))
+			.ClientCalls(r => r.OnPath("_tasks").SucceedAlways()
+				.ReturnResponse(new
+				{
+					completed = true,
+					task = new { status = new { total = 500, updated = 500, created = 0, version_conflicts = 0 } }
+				}))
+			.ClientCalls(r => r.SucceedAlways().ReturnResponse(new { }))
+			.StaticNodePool()
+			.Settings(s => s.DisablePing().EnableDebugMode())
+			.RequestHandler;
+
+		using var orchestrator = new AiEnrichmentOrchestrator(transport, CreateProvider());
+
+		var phases = new List<AiEnrichmentProgress>();
+		await foreach (var p in orchestrator.BackfillAllAsync("test-index", pollInterval: TimeSpan.FromMilliseconds(1)))
+			phases.Add(p);
+
+		phases.Should().HaveCountGreaterOrEqualTo(3);
+
+		phases.First().Phase.Should().Be(AiEnrichmentPhase.Backfilling);
+		phases.First().Message.Should().Contain("Starting full backfill");
+
+		phases.Should().Contain(p =>
+			p.Phase == AiEnrichmentPhase.Backfilling && p.Message != null && p.Message.Contains("500/500"));
+
+		phases.Last().Phase.Should().Be(AiEnrichmentPhase.Complete);
+		phases.Last().Message.Should().Contain("Full backfill completed");
+	}
+
 	private static string UrlHash(string url)
 	{
 		var hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(url));

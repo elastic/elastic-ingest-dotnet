@@ -281,6 +281,70 @@ public class AiEnrichmentOrchestrator : IDisposable
 	}
 
 	/// <summary>
+	/// Applies the enrich pipeline to <b>all</b> documents in the target index via a single
+	/// <c>_update_by_query</c> that runs asynchronously on the server. Progress is yielded
+	/// on each task-poll so callers can report throughput.
+	/// <para>
+	/// Use this after <see cref="InitializeAsync"/> to force a complete backfill, or as
+	/// a one-off catch-up when documents were indexed before the pipeline existed.
+	/// </para>
+	/// <para><b>Example:</b></para>
+	/// <code>
+	/// await foreach (var p in orchestrator.BackfillAllAsync("my-index"))
+	///     logger.LogInformation("[{Phase}] {Message}", p.Phase, p.Message);
+	/// </code>
+	/// </summary>
+	/// <param name="targetIndex">The index to update.</param>
+	/// <param name="pollInterval">How often to poll the background task. Default: 5 s.</param>
+	/// <param name="ct">Cancellation token.</param>
+	public async IAsyncEnumerable<AiEnrichmentProgress> BackfillAllAsync(
+		string targetIndex,
+		TimeSpan? pollInterval = null,
+		[EnumeratorCancellation] CancellationToken ct = default)
+	{
+		var interval = pollInterval ?? TimeSpan.FromSeconds(5);
+
+		yield return Progress(AiEnrichmentPhase.Backfilling, 0, 0, 0,
+			$"Starting full backfill on '{targetIndex}' via pipeline '{_infra.PipelineName}'...");
+
+		var url = $"/{targetIndex}/_update_by_query?wait_for_completion=false&pipeline={_infra.PipelineName}";
+		var response = await _transport.RequestAsync<JsonResponse>(
+			HttpMethod.POST, url,
+			PostData.Serializable(new QueryRequest { Query = JsonDocument.Parse("{\"match_all\":{}}").RootElement.Clone() }),
+			cancellationToken: ct).ConfigureAwait(false);
+
+		if (response.ApiCallDetails.HttpStatusCode is not 200)
+		{
+			yield return Progress(AiEnrichmentPhase.Complete, 0, 0, 0,
+				$"_update_by_query failed: HTTP {response.ApiCallDetails.HttpStatusCode}");
+			yield break;
+		}
+
+		var taskId = response.Get<string>("task");
+		if (string.IsNullOrEmpty(taskId))
+		{
+			yield return Progress(AiEnrichmentPhase.Complete, 0, 0, 0, "No task ID returned.");
+			yield break;
+		}
+
+		await foreach (var taskResponse in ElasticsearchTaskMonitor.PollTaskAsync(
+			_transport, taskId, interval, ct).ConfigureAwait(false))
+		{
+			var updated = taskResponse.Get<int?>("task.status.updated") ?? 0;
+			var total = taskResponse.Get<int?>("task.status.total") ?? 0;
+			var created = taskResponse.Get<int?>("task.status.created") ?? 0;
+			var failures = taskResponse.Get<int?>("task.status.version_conflicts") ?? 0;
+			var completed = taskResponse.Get<bool>("completed");
+
+			yield return Progress(AiEnrichmentPhase.Backfilling, updated, failures, total,
+				$"Backfilling: {updated + created}/{total} docs processed"
+				+ (completed ? " — done." : "..."));
+		}
+
+		yield return Progress(AiEnrichmentPhase.Complete, 0, 0, 0, "Full backfill completed.");
+	}
+
+	/// <summary>
 	/// Deletes lookup entries whose match field value doesn't exist in the target index.
 	/// Uses <see cref="PointInTimeSearch{TDocument}"/> over the lookup index, then
 	/// batch-checks existence against the target via terms queries.
