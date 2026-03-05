@@ -85,16 +85,19 @@ public abstract class IngestChannelOptionsBase<TEvent> : TransportChannelOptions
 		}
 	}
 
+	private JsonSerializerOptions _serializerOptions = CreateDefaultSerializerOptions();
+
 	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "Fallback for user TEvent types not covered by a source-generated context")]
 	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "Fallback for user TEvent types not covered by a source-generated context")]
-	private JsonSerializerOptions _serializerOptions = new(IngestChannelStatics.SerializerOptions)
-	{
-		TypeInfoResolver = JsonTypeInfoResolver.Combine(
-			new DefaultJsonTypeInfoResolver(),
-			IngestSerializationContext.Default,
-			ElasticsearchTransportSerializerContext.Default
-		),
-	};
+	private static JsonSerializerOptions CreateDefaultSerializerOptions() =>
+		new(IngestChannelStatics.SerializerOptions)
+		{
+			TypeInfoResolver = JsonTypeInfoResolver.Combine(
+				new DefaultJsonTypeInfoResolver(),
+				IngestSerializationContext.Default,
+				ElasticsearchTransportSerializerContext.Default
+			),
+		};
 
 	internal JsonSerializerOptions SerializerOptions => _serializerOptions;
 }
