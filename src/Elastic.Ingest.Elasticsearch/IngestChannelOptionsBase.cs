@@ -44,8 +44,8 @@ public abstract class IngestChannelOptionsBase<TEvent> : TransportChannelOptions
 	private IJsonTypeInfoResolver? _serializerContext;
 
 	/// <summary> The JsonSerializerContext to use for serialization. </summary>
-	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "We always provide a static JsonTypeInfoResolver")]
-	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "We always provide a static JsonTypeInfoResolver")]
+	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "Fallback for user TEvent types not covered by a source-generated context")]
+	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "Fallback for user TEvent types not covered by a source-generated context")]
 	public JsonSerializerContext SerializerContext
 	{
 		set
@@ -56,23 +56,20 @@ public abstract class IngestChannelOptionsBase<TEvent> : TransportChannelOptions
 				ElasticsearchTransportSerializerContext.Default,
 				value
 			);
-			_serializerOptions = new JsonSerializerOptions
+			_serializerOptions = new JsonSerializerOptions(IngestChannelStatics.SerializerOptions)
 			{
 				TypeInfoResolver = _serializerContext,
-				DefaultIgnoreCondition = IngestChannelStatics.SerializerOptions.DefaultIgnoreCondition,
-				Encoder = IngestChannelStatics.SerializerOptions.Encoder
 			};
 		}
 	}
 
 	/// <summary> The JsonSerializerContexts to use for serialization. </summary>
-	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "We always provide a static JsonTypeInfoResolver")]
-	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "We always provide a static JsonTypeInfoResolver")]
+	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "Fallback for user TEvent types not covered by a source-generated context")]
+	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "Fallback for user TEvent types not covered by a source-generated context")]
 	public JsonSerializerContext[] SerializerContexts
 	{
 		set
 		{
-
 			_serializerContext = JsonTypeInfoResolver.Combine(
 				[
 					new DefaultJsonTypeInfoResolver(),
@@ -81,20 +78,26 @@ public abstract class IngestChannelOptionsBase<TEvent> : TransportChannelOptions
 					.. value
 				]
 			);
-			_serializerOptions = new JsonSerializerOptions
+			_serializerOptions = new JsonSerializerOptions(IngestChannelStatics.SerializerOptions)
 			{
 				TypeInfoResolver = _serializerContext,
-				DefaultIgnoreCondition = IngestChannelStatics.SerializerOptions.DefaultIgnoreCondition,
-				Encoder = IngestChannelStatics.SerializerOptions.Encoder
 			};
 		}
 	}
 
-	private JsonSerializerOptions _serializerOptions = new()
-	{
-		DefaultIgnoreCondition = IngestChannelStatics.SerializerOptions.DefaultIgnoreCondition,
-		Encoder = IngestChannelStatics.SerializerOptions.Encoder
-	};
+	private JsonSerializerOptions _serializerOptions = CreateDefaultSerializerOptions();
+
+	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "Fallback for user TEvent types not covered by a source-generated context")]
+	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "Fallback for user TEvent types not covered by a source-generated context")]
+	private static JsonSerializerOptions CreateDefaultSerializerOptions() =>
+		new(IngestChannelStatics.SerializerOptions)
+		{
+			TypeInfoResolver = JsonTypeInfoResolver.Combine(
+				new DefaultJsonTypeInfoResolver(),
+				IngestSerializationContext.Default,
+				ElasticsearchTransportSerializerContext.Default
+			),
+		};
 
 	internal JsonSerializerOptions SerializerOptions => _serializerOptions;
 }

@@ -9,6 +9,7 @@ using Elastic.Ingest.Elasticsearch.Enrichment;
 
 namespace Elastic.Ingest.Elasticsearch.Serialization;
 
+[JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault)]
 [JsonSerializable(typeof(BulkOperationHeader))]
 [JsonSerializable(typeof(CreateOperation))]
 [JsonSerializable(typeof(IndexOperation))]
@@ -20,8 +21,4 @@ namespace Elastic.Ingest.Elasticsearch.Serialization;
 [JsonSerializable(typeof(Dictionary<string, string>))]
 [JsonSerializable(typeof(QueryRequest))]
 [JsonSerializable(typeof(JsonElement))]
-internal sealed partial class IngestSerializationContext : JsonSerializerContext
-{
-	static IngestSerializationContext() =>
-		Default = new IngestSerializationContext(IngestChannelStatics.SerializerOptions);
-}
+internal sealed partial class IngestSerializationContext : JsonSerializerContext;
