@@ -826,8 +826,6 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 	private async Task<int> BulkUpsertLookupAsync(List<LookupUpdate> updates, CancellationToken ct)
 	{
-		PostData body;
-
 #if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 		var items = updates.ToArray();
 		var bytes = BulkRequestDataFactory.GetBytes(
@@ -835,7 +833,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 			BulkSerializerOptions,
 			static u => new UpdateOperation { Id = u.UrlHash },
 			static u => u.Document);
-		body = PostData.ReadOnlyMemory(bytes);
+		var body = PostData.ReadOnlyMemory(bytes);
 #else
 		var sb = new StringBuilder();
 		foreach (var update in updates)
@@ -843,7 +841,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 			sb.Append("{\"update\":{\"_id\":\"").Append(update.UrlHash).Append("\"}}\n");
 			sb.Append("{\"doc_as_upsert\":true,\"doc\":").Append(update.Document.GetRawText()).Append("}\n");
 		}
-		body = PostData.String(sb.ToString());
+		var body = PostData.Bytes(Encoding.UTF8.GetBytes(sb.ToString()));
 #endif
 
 		var response = await _transport.RequestAsync<StringResponse>(
