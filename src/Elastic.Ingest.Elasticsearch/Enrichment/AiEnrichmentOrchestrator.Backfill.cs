@@ -19,12 +19,6 @@ namespace Elastic.Ingest.Elasticsearch.Enrichment;
 
 public partial class AiEnrichmentOrchestrator
 {
-	private static readonly JsonSerializerOptions BulkSerializerOptions = new()
-	{
-		DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault,
-		Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-	};
-
 	// Elasticsearch ids query uses terms on _id under the hood (default
 	// index.max_terms_count = 65 536).  We batch well under that to keep
 	// individual _update_by_query requests small and predictable.
@@ -59,7 +53,7 @@ public partial class AiEnrichmentOrchestrator
 		var items = updates.ToArray();
 		var bytes = BulkRequestDataFactory.GetBytes(
 			items.AsSpan(),
-			BulkSerializerOptions,
+			IngestChannelStatics.SerializerOptions,
 			static u => new UpdateOperation { Id = u.UrlHash },
 			static u => u.Document);
 		var body = PostData.ReadOnlyMemory(bytes);

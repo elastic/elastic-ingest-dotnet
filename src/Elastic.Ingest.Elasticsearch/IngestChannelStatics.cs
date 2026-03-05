@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Elastic.Ingest.Elasticsearch.Serialization;
 
 namespace Elastic.Ingest.Elasticsearch;
 
@@ -43,9 +44,8 @@ internal static class IngestChannelStatics
 
 	public static readonly HashSet<int> RetryStatusCodes = [502, 503, 504, 429];
 
-	public static readonly JsonSerializerOptions SerializerOptions = new ()
+	public static readonly JsonSerializerOptions SerializerOptions = new(IngestSerializationContext.Default.Options)
 	{
-		DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
 		Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
 	};
 
