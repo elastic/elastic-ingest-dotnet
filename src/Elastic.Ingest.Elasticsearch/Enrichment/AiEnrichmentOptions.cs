@@ -109,6 +109,15 @@ public sealed class AiEnrichmentOptions
 	/// Default: <see cref="CompletionTimeout"/> + 30 seconds.
 	/// </summary>
 	public TimeSpan? DrainTimeout { get; set; }
+
+#if NET8_0_OR_GREATER
+	/// <summary>
+	/// Clock used to measure <see cref="Timeout"/> and <see cref="DrainTimeout"/>.
+	/// Defaults to <see cref="System.TimeProvider.System"/>.
+	/// Override with a <c>FakeTimeProvider</c> in tests for deterministic timing.
+	/// </summary>
+	public TimeProvider TimeProvider { get; set; } = TimeProvider.System;
+#endif
 }
 
 /// <summary>

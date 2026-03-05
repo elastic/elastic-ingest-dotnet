@@ -10,7 +10,6 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Ingest.Elasticsearch.Enrichment;
 using Elastic.Mapping;
@@ -18,6 +17,7 @@ using Elastic.Transport;
 using Elastic.Transport.VirtualizedCluster;
 using Elastic.Transport.VirtualizedCluster.Components;
 using FluentAssertions;
+using Microsoft.Extensions.Time.Testing;
 using TUnit.Core;
 
 namespace Elastic.Ingest.Elasticsearch.Tests;
@@ -216,6 +216,7 @@ public class AiEnrichmentOrchestratorTests
 
 	/// <summary>
 	/// Demonstrates the recommended pattern for time-boxed CI enrichment.
+	/// Uses <c>FakeTimeProvider</c> so the test is deterministic — no wall-clock waits.
 	///
 	/// Real-world usage:
 	/// <code>
@@ -277,31 +278,36 @@ public class AiEnrichmentOrchestratorTests
 			.Settings(s => s.DisablePing().EnableDebugMode())
 			.RequestHandler;
 
-		// ── Act: cancel ct after 2 chunks — with Timeout set, ct triggers
-		//    the soft-stop while the hard timeout protects the drain+backfill ──
+		// ── Act: advance fake clock past the soft-stop point after 2 chunks ──
 
-		var cts = new CancellationTokenSource();
+		var fakeTime = new FakeTimeProvider();
 
 		var opts = new AiEnrichmentOptions
 		{
 			MaxEnrichmentsPerRun = 20,
 			EsqlBatchSize = 5,
 			EsqlConcurrency = 1,
-			Timeout = TimeSpan.FromSeconds(30),
+			Timeout = TimeSpan.FromMinutes(20),
+			DrainTimeout = TimeSpan.FromMinutes(5),
+			TimeProvider = fakeTime,
 		};
 
 		using var orchestrator = new AiEnrichmentOrchestrator(transport, CreateProvider());
 
 		var phases = new List<AiEnrichmentProgress>();
-		await foreach (var p in orchestrator.EnrichAsync("test-index", opts, cts.Token))
+		var advancedTime = false;
+		await foreach (var p in orchestrator.EnrichAsync("test-index", opts))
 		{
 			phases.Add(p);
 
-			// Simulate app-level cancellation (or a real timer) after 2 chunks.
-			// Because Timeout is set, ct cancellation triggers the soft-stop
-			// while the hard timeout (30s) protects the drain+backfill phase.
-			if (phases.Count(x => x.Phase == AiEnrichmentPhase.Enriching) >= 2)
-				cts.Cancel();
+			// After 2 COMPLETION chunks finish, advance the fake clock past the
+			// soft-stop point (15 min) but before the hard deadline (20 min).
+			// This triggers graceful drainage without any wall-clock delay.
+			if (!advancedTime && phases.Count(x => x.Phase == AiEnrichmentPhase.Enriching) >= 2)
+			{
+				fakeTime.Advance(TimeSpan.FromMinutes(16));
+				advancedTime = true;
+			}
 		}
 
 		// ── Assert ──

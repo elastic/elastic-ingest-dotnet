@@ -114,16 +114,13 @@ public class AiEnrichmentOrchestrator : IDisposable
 	{
 		var opts = options ?? new AiEnrichmentOptions();
 
-		using var softCts = opts.Timeout.HasValue ? new CancellationTokenSource() : null;
-		using var hardCts = opts.Timeout.HasValue ? new CancellationTokenSource() : null;
-		if (opts.Timeout is { } timeout)
-		{
-			var drainGrace = opts.DrainTimeout ?? (opts.CompletionTimeout + TimeSpan.FromSeconds(30));
-			var softDelay = timeout - drainGrace;
-			if (softDelay > TimeSpan.Zero)
-				softCts!.CancelAfter(softDelay);
-			hardCts!.CancelAfter(timeout);
-		}
+		var drainGrace = opts.DrainTimeout ?? (opts.CompletionTimeout + TimeSpan.FromSeconds(30));
+		var softDelay = opts.Timeout.HasValue ? opts.Timeout.Value - drainGrace : TimeSpan.Zero;
+
+		using var softCts = opts.Timeout.HasValue && softDelay > TimeSpan.Zero
+			? CreateTimeoutCts(opts, softDelay) : null;
+		using var hardCts = opts.Timeout.HasValue
+			? CreateTimeoutCts(opts, opts.Timeout.Value) : null;
 
 		var stopToken = softCts?.Token ?? CancellationToken.None;
 		var hardToken = hardCts?.Token ?? ct;
@@ -686,6 +683,37 @@ public class AiEnrichmentOrchestrator : IDisposable
 			activeTasks[task] = next;
 		}
 	}
+
+	private static CancellationTokenSource CreateTimeoutCts(
+		AiEnrichmentOptions opts, TimeSpan delay)
+	{
+#if NET8_0_OR_GREATER
+		var cts = new TimeProviderCts(opts.TimeProvider, delay);
+		return cts;
+#else
+		return new CancellationTokenSource(delay);
+#endif
+	}
+
+#if NET8_0_OR_GREATER
+	private sealed class TimeProviderCts : CancellationTokenSource
+	{
+		private readonly ITimer _timer;
+
+		public TimeProviderCts(TimeProvider timeProvider, TimeSpan delay)
+		{
+			_timer = timeProvider.CreateTimer(
+				static s => ((CancellationTokenSource)s!).Cancel(), this,
+				delay, Timeout.InfiniteTimeSpan);
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			_timer.Dispose();
+			base.Dispose(disposing);
+		}
+	}
+#endif
 
 	private static List<List<T>> ChunkList<T>(List<T> source, int chunkSize)
 	{
