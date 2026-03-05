@@ -94,10 +94,17 @@ public class AiEnrichmentOrchestrator : IDisposable
 	/// Post-indexing: streams <see cref="AiEnrichmentProgress"/> as enrichment proceeds.
 	/// Queries the target index for documents needing enrichment, sends parallel ES|QL
 	/// COMPLETION queries (yielding per-chunk progress), stores results in the lookup
-	/// index, then re-executes the enrich policy and backfills.
+	/// index, then re-executes the enrich policy and backfills only the enriched documents.
 	/// <para>
-	/// Callers can control execution with <see cref="AiEnrichmentOptions.MaxEnrichmentsPerRun"/>
-	/// or a <see cref="CancellationToken"/> with a timeout for time-boxed CI jobs.
+	/// Set <see cref="AiEnrichmentOptions.Timeout"/> for time-boxed runs (e.g. CI jobs).
+	/// The orchestrator stops new work at <c>Timeout − DrainTimeout</c> and uses the
+	/// remaining grace window for draining in-flight requests and backfilling.
+	/// </para>
+	/// <para>
+	/// The <paramref name="ct"/> token also triggers the soft-stop (e.g. application shutdown),
+	/// while the hard timeout boundary protects the drain+backfill phase.
+	/// Without a <see cref="AiEnrichmentOptions.Timeout"/>, <paramref name="ct"/> is a
+	/// traditional hard cancel that aborts everything.
 	/// </para>
 	/// </summary>
 	public async IAsyncEnumerable<AiEnrichmentProgress> EnrichAsync(
@@ -106,11 +113,25 @@ public class AiEnrichmentOrchestrator : IDisposable
 		[EnumeratorCancellation] CancellationToken ct = default)
 	{
 		var opts = options ?? new AiEnrichmentOptions();
+
+		using var softCts = opts.Timeout.HasValue ? new CancellationTokenSource() : null;
+		using var hardCts = opts.Timeout.HasValue ? new CancellationTokenSource() : null;
+		if (opts.Timeout is { } timeout)
+		{
+			var drainGrace = opts.DrainTimeout ?? (opts.CompletionTimeout + TimeSpan.FromSeconds(30));
+			var softDelay = timeout - drainGrace;
+			if (softDelay > TimeSpan.Zero)
+				softCts!.CancelAfter(softDelay);
+			hardCts!.CancelAfter(timeout);
+		}
+
+		var stopToken = softCts?.Token ?? CancellationToken.None;
+		var hardToken = hardCts?.Token ?? ct;
+
 		var enriched = 0;
 		var failed = 0;
 		var totalCandidates = 0;
 
-		// 1. Lightweight search: just _id for all candidates
 		yield return Progress(AiEnrichmentPhase.Querying, enriched, failed, totalCandidates,
 			$"Querying up to {opts.MaxEnrichmentsPerRun} candidates...");
 
@@ -133,22 +154,29 @@ public class AiEnrichmentOrchestrator : IDisposable
 		var retryDelay = TimeSpan.FromSeconds(Math.Min(opts.CompletionTimeout.TotalSeconds, 30));
 		var minBatch = Math.Max(opts.MinCompletionBatchSize, 1);
 
+		var allEnrichedDocIds = new List<string>();
 		var activeTasks = new Dictionary<Task<EsqlChunkResult>, ChunkMeta>();
 		var pendingChunks = new Queue<ChunkMeta>();
 		for (var i = 0; i < chunks.Count; i++)
 			pendingChunks.Enqueue(new ChunkMeta(chunks[i], 0));
 
-		while (pendingChunks.Count > 0 && activeTasks.Count < opts.EsqlConcurrency)
+		while (pendingChunks.Count > 0 && activeTasks.Count < opts.EsqlConcurrency
+			&& !stopToken.IsCancellationRequested && !ct.IsCancellationRequested)
 		{
 			var meta = pendingChunks.Dequeue();
-			var task = RunEsqlCompletionAsync(targetIndex, meta.DocIds, opts, ct);
+			var task = RunEsqlCompletionAsync(targetIndex, meta.DocIds, opts, hardToken);
 			activeTasks[task] = meta;
 		}
 
+		var stopping = stopToken.IsCancellationRequested || ct.IsCancellationRequested;
 		var completedChunks = 0;
 		while (activeTasks.Count > 0)
 		{
-			ct.ThrowIfCancellationRequested();
+			hardToken.ThrowIfCancellationRequested();
+
+			if (!stopping)
+				stopping = stopToken.IsCancellationRequested || ct.IsCancellationRequested;
+
 			var completed = await Task.WhenAny(activeTasks.Keys).ConfigureAwait(false);
 			var meta = activeTasks[completed];
 			activeTasks.Remove(completed);
@@ -156,7 +184,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 			var result = await completed.ConfigureAwait(false);
 
 			if (result.Error != null && result.IsRetryable
-				&& meta.Depth < opts.CompletionMaxRetries)
+				&& meta.Depth < opts.CompletionMaxRetries && !stopping)
 			{
 				var currentSize = meta.DocIds.Count;
 				var retrySize = Math.Max((currentSize + 1) / 2, minBatch);
@@ -174,7 +202,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 					totalChunks += subChunks.Count - 1;
 
 					await SchedulePendingAfterDelayAsync(
-						targetIndex, opts, retryDelay, pendingChunks, activeTasks, ct).ConfigureAwait(false);
+						targetIndex, opts, retryDelay, pendingChunks, activeTasks, hardToken).ConfigureAwait(false);
 					continue;
 				}
 
@@ -194,6 +222,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 			{
 				completedChunks++;
 				allUpdates.AddRange(result.Updates);
+				allEnrichedDocIds.AddRange(result.EnrichedDocIds);
 				failed += result.Failed;
 				enriched = allUpdates.Count;
 
@@ -202,18 +231,35 @@ public class AiEnrichmentOrchestrator : IDisposable
 					$"Chunk {completedChunks}/{totalChunks}: +{result.Updates.Count} enriched, +{result.Failed} failed{depthNote}");
 			}
 
-			while (pendingChunks.Count > 0 && activeTasks.Count < opts.EsqlConcurrency)
+			if (!stopping)
+				stopping = stopToken.IsCancellationRequested || ct.IsCancellationRequested;
+
+			if (!stopping)
 			{
-				var next = pendingChunks.Dequeue();
-				var task = RunEsqlCompletionAsync(targetIndex, next.DocIds, opts, ct);
-				activeTasks[task] = next;
+				while (pendingChunks.Count > 0 && activeTasks.Count < opts.EsqlConcurrency)
+				{
+					var next = pendingChunks.Dequeue();
+					var task = RunEsqlCompletionAsync(targetIndex, next.DocIds, opts, hardToken);
+					activeTasks[task] = next;
+				}
 			}
+		}
+
+		if (stopping && pendingChunks.Count > 0)
+		{
+			var skippedChunks = pendingChunks.Count;
+			var skippedDocs = 0;
+			foreach (var p in pendingChunks)
+				skippedDocs += p.DocIds.Count;
+			pendingChunks.Clear();
+			yield return Progress(AiEnrichmentPhase.Draining, enriched, failed, totalCandidates,
+				$"Graceful stop: skipped {skippedChunks} pending chunk(s) ({skippedDocs} docs)");
 		}
 
 		// 3. Bulk upsert to lookup index
 		var bulkErrors = 0;
 		if (allUpdates.Count > 0)
-			bulkErrors = await BulkUpsertLookupAsync(allUpdates, ct).ConfigureAwait(false);
+			bulkErrors = await BulkUpsertLookupAsync(allUpdates, hardToken).ConfigureAwait(false);
 
 		enriched -= bulkErrors;
 		failed += bulkErrors;
@@ -223,15 +269,15 @@ public class AiEnrichmentOrchestrator : IDisposable
 		{
 			yield return Progress(AiEnrichmentPhase.Refreshing, enriched, failed, totalCandidates,
 				$"Refreshing lookup index '{_infra.LookupIndexName}'...");
-			await RefreshAsync(_infra.LookupIndexName, ct).ConfigureAwait(false);
+			await RefreshAsync(_infra.LookupIndexName, hardToken).ConfigureAwait(false);
 
 			yield return Progress(AiEnrichmentPhase.ExecutingPolicy, enriched, failed, totalCandidates,
 				$"Executing enrich policy '{_infra.EnrichPolicyName}'...");
-			await ExecuteEnrichPolicyAsync(ct).ConfigureAwait(false);
+			await ExecuteEnrichPolicyAsync(hardToken).ConfigureAwait(false);
 
 			yield return Progress(AiEnrichmentPhase.Backfilling, enriched, failed, totalCandidates,
 				$"Backfilling {enriched} enriched docs into '{targetIndex}'...");
-			await BackfillAsync(targetIndex, ct).ConfigureAwait(false);
+			await BackfillAsync(targetIndex, allEnrichedDocIds, hardToken).ConfigureAwait(false);
 		}
 
 		yield return Progress(AiEnrichmentPhase.Complete, enriched, failed, totalCandidates, null);
@@ -509,6 +555,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 		string targetIndex, List<string> docIds, AiEnrichmentOptions opts, CancellationToken ct)
 	{
 		var updates = new List<LookupUpdate>();
+		var enrichedDocIds = new List<string>();
 
 		var idPlaceholders = string.Join(", ", docIds.Select((_, i) => $"?id_{i}"));
 		var inferenceId = opts.InferenceEndpointId;
@@ -554,21 +601,21 @@ public class AiEnrichmentOrchestrator : IDisposable
 			var status = response.ApiCallDetails.HttpStatusCode;
 			var retryable = status is 408 or 429 or >= 500;
 			var errorBody = Truncate(response.Body, 1000);
-			return new EsqlChunkResult(updates, docIds.Count,
+			return new EsqlChunkResult(updates, enrichedDocIds, docIds.Count,
 				$"ES|QL COMPLETION failed (HTTP {status}): {errorBody}", retryable);
 		}
 
 		JsonNode? rootNode;
 		try { rootNode = JsonNode.Parse(response.Body); }
-		catch { return new EsqlChunkResult(updates, docIds.Count, "ES|QL response was not valid JSON"); }
+		catch { return new EsqlChunkResult(updates, enrichedDocIds, docIds.Count, "ES|QL response was not valid JSON"); }
 
 		if (rootNode is not JsonObject root)
-			return new EsqlChunkResult(updates, docIds.Count, "ES|QL response root was not a JSON object");
+			return new EsqlChunkResult(updates, enrichedDocIds, docIds.Count, "ES|QL response root was not a JSON object");
 
 		var columns = root["columns"]?.AsArray();
 		var values = root["values"]?.AsArray();
 		if (columns == null || values == null)
-			return new EsqlChunkResult(updates, docIds.Count,
+			return new EsqlChunkResult(updates, enrichedDocIds, docIds.Count,
 				$"ES|QL response missing columns/values: {Truncate(response.Body, 500)}");
 
 		int idCol = -1, matchCol = -1, resultCol = -1;
@@ -583,7 +630,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 		if (idCol < 0 || matchCol < 0 || resultCol < 0)
 		{
 			var colNames = string.Join(", ", columns.Select(c => c?["name"]?.GetValue<string>() ?? "?"));
-			return new EsqlChunkResult(updates, docIds.Count,
+			return new EsqlChunkResult(updates, enrichedDocIds, docIds.Count,
 				$"Expected columns [_id, {_infra.MatchField}, result] but got [{colNames}]");
 		}
 
@@ -598,6 +645,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 				continue;
 			}
 
+			var docId = rowArr[idCol]?.GetValue<string>();
 			var matchValue = rowArr[matchCol]?.GetValue<string>();
 			var resultText = rowArr[resultCol]?.GetValue<string>();
 
@@ -617,10 +665,12 @@ public class AiEnrichmentOrchestrator : IDisposable
 			var urlHash = UrlHash(matchValue);
 			var lookupDoc = BuildLookupDocument(matchValue, partialDoc);
 			updates.Add(new LookupUpdate(urlHash, lookupDoc));
+			if (docId != null)
+				enrichedDocIds.Add(docId);
 		}
 
 		chunkFailed += docIds.Count - (updates.Count + chunkFailed);
-		return new EsqlChunkResult(updates, chunkFailed, null);
+		return new EsqlChunkResult(updates, enrichedDocIds, chunkFailed, null);
 	}
 
 	private async Task SchedulePendingAfterDelayAsync(
@@ -695,7 +745,7 @@ public class AiEnrichmentOrchestrator : IDisposable
 		body = PostData.String(sb.ToString());
 #endif
 
-		var response = await _transport.RequestAsync<BulkResponse>(
+		var response = await _transport.RequestAsync<StringResponse>(
 			HttpMethod.POST,
 			$"{_infra.LookupIndexName}/_bulk?filter_path=errors,items.*.status,items.*.error",
 			body, cancellationToken: ct).ConfigureAwait(false);
@@ -703,11 +753,22 @@ public class AiEnrichmentOrchestrator : IDisposable
 		if (response.ApiCallDetails.HttpStatusCode is not 200)
 			return updates.Count;
 
+		using var doc = JsonDocument.Parse(response.Body);
+		if (!doc.RootElement.TryGetProperty("items", out var itemsArray))
+			return 0;
+
 		var errors = 0;
-		foreach (var item in response.Items)
+		foreach (var item in itemsArray.EnumerateArray())
 		{
-			if (item.Status < 200 || item.Status > 299)
-				errors++;
+			foreach (var action in item.EnumerateObject())
+			{
+				if (action.Value.TryGetProperty("status", out var statusProp))
+				{
+					var status = statusProp.GetInt32();
+					if (status < 200 || status > 299)
+						errors++;
+				}
+			}
 		}
 		return errors;
 	}
@@ -718,24 +779,39 @@ public class AiEnrichmentOrchestrator : IDisposable
 
 	// ── Private: backfill ──
 
-	private async Task BackfillAsync(string targetIndex, CancellationToken ct)
+	// Elasticsearch ids query uses terms on _id under the hood (default
+	// index.max_terms_count = 65 536).  We batch well under that to keep
+	// individual _update_by_query requests small and predictable.
+	private const int BackfillBatchSize = 1_000;
+
+	private async Task BackfillAsync(string targetIndex, List<string> enrichedDocIds, CancellationToken ct)
 	{
-		var url = $"/{targetIndex}/_update_by_query?wait_for_completion=false&pipeline={_infra.PipelineName}";
-
-		var response = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.POST, url,
-			PostData.Serializable(new QueryRequest { Query = _stalenessQuery }),
-			cancellationToken: ct).ConfigureAwait(false);
-
-		if (response.ApiCallDetails.HttpStatusCode is not 200)
+		if (enrichedDocIds.Count == 0)
 			return;
 
-		var taskId = response.Get<string>("task");
-		if (!string.IsNullOrEmpty(taskId))
+		var url = $"/{targetIndex}/_update_by_query?wait_for_completion=false&pipeline={_infra.PipelineName}";
+		var batches = ChunkList(enrichedDocIds, BackfillBatchSize);
+
+		foreach (var batch in batches)
 		{
-			await foreach (var _ in ElasticsearchTaskMonitor.PollTaskAsync(
-				_transport, taskId, TimeSpan.FromSeconds(5), ct).ConfigureAwait(false))
+			var idsJson = string.Join(",", batch.Select(id => $"\"{JsonEncodedText.Encode(id)}\""));
+			var idsQuery = JsonDocument.Parse($"{{\"ids\":{{\"values\":[{idsJson}]}}}}").RootElement.Clone();
+
+			var response = await _transport.RequestAsync<JsonResponse>(
+				HttpMethod.POST, url,
+				PostData.Serializable(new QueryRequest { Query = idsQuery }),
+				cancellationToken: ct).ConfigureAwait(false);
+
+			if (response.ApiCallDetails.HttpStatusCode is not 200)
+				continue;
+
+			var taskId = response.Get<string>("task");
+			if (!string.IsNullOrEmpty(taskId))
 			{
+				await foreach (var _ in ElasticsearchTaskMonitor.PollTaskAsync(
+					_transport, taskId, TimeSpan.FromSeconds(5), ct).ConfigureAwait(false))
+				{
+				}
 			}
 		}
 	}

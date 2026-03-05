@@ -65,6 +65,50 @@ public sealed class AiEnrichmentOptions
 	/// Must be at least 1. Default: 5.
 	/// </summary>
 	public int MinCompletionBatchSize { get; set; } = 5;
+
+	/// <summary>
+	/// Optional total time budget for the enrichment run. The orchestrator internally
+	/// derives two boundaries from this value:
+	/// <list type="bullet">
+	///   <item><b>Soft stop</b> at <c>Timeout − <see cref="DrainTimeout"/></c> — stops
+	///   starting new COMPLETION chunks so in-flight requests can finish.</item>
+	///   <item><b>Hard stop</b> at <c>Timeout</c> — cancels everything, including
+	///   in-flight HTTP requests and the backfill pipeline.</item>
+	/// </list>
+	/// <para>
+	/// The <c>CancellationToken</c> passed to <see cref="AiEnrichmentOrchestrator.EnrichAsync"/>
+	/// also triggers the soft-stop (e.g. on application shutdown). Because the hard-stop
+	/// token is <em>not</em> linked to the caller's token, in-flight requests and the
+	/// backfill pipeline continue under the protection of the remaining timeout budget.
+	/// This means cancelling the token early is safe: the orchestrator drains gracefully
+	/// and still applies all completed enrichments.
+	/// </para>
+	/// <para>
+	/// Without a <see cref="Timeout"/>, the cancellation token behaves as a traditional
+	/// hard cancel — in-flight requests are aborted and no backfill runs.
+	/// </para>
+	/// <para><b>Example — time-boxed CI job (20 min budget, scheduled every 30 min):</b></para>
+	/// <code>
+	/// using var cts = new CancellationTokenSource();
+	/// var options = new AiEnrichmentOptions
+	/// {
+	///     MaxEnrichmentsPerRun = 5000,
+	///     Timeout = TimeSpan.FromMinutes(20),
+	///     // DrainTimeout defaults to CompletionTimeout + 30 s (≈ 5 min 30 s).
+	///     // Override to shrink or grow the grace window as needed.
+	/// };
+	/// await foreach (var p in orchestrator.EnrichAsync("my-index", options, cts.Token))
+	///     logger.LogInformation("[{Phase}] {Message}", p.Phase, p.Message);
+	/// </code>
+	/// </summary>
+	public TimeSpan? Timeout { get; set; }
+
+	/// <summary>
+	/// Grace period reserved at the end of <see cref="Timeout"/> for draining in-flight
+	/// COMPLETION requests and running the backfill pipeline.
+	/// Default: <see cref="CompletionTimeout"/> + 30 seconds.
+	/// </summary>
+	public TimeSpan? DrainTimeout { get; set; }
 }
 
 /// <summary>
@@ -98,6 +142,8 @@ public enum AiEnrichmentPhase
 	Querying,
 	/// <summary>An ES|QL COMPLETION chunk completed (yielded per-chunk).</summary>
 	Enriching,
+	/// <summary>Timeout or cancellation triggered; draining in-flight requests before backfill.</summary>
+	Draining,
 	/// <summary>Refreshing the lookup index.</summary>
 	Refreshing,
 	/// <summary>Executing the enrich policy.</summary>
@@ -117,7 +163,7 @@ internal sealed record LookupUpdate(string UrlHash, JsonElement Document);
 /// <summary>
 /// Result of a single ES|QL COMPLETION chunk.
 /// </summary>
-internal sealed record EsqlChunkResult(List<LookupUpdate> Updates, int Failed, string? Error, bool IsRetryable = false);
+internal sealed record EsqlChunkResult(List<LookupUpdate> Updates, List<string> EnrichedDocIds, int Failed, string? Error, bool IsRetryable = false);
 
 /// <summary>
 /// Tracks a chunk of doc IDs and its current retry depth for binary-split retries.
