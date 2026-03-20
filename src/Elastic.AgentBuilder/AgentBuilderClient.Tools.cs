@@ -10,47 +10,45 @@ namespace Elastic.AgentBuilder;
 
 public partial class AgentBuilderClient
 {
-	private static readonly AgentBuilderSerializationContext Ctx = AgentBuilderSerializationContext.Default;
-
 	/// <summary> List all available tools. </summary>
 	public Task<ListToolsResponse> ListToolsAsync(CancellationToken ct = default) =>
-		GetAsync("/tools", Ctx.ListToolsResponse, ct);
+		GetAsync<ListToolsResponse>("/tools", ct);
 
 	/// <summary> Get a tool by its ID. </summary>
 	public Task<AgentBuilderTool> GetToolAsync(string toolId, CancellationToken ct = default) =>
-		GetAsync($"/tools/{toolId}", Ctx.AgentBuilderTool, ct);
+		GetAsync<AgentBuilderTool>($"/tools/{toolId}", ct);
 
 	/// <summary> Create an ES|QL tool. </summary>
 	public Task<AgentBuilderTool> CreateToolAsync(CreateEsqlToolRequest request, CancellationToken ct = default) =>
-		PostAsync("/tools", request, Ctx.CreateEsqlToolRequest, Ctx.AgentBuilderTool, ct);
+		PostAsync<CreateEsqlToolRequest, AgentBuilderTool>("/tools", request, ct);
 
 	/// <summary> Create an index search tool. </summary>
 	public Task<AgentBuilderTool> CreateToolAsync(CreateIndexSearchToolRequest request, CancellationToken ct = default) =>
-		PostAsync("/tools", request, Ctx.CreateIndexSearchToolRequest, Ctx.AgentBuilderTool, ct);
+		PostAsync<CreateIndexSearchToolRequest, AgentBuilderTool>("/tools", request, ct);
 
 	/// <summary> Create an MCP tool. </summary>
 	public Task<AgentBuilderTool> CreateToolAsync(CreateMcpToolRequest request, CancellationToken ct = default) =>
-		PostAsync("/tools", request, Ctx.CreateMcpToolRequest, Ctx.AgentBuilderTool, ct);
+		PostAsync<CreateMcpToolRequest, AgentBuilderTool>("/tools", request, ct);
 
 	/// <summary> Create a workflow tool. </summary>
 	public Task<AgentBuilderTool> CreateToolAsync(CreateWorkflowToolRequest request, CancellationToken ct = default) =>
-		PostAsync("/tools", request, Ctx.CreateWorkflowToolRequest, Ctx.AgentBuilderTool, ct);
+		PostAsync<CreateWorkflowToolRequest, AgentBuilderTool>("/tools", request, ct);
 
 	/// <summary> Update an ES|QL tool. </summary>
 	public Task<AgentBuilderTool> UpdateToolAsync(string toolId, UpdateEsqlToolRequest request, CancellationToken ct = default) =>
-		PutAsync($"/tools/{toolId}", request, Ctx.UpdateEsqlToolRequest, Ctx.AgentBuilderTool, ct);
+		PutAsync<UpdateEsqlToolRequest, AgentBuilderTool>($"/tools/{toolId}", request, ct);
 
 	/// <summary> Update an index search tool. </summary>
 	public Task<AgentBuilderTool> UpdateToolAsync(string toolId, UpdateIndexSearchToolRequest request, CancellationToken ct = default) =>
-		PutAsync($"/tools/{toolId}", request, Ctx.UpdateIndexSearchToolRequest, Ctx.AgentBuilderTool, ct);
+		PutAsync<UpdateIndexSearchToolRequest, AgentBuilderTool>($"/tools/{toolId}", request, ct);
 
 	/// <summary> Update an MCP tool. </summary>
 	public Task<AgentBuilderTool> UpdateToolAsync(string toolId, UpdateMcpToolRequest request, CancellationToken ct = default) =>
-		PutAsync($"/tools/{toolId}", request, Ctx.UpdateMcpToolRequest, Ctx.AgentBuilderTool, ct);
+		PutAsync<UpdateMcpToolRequest, AgentBuilderTool>($"/tools/{toolId}", request, ct);
 
 	/// <summary> Update a workflow tool. </summary>
 	public Task<AgentBuilderTool> UpdateToolAsync(string toolId, UpdateWorkflowToolRequest request, CancellationToken ct = default) =>
-		PutAsync($"/tools/{toolId}", request, Ctx.UpdateWorkflowToolRequest, Ctx.AgentBuilderTool, ct);
+		PutAsync<UpdateWorkflowToolRequest, AgentBuilderTool>($"/tools/{toolId}", request, ct);
 
 	/// <summary> Delete a tool by its ID. </summary>
 	public Task DeleteToolAsync(string toolId, CancellationToken ct = default) =>
@@ -58,5 +56,5 @@ public partial class AgentBuilderClient
 
 	/// <summary> Execute a tool with parameters. </summary>
 	public Task<ExecuteToolResponse> ExecuteToolAsync(ExecuteToolRequest request, CancellationToken ct = default) =>
-		PostAsync("/tools/_execute", request, Ctx.ExecuteToolRequest, Ctx.ExecuteToolResponse, ct);
+		PostAsync<ExecuteToolRequest, ExecuteToolResponse>("/tools/_execute", request, ct);
 }

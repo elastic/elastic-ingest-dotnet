@@ -5,16 +5,17 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Elastic.Transport;
 
 namespace Elastic.AgentBuilder.Tools;
 
 /// <summary>
 /// Response from executing a tool.
 /// </summary>
-public record ExecuteToolResponse
+public class ExecuteToolResponse : TransportResponse
 {
 	[JsonPropertyName("results")]
-	public required IReadOnlyList<ToolResult> Results { get; init; }
+	public IReadOnlyList<ToolResult> Results { get; set; } = default!;
 }
 
 /// <summary>

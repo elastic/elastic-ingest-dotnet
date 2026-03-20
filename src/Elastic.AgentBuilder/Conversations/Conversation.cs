@@ -5,32 +5,33 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Elastic.Transport;
 
 namespace Elastic.AgentBuilder.Conversations;
 
 /// <summary>
 /// Represents a conversation as returned by the Agent Builder API.
 /// </summary>
-public record Conversation
+public class Conversation : TransportResponse
 {
 	[JsonPropertyName("conversation_id")]
-	public required string ConversationId { get; init; }
+	public string ConversationId { get; set; } = default!;
 
 	[JsonPropertyName("title")]
-	public string? Title { get; init; }
+	public string? Title { get; set; }
 
 	[JsonPropertyName("agent_id")]
-	public string? AgentId { get; init; }
+	public string? AgentId { get; set; }
 
 	[JsonPropertyName("rounds")]
-	public IReadOnlyList<JsonElement>? Rounds { get; init; }
+	public IReadOnlyList<JsonElement>? Rounds { get; set; }
 }
 
 /// <summary>
 /// Response wrapper for listing conversations.
 /// </summary>
-public record ListConversationsResponse
+public class ListConversationsResponse : TransportResponse
 {
 	[JsonPropertyName("results")]
-	public required IReadOnlyList<Conversation> Results { get; init; }
+	public IReadOnlyList<Conversation> Results { get; set; } = default!;
 }

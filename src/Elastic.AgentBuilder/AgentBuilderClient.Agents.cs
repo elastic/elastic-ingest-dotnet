@@ -12,19 +12,19 @@ public partial class AgentBuilderClient
 {
 	/// <summary> List all agents. </summary>
 	public Task<ListAgentsResponse> ListAgentsAsync(CancellationToken ct = default) =>
-		GetAsync("/agents", Ctx.ListAgentsResponse, ct);
+		GetAsync<ListAgentsResponse>("/agents", ct);
 
 	/// <summary> Get an agent by its ID. </summary>
 	public Task<AgentBuilderAgent> GetAgentAsync(string agentId, CancellationToken ct = default) =>
-		GetAsync($"/agents/{agentId}", Ctx.AgentBuilderAgent, ct);
+		GetAsync<AgentBuilderAgent>($"/agents/{agentId}", ct);
 
 	/// <summary> Create a new agent. </summary>
 	public Task<AgentBuilderAgent> CreateAgentAsync(CreateAgentRequest request, CancellationToken ct = default) =>
-		PostAsync("/agents", request, Ctx.CreateAgentRequest, Ctx.AgentBuilderAgent, ct);
+		PostAsync<CreateAgentRequest, AgentBuilderAgent>("/agents", request, ct);
 
 	/// <summary> Update an existing agent. </summary>
 	public Task<AgentBuilderAgent> UpdateAgentAsync(string agentId, UpdateAgentRequest request, CancellationToken ct = default) =>
-		PutAsync($"/agents/{agentId}", request, Ctx.UpdateAgentRequest, Ctx.AgentBuilderAgent, ct);
+		PutAsync<UpdateAgentRequest, AgentBuilderAgent>($"/agents/{agentId}", request, ct);
 
 	/// <summary> Delete an agent by its ID. </summary>
 	public Task DeleteAgentAsync(string agentId, CancellationToken ct = default) =>

@@ -5,6 +5,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Elastic.Transport;
 
 namespace Elastic.AgentBuilder.Tools;
 
@@ -14,28 +15,28 @@ namespace Elastic.AgentBuilder.Tools;
 /// deserialized into the appropriate typed configuration using <see cref="AsEsql"/>,
 /// <see cref="AsIndexSearch"/>, <see cref="AsMcp"/>, or <see cref="AsWorkflow"/>.
 /// </summary>
-public record AgentBuilderTool
+public class AgentBuilderTool : TransportResponse
 {
 	[JsonPropertyName("id")]
-	public required string Id { get; init; }
+	public string Id { get; set; } = default!;
 
 	[JsonPropertyName("type")]
-	public required string Type { get; init; }
+	public string Type { get; set; } = default!;
 
 	[JsonPropertyName("description")]
-	public string? Description { get; init; }
+	public string? Description { get; set; }
 
 	[JsonPropertyName("tags")]
-	public IReadOnlyList<string>? Tags { get; init; }
+	public IReadOnlyList<string>? Tags { get; set; }
 
 	[JsonPropertyName("configuration")]
-	public JsonElement Configuration { get; init; }
+	public JsonElement Configuration { get; set; }
 
 	[JsonPropertyName("readonly")]
-	public bool Readonly { get; init; }
+	public bool Readonly { get; set; }
 
 	[JsonPropertyName("schema")]
-	public JsonElement? Schema { get; init; }
+	public JsonElement? Schema { get; set; }
 
 	/// <summary> Deserialize configuration as an ES|QL tool. </summary>
 	public EsqlToolConfiguration? AsEsql() =>
@@ -57,8 +58,8 @@ public record AgentBuilderTool
 /// <summary>
 /// Response wrapper for listing tools.
 /// </summary>
-public record ListToolsResponse
+public class ListToolsResponse : TransportResponse
 {
 	[JsonPropertyName("results")]
-	public required IReadOnlyList<AgentBuilderTool> Results { get; init; }
+	public IReadOnlyList<AgentBuilderTool> Results { get; set; } = default!;
 }
