@@ -47,6 +47,53 @@ public partial class AgentBuilderClient
 	public Task DeleteConversationAsync(string conversationId, CancellationToken ct = default) =>
 		DeleteAsync($"/conversations/{conversationId}", ct);
 
+	/// <summary> List all attachments for a conversation. </summary>
+	public Task<ListAttachmentsResponse> ListAttachmentsAsync(
+		string conversationId, bool includeDeleted = false, CancellationToken ct = default)
+	{
+		var path = includeDeleted
+			? $"/conversations/{conversationId}/attachments?include_deleted=true"
+			: $"/conversations/{conversationId}/attachments";
+		return GetAsync<ListAttachmentsResponse>(path, ct);
+	}
+
+	/// <summary> Create a new attachment for a conversation. </summary>
+	public Task<Attachment> CreateAttachmentAsync(
+		string conversationId, CreateAttachmentRequest request, CancellationToken ct = default) =>
+		PostAsync<CreateAttachmentRequest, Attachment>(
+			$"/conversations/{conversationId}/attachments", request, ct);
+
+	/// <summary> Update an attachment's content (creates a new version if content changed). </summary>
+	public Task<Attachment> UpdateAttachmentAsync(
+		string conversationId, string attachmentId,
+		UpdateAttachmentRequest request, CancellationToken ct = default) =>
+		PutAsync<UpdateAttachmentRequest, Attachment>(
+			$"/conversations/{conversationId}/attachments/{attachmentId}", request, ct);
+
+	/// <summary> Delete an attachment (soft delete by default). </summary>
+	public Task DeleteAttachmentAsync(
+		string conversationId, string attachmentId,
+		bool permanent = false, CancellationToken ct = default)
+	{
+		var path = permanent
+			? $"/conversations/{conversationId}/attachments/{attachmentId}?permanent=true"
+			: $"/conversations/{conversationId}/attachments/{attachmentId}";
+		return DeleteAsync(path, ct);
+	}
+
+	/// <summary> Restore a soft-deleted attachment. </summary>
+	public Task<Attachment> RestoreAttachmentAsync(
+		string conversationId, string attachmentId, CancellationToken ct = default) =>
+		PostEmptyAsync<Attachment>(
+			$"/conversations/{conversationId}/attachments/{attachmentId}/_restore", ct);
+
+	/// <summary> Update the origin reference for an attachment. </summary>
+	public Task<Attachment> UpdateAttachmentOriginAsync(
+		string conversationId, string attachmentId,
+		UpdateAttachmentOriginRequest request, CancellationToken ct = default) =>
+		PutAsync<UpdateAttachmentOriginRequest, Attachment>(
+			$"/conversations/{conversationId}/attachments/{attachmentId}/origin", request, ct);
+
 	/// <summary>
 	/// Parses the raw UTF-8 bytes of an SSE <c>data:</c> line directly into a typed
 	/// <see cref="ConverseStreamEvent"/>. Kibana wraps every event payload in a

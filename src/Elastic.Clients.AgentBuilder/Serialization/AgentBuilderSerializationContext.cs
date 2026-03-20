@@ -6,6 +6,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Elastic.Clients.AgentBuilder.Agents;
 using Elastic.Clients.AgentBuilder.Conversations;
+using Elastic.Clients.AgentBuilder.Plugins;
+using Elastic.Clients.AgentBuilder.Skills;
 using Elastic.Clients.AgentBuilder.Tools;
 
 namespace Elastic.Clients.AgentBuilder;
@@ -37,8 +39,16 @@ namespace Elastic.Clients.AgentBuilder;
 [JsonSerializable(typeof(AgentToolGroup))]
 [JsonSerializable(typeof(CreateAgentRequest))]
 [JsonSerializable(typeof(UpdateAgentRequest))]
+[JsonSerializable(typeof(AgentConsumptionRequest))]
+[JsonSerializable(typeof(AgentConsumptionResponse))]
+[JsonSerializable(typeof(ConversationConsumption))]
 [JsonSerializable(typeof(Conversation))]
 [JsonSerializable(typeof(ListConversationsResponse))]
+[JsonSerializable(typeof(Attachment))]
+[JsonSerializable(typeof(ListAttachmentsResponse))]
+[JsonSerializable(typeof(CreateAttachmentRequest))]
+[JsonSerializable(typeof(UpdateAttachmentRequest))]
+[JsonSerializable(typeof(UpdateAttachmentOriginRequest))]
 [JsonSerializable(typeof(ConverseRequest))]
 [JsonSerializable(typeof(ConverseResponse))]
 [JsonSerializable(typeof(ConverseStep))]
@@ -55,6 +65,15 @@ namespace Elastic.Clients.AgentBuilder;
 [JsonSerializable(typeof(MessageCompleteEvent))]
 [JsonSerializable(typeof(ThinkingCompleteEvent))]
 [JsonSerializable(typeof(RoundCompleteEvent))]
+[JsonSerializable(typeof(AgentBuilderSkill))]
+[JsonSerializable(typeof(ListSkillsResponse))]
+[JsonSerializable(typeof(SkillReferencedContent))]
+[JsonSerializable(typeof(CreateSkillRequest))]
+[JsonSerializable(typeof(UpdateSkillRequest))]
+[JsonSerializable(typeof(AgentBuilderPlugin))]
+[JsonSerializable(typeof(ListPluginsResponse))]
+[JsonSerializable(typeof(PluginManagedAssets))]
+[JsonSerializable(typeof(InstallPluginRequest))]
 [JsonSourceGenerationOptions(
 	PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
 	DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
