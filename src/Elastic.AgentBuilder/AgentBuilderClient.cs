@@ -85,6 +85,20 @@ public partial class AgentBuilderClient
 		return Deserialize(response.Body, responseTypeInfo);
 	}
 
+	private static readonly RequestConfiguration SseRequestConfig = new() { Accept = "application/octet-stream" };
+
+	internal async Task<StreamResponse> PostStreamAsync<TRequest>(
+		string path, TRequest body, JsonTypeInfo<TRequest> requestTypeInfo, CancellationToken ct)
+	{
+		var json = JsonSerializer.Serialize(body, requestTypeInfo);
+		var response = await _transport
+			.RequestAsync<StreamResponse>(HttpMethod.POST, Path(path), PostData.String(json),
+				localConfiguration: SseRequestConfig, cancellationToken: ct)
+			.ConfigureAwait(false);
+		EnsureSuccess(response);
+		return response;
+	}
+
 	private async Task DeleteAsync(string path, CancellationToken ct)
 	{
 		var response = await _transport
@@ -97,12 +111,13 @@ public partial class AgentBuilderClient
 		JsonSerializer.Deserialize(body, typeInfo)
 		?? throw new InvalidOperationException($"Failed to deserialize response as {typeof(TResponse).Name}");
 
-	private static void EnsureSuccess(StringResponse response)
+	private static void EnsureSuccess(TransportResponse response)
 	{
 		if (!response.ApiCallDetails.HasSuccessfulStatusCode)
 		{
+			var body = response is StringResponse sr ? $": {sr.Body}" : string.Empty;
 			throw new AgentBuilderException(
-				$"Agent Builder API returned {response.ApiCallDetails.HttpStatusCode}: {response.Body}",
+				$"Agent Builder API returned {response.ApiCallDetails.HttpStatusCode}{body}",
 				response.ApiCallDetails);
 		}
 	}

@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <PackageReference Include="Elastic.Transport" Version="0.15.1" />
+    <PackageReference Include="System.Net.ServerSentEvents" Version="10.0.5" />
   </ItemGroup>
 
   <ItemGroup Condition="!$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">

@@ -97,18 +97,46 @@ public class ElasticAgentChatClient : IChatClient
 		ChatOptions? options = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
-		var response = await GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
+		var messageList = messages?.ToList() ?? throw new ArgumentNullException(nameof(messages));
+		var lastUserMessage = messageList.LastOrDefault(m => m.Role == ChatRole.User);
+		var input = lastUserMessage?.Text ?? string.Empty;
 
-		foreach (var message in response.Messages)
+		var conversationId = options?.ConversationId;
+
+		await foreach (var evt in _client.ConverseStreamAsync(new ConverseRequest
 		{
-			yield return new ChatResponseUpdate
+			Input = input,
+			AgentId = _agentId,
+			ConversationId = conversationId,
+			ConnectorId = _connectorId
+		}, cancellationToken).ConfigureAwait(false))
+		{
+			switch (evt)
 			{
-				Role = message.Role,
-				Contents = message.Contents,
-				FinishReason = response.FinishReason,
-				ConversationId = response.ConversationId,
-				ModelId = response.ModelId,
-			};
+				case ConversationIdSetEvent idSet:
+					conversationId = idSet.ConversationId;
+					break;
+
+				case MessageChunkEvent chunk:
+					yield return new ChatResponseUpdate
+					{
+						Role = ChatRole.Assistant,
+						Contents = [new TextContent(chunk.TextChunk)],
+						ConversationId = conversationId,
+						ModelId = _agentId,
+					};
+					break;
+
+				case MessageCompleteEvent:
+					yield return new ChatResponseUpdate
+					{
+						Role = ChatRole.Assistant,
+						FinishReason = ChatFinishReason.Stop,
+						ConversationId = conversationId,
+						ModelId = _agentId,
+					};
+					break;
+			}
 		}
 	}
 
