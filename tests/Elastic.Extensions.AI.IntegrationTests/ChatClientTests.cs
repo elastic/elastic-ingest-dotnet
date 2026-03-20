@@ -4,7 +4,7 @@
 
 using System.Linq;
 using System.Threading.Tasks;
-using Elastic.AgentBuilder;
+using Elastic.Clients.AgentBuilder;
 using FluentAssertions;
 using Microsoft.Extensions.AI;
 

@@ -8,8 +8,8 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Elastic.AgentBuilder;
-using Elastic.AgentBuilder.Conversations;
+using Elastic.Clients.AgentBuilder;
+using Elastic.Clients.AgentBuilder.Conversations;
 using Microsoft.Extensions.AI;
 
 namespace Elastic.Extensions.AI;

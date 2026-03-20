@@ -32,7 +32,7 @@
   </Folder>
   <Folder Name="/src/">
     <File Path="src/Directory.Build.props" />
-    <Project Path="src/Elastic.AgentBuilder/Elastic.AgentBuilder.csproj" />
+    <Project Path="src/Elastic.Clients.AgentBuilder/Elastic.Clients.AgentBuilder.csproj" />
     <Project Path="src/Elastic.Extensions.AI/Elastic.Extensions.AI.csproj" />
     <Project Path="src/Elastic.Channels/Elastic.Channels.csproj" />
     <Project Path="src/Elastic.Ingest.Apm/Elastic.Ingest.Apm.csproj" />
@@ -45,8 +45,8 @@
   <Folder Name="/tests/">
     <File Path="tests/Directory.Build.props" />
     <File Path="tests\README.md" />
-    <Project Path="tests/Elastic.AgentBuilder.IntegrationTests/Elastic.AgentBuilder.IntegrationTests.csproj" />
-    <Project Path="tests/Elastic.AgentBuilder.Tests/Elastic.AgentBuilder.Tests.csproj" />
+    <Project Path="tests/Elastic.Clients.AgentBuilder.IntegrationTests/Elastic.Clients.AgentBuilder.IntegrationTests.csproj" />
+    <Project Path="tests/Elastic.Clients.AgentBuilder.Tests/Elastic.Clients.AgentBuilder.Tests.csproj" />
     <Project Path="tests/Elastic.Extensions.AI.IntegrationTests/Elastic.Extensions.AI.IntegrationTests.csproj" />
     <Project Path="tests/Elastic.Channels.Tests/Elastic.Channels.Tests.csproj" />
     <Project Path="tests/Elastic.Ingest.Elasticsearch.IntegrationTests/Elastic.Ingest.Elasticsearch.IntegrationTests.csproj" />
