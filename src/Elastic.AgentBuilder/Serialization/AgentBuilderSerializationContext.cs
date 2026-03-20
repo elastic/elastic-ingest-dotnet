@@ -44,6 +44,17 @@ namespace Elastic.AgentBuilder;
 [JsonSerializable(typeof(ConverseStep))]
 [JsonSerializable(typeof(ConverseMessage))]
 [JsonSerializable(typeof(ModelUsage))]
+[JsonSerializable(typeof(ConversationIdSetEvent))]
+[JsonSerializable(typeof(ConversationCreatedEvent))]
+[JsonSerializable(typeof(ConversationUpdatedEvent))]
+[JsonSerializable(typeof(ReasoningEvent))]
+[JsonSerializable(typeof(ToolCallEvent))]
+[JsonSerializable(typeof(ToolProgressEvent))]
+[JsonSerializable(typeof(ToolResultEvent))]
+[JsonSerializable(typeof(MessageChunkEvent))]
+[JsonSerializable(typeof(MessageCompleteEvent))]
+[JsonSerializable(typeof(ThinkingCompleteEvent))]
+[JsonSerializable(typeof(RoundCompleteEvent))]
 [JsonSourceGenerationOptions(
 	PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
 	DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]

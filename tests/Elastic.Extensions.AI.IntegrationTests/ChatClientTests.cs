@@ -60,16 +60,22 @@ public class ChatClientTests(KibanaFixture fixture)
 	{
 		var updates = fixture.ChatClient.GetStreamingResponseAsync("Say hi briefly.");
 
-		var count = 0;
+		var textChunks = 0;
+		ChatFinishReason? finishReason = null;
 		await foreach (var update in updates)
 		{
 			update.Role.Should().Be(ChatRole.Assistant);
-			update.Text.Should().NotBeNullOrWhiteSpace();
 			update.ConversationId.Should().NotBeNullOrWhiteSpace();
-			count++;
+
+			if (!string.IsNullOrWhiteSpace(update.Text))
+				textChunks++;
+
+			if (update.FinishReason is not null)
+				finishReason = update.FinishReason;
 		}
 
-		count.Should().BeGreaterThan(0);
+		textChunks.Should().BeGreaterThan(0, "expected at least one text chunk from the stream");
+		finishReason.Should().Be(ChatFinishReason.Stop);
 	}
 
 	[Test]
