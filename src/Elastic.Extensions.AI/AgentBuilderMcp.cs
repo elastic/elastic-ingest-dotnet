@@ -14,14 +14,14 @@ namespace Elastic.Extensions.AI;
 
 /// <summary>
 /// Factory for creating an MCP client connected to the Kibana Agent Builder MCP server.
-/// The returned <see cref="IMcpClient"/> exposes tools as <see cref="McpClientTool"/> instances
+/// The returned <see cref="McpClient"/> exposes tools as <see cref="McpClientTool"/> instances
 /// that implement <c>AIFunction</c> from <c>Microsoft.Extensions.AI</c>, making them
 /// immediately usable with any <c>IChatClient</c>.
 /// </summary>
 public static class AgentBuilderMcp
 {
 	/// <summary>
-	/// Creates an <see cref="IMcpClient"/> connected to the Kibana Agent Builder MCP endpoint.
+	/// Creates an <see cref="McpClient"/> connected to the Kibana Agent Builder MCP endpoint.
 	/// </summary>
 	/// <param name="kibanaUri">The Kibana base URL.</param>
 	/// <param name="apiKey">The API key for authentication (base64-encoded).</param>
@@ -29,7 +29,7 @@ public static class AgentBuilderMcp
 	/// <param name="namespaceFilter">Optional comma-separated namespace filter for tools.</param>
 	/// <param name="loggerFactory">Optional logger factory for MCP diagnostics.</param>
 	/// <param name="ct">Cancellation token.</param>
-	public static async Task<IMcpClient> CreateClientAsync(
+	public static async Task<McpClient> CreateClientAsync(
 		Uri kibanaUri,
 		string apiKey,
 		string? space = null,
@@ -52,19 +52,19 @@ public static class AgentBuilderMcp
 			["kbn-xsrf"] = "true"
 		};
 
-		var transport = new SseClientTransport(new SseClientTransportOptions
+		var transport = new HttpClientTransport(new HttpClientTransportOptions
 		{
 			Endpoint = endpoint,
 			Name = "Elastic Agent Builder MCP",
 			AdditionalHeaders = headers,
 		});
 
-		return await McpClientFactory.CreateAsync(transport, loggerFactory: loggerFactory, cancellationToken: ct)
+		return await McpClient.CreateAsync(transport, loggerFactory: loggerFactory, cancellationToken: ct)
 			.ConfigureAwait(false);
 	}
 
 	/// <summary>
-	/// Creates an <see cref="IMcpClient"/> connected to the Kibana Agent Builder MCP endpoint
+	/// Creates an <see cref="McpClient"/> connected to the Kibana Agent Builder MCP endpoint
 	/// using a Cloud ID to resolve the Kibana URL.
 	/// </summary>
 	/// <param name="cloudId">The Elastic Cloud ID.</param>
@@ -73,7 +73,7 @@ public static class AgentBuilderMcp
 	/// <param name="namespaceFilter">Optional comma-separated namespace filter for tools.</param>
 	/// <param name="loggerFactory">Optional logger factory for MCP diagnostics.</param>
 	/// <param name="ct">Cancellation token.</param>
-	public static Task<IMcpClient> CreateClientFromCloudIdAsync(
+	public static Task<McpClient> CreateClientFromCloudIdAsync(
 		string cloudId,
 		string apiKey,
 		string? space = null,

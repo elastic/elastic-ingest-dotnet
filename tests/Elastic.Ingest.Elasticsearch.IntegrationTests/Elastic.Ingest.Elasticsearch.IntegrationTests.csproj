@@ -10,7 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.2.1" />
-    <PackageReference Include="Elastic.TUnit.Elasticsearch.Core" Version="0.12.2" />
+    <PackageReference Include="Elastic.TUnit.Elasticsearch.Core" Version="0.13.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.0-preview.1.25080.5" />
   </ItemGroup>
 
