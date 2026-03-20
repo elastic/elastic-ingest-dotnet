@@ -99,15 +99,17 @@ public class ElasticAgentChatClient : IChatClient
 	{
 		var response = await GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
 
-		var text = response.Messages.FirstOrDefault()?.Text ?? string.Empty;
-		yield return new ChatResponseUpdate
+		foreach (var message in response.Messages)
 		{
-			Role = ChatRole.Assistant,
-			Contents = [new TextContent(text)],
-			FinishReason = response.FinishReason,
-			ConversationId = response.ConversationId,
-			ModelId = response.ModelId,
-		};
+			yield return new ChatResponseUpdate
+			{
+				Role = message.Role,
+				Contents = message.Contents,
+				FinishReason = response.FinishReason,
+				ConversationId = response.ConversationId,
+				ModelId = response.ModelId,
+			};
+		}
 	}
 
 	/// <inheritdoc />
