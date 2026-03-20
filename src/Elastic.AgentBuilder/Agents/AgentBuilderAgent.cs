@@ -4,40 +4,41 @@
 
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+using Elastic.Transport;
 
 namespace Elastic.AgentBuilder.Agents;
 
 /// <summary>
 /// Represents an agent as returned by the Agent Builder API.
 /// </summary>
-public record AgentBuilderAgent
+public class AgentBuilderAgent : TransportResponse
 {
 	[JsonPropertyName("id")]
-	public required string Id { get; init; }
+	public string Id { get; set; } = default!;
 
 	[JsonPropertyName("type")]
-	public string? Type { get; init; }
+	public string? Type { get; set; }
 
 	[JsonPropertyName("name")]
-	public required string Name { get; init; }
+	public string Name { get; set; } = default!;
 
 	[JsonPropertyName("description")]
-	public string? Description { get; init; }
+	public string? Description { get; set; }
 
 	[JsonPropertyName("labels")]
-	public IReadOnlyList<string>? Labels { get; init; }
+	public IReadOnlyList<string>? Labels { get; set; }
 
 	[JsonPropertyName("avatar_color")]
-	public string? AvatarColor { get; init; }
+	public string? AvatarColor { get; set; }
 
 	[JsonPropertyName("avatar_symbol")]
-	public string? AvatarSymbol { get; init; }
+	public string? AvatarSymbol { get; set; }
 
 	[JsonPropertyName("configuration")]
-	public AgentConfiguration? Configuration { get; init; }
+	public AgentConfiguration? Configuration { get; set; }
 
 	[JsonPropertyName("readonly")]
-	public bool Readonly { get; init; }
+	public bool Readonly { get; set; }
 }
 
 /// <summary>
@@ -64,8 +65,8 @@ public record AgentToolGroup
 /// <summary>
 /// Response wrapper for listing agents.
 /// </summary>
-public record ListAgentsResponse
+public class ListAgentsResponse : TransportResponse
 {
 	[JsonPropertyName("results")]
-	public required IReadOnlyList<AgentBuilderAgent> Results { get; init; }
+	public IReadOnlyList<AgentBuilderAgent> Results { get; set; } = default!;
 }

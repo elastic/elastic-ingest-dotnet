@@ -17,14 +17,14 @@ public partial class AgentBuilderClient
 {
 	/// <summary> Send a synchronous chat message to an agent. </summary>
 	public Task<ConverseResponse> ConverseAsync(ConverseRequest request, CancellationToken ct = default) =>
-		PostAsync("/converse", request, Ctx.ConverseRequest, Ctx.ConverseResponse, ct);
+		PostAsync<ConverseRequest, ConverseResponse>("/converse", request, ct);
 
 	/// <summary> Send a chat message and receive a stream of typed SSE events. </summary>
 	public async IAsyncEnumerable<ConverseStreamEvent> ConverseStreamAsync(
 		ConverseRequest request,
 		[EnumeratorCancellation] CancellationToken ct = default)
 	{
-		using var response = await PostStreamAsync("/converse/async", request, Ctx.ConverseRequest, ct)
+		using var response = await PostStreamAsync("/converse/async", request, ct)
 			.ConfigureAwait(false);
 
 		var parser = SseParser.Create(response.Body, ParseSseEvent);
@@ -37,11 +37,11 @@ public partial class AgentBuilderClient
 
 	/// <summary> List all conversations. </summary>
 	public Task<ListConversationsResponse> ListConversationsAsync(CancellationToken ct = default) =>
-		GetAsync("/conversations", Ctx.ListConversationsResponse, ct);
+		GetAsync<ListConversationsResponse>("/conversations", ct);
 
 	/// <summary> Get a conversation by its ID. </summary>
 	public Task<Conversation> GetConversationAsync(string conversationId, CancellationToken ct = default) =>
-		GetAsync($"/conversations/{conversationId}", Ctx.Conversation, ct);
+		GetAsync<Conversation>($"/conversations/{conversationId}", ct);
 
 	/// <summary> Delete a conversation by its ID. </summary>
 	public Task DeleteConversationAsync(string conversationId, CancellationToken ct = default) =>

@@ -29,30 +29,30 @@ public class AgentTransportConfiguration
 	/// The Cloud ID is parsed to resolve the Kibana service URL automatically.
 	/// </summary>
 	public AgentTransportConfiguration(string cloudId, ApiKey credentials) =>
-		_factory = () => new TransportConfigurationDescriptor(cloudId, credentials, CloudService.Kibana)
-			.GlobalHeaders(KibanaHeaders);
+		_factory = () => Descriptor(new CloudNodePool(cloudId, credentials, CloudService.Kibana));
 
 	/// <summary>
 	/// Connect to Kibana via an Elastic Cloud ID with basic credentials.
 	/// </summary>
 	public AgentTransportConfiguration(string cloudId, BasicAuthentication credentials) =>
-		_factory = () => new TransportConfigurationDescriptor(cloudId, credentials, CloudService.Kibana)
-			.GlobalHeaders(KibanaHeaders);
+		_factory = () => Descriptor(new CloudNodePool(cloudId, credentials, CloudService.Kibana));
 
 	/// <summary>
 	/// Connect to a Kibana instance at the given URL with an API key.
 	/// </summary>
 	public AgentTransportConfiguration(Uri kibanaUri, ApiKey credentials) =>
-		_factory = () => new TransportConfigurationDescriptor(new SingleNodePool(kibanaUri))
-			.Authentication(credentials)
-			.GlobalHeaders(KibanaHeaders);
+		_factory = () => Descriptor(new SingleNodePool(kibanaUri))
+			.Authentication(credentials);
 
 	/// <summary>
 	/// Connect to a Kibana instance at the given URL with basic credentials.
 	/// </summary>
 	public AgentTransportConfiguration(Uri kibanaUri, BasicAuthentication credentials) =>
-		_factory = () => new TransportConfigurationDescriptor(new SingleNodePool(kibanaUri))
-			.Authentication(credentials)
+		_factory = () => Descriptor(new SingleNodePool(kibanaUri))
+			.Authentication(credentials);
+
+	private static TransportConfigurationDescriptor Descriptor(NodePool pool) =>
+		new TransportConfigurationDescriptor(pool, null, AgentBuilderSerializer.Instance)
 			.GlobalHeaders(KibanaHeaders);
 
 	internal ITransportConfiguration CreateTransportConfiguration() => _factory();

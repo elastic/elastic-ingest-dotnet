@@ -5,31 +5,32 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Elastic.Transport;
 
 namespace Elastic.AgentBuilder.Conversations;
 
 /// <summary>
 /// Synchronous response from the converse API.
 /// </summary>
-public record ConverseResponse
+public class ConverseResponse : TransportResponse
 {
 	[JsonPropertyName("conversation_id")]
-	public required string ConversationId { get; init; }
+	public string ConversationId { get; set; } = default!;
 
 	[JsonPropertyName("round_id")]
-	public string? RoundId { get; init; }
+	public string? RoundId { get; set; }
 
 	[JsonPropertyName("status")]
-	public string? Status { get; init; }
+	public string? Status { get; set; }
 
 	[JsonPropertyName("steps")]
-	public IReadOnlyList<ConverseStep>? Steps { get; init; }
+	public IReadOnlyList<ConverseStep>? Steps { get; set; }
 
 	[JsonPropertyName("model_usage")]
-	public ModelUsage? ModelUsage { get; init; }
+	public ModelUsage? ModelUsage { get; set; }
 
 	[JsonPropertyName("response")]
-	public ConverseMessage? Response { get; init; }
+	public ConverseMessage? Response { get; set; }
 }
 
 /// <summary>

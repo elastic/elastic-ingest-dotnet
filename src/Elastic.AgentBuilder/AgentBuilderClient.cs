@@ -3,8 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Transport;
@@ -54,45 +53,48 @@ public partial class AgentBuilderClient
 
 	private string Path(string relative) => $"{_pathPrefix}{relative}";
 
-	private async Task<TResponse> GetAsync<TResponse>(string path, JsonTypeInfo<TResponse> typeInfo, CancellationToken ct)
+	private async Task<TResponse> GetAsync<TResponse>(string path, CancellationToken ct)
+		where TResponse : TransportResponse, new()
 	{
 		var response = await _transport
-			.RequestAsync<StringResponse>(HttpMethod.GET, Path(path), cancellationToken: ct)
+			.RequestAsync<TResponse>(HttpMethod.GET, Path(path), cancellationToken: ct)
 			.ConfigureAwait(false);
 		EnsureSuccess(response);
-		return Deserialize(response.Body, typeInfo);
+		return response;
 	}
 
 	private async Task<TResponse> PostAsync<TRequest, TResponse>(
-		string path, TRequest body, JsonTypeInfo<TRequest> requestTypeInfo, JsonTypeInfo<TResponse> responseTypeInfo, CancellationToken ct)
+		string path, TRequest body, CancellationToken ct)
+		where TResponse : TransportResponse, new()
 	{
-		var json = JsonSerializer.Serialize(body, requestTypeInfo);
 		var response = await _transport
-			.RequestAsync<StringResponse>(HttpMethod.POST, Path(path), PostData.String(json), cancellationToken: ct)
+			.RequestAsync<TResponse>(HttpMethod.POST, Path(path),
+				PostData.Serializable(body), cancellationToken: ct)
 			.ConfigureAwait(false);
 		EnsureSuccess(response);
-		return Deserialize(response.Body, responseTypeInfo);
+		return response;
 	}
 
 	private async Task<TResponse> PutAsync<TRequest, TResponse>(
-		string path, TRequest body, JsonTypeInfo<TRequest> requestTypeInfo, JsonTypeInfo<TResponse> responseTypeInfo, CancellationToken ct)
+		string path, TRequest body, CancellationToken ct)
+		where TResponse : TransportResponse, new()
 	{
-		var json = JsonSerializer.Serialize(body, requestTypeInfo);
 		var response = await _transport
-			.RequestAsync<StringResponse>(HttpMethod.PUT, Path(path), PostData.String(json), cancellationToken: ct)
+			.RequestAsync<TResponse>(HttpMethod.PUT, Path(path),
+				PostData.Serializable(body), cancellationToken: ct)
 			.ConfigureAwait(false);
 		EnsureSuccess(response);
-		return Deserialize(response.Body, responseTypeInfo);
+		return response;
 	}
 
 	private static readonly RequestConfiguration SseRequestConfig = new() { Accept = "application/octet-stream" };
 
 	internal async Task<StreamResponse> PostStreamAsync<TRequest>(
-		string path, TRequest body, JsonTypeInfo<TRequest> requestTypeInfo, CancellationToken ct)
+		string path, TRequest body, CancellationToken ct)
 	{
-		var json = JsonSerializer.Serialize(body, requestTypeInfo);
 		var response = await _transport
-			.RequestAsync<StreamResponse>(HttpMethod.POST, Path(path), PostData.String(json),
+			.RequestAsync<StreamResponse>(HttpMethod.POST, Path(path),
+				PostData.Serializable(body),
 				localConfiguration: SseRequestConfig, cancellationToken: ct)
 			.ConfigureAwait(false);
 		EnsureSuccess(response);
@@ -102,20 +104,18 @@ public partial class AgentBuilderClient
 	private async Task DeleteAsync(string path, CancellationToken ct)
 	{
 		var response = await _transport
-			.RequestAsync<StringResponse>(HttpMethod.DELETE, Path(path), cancellationToken: ct)
+			.RequestAsync<VoidResponse>(HttpMethod.DELETE, Path(path), cancellationToken: ct)
 			.ConfigureAwait(false);
 		EnsureSuccess(response);
 	}
-
-	private static TResponse Deserialize<TResponse>(string body, JsonTypeInfo<TResponse> typeInfo) =>
-		JsonSerializer.Deserialize(body, typeInfo)
-		?? throw new InvalidOperationException($"Failed to deserialize response as {typeof(TResponse).Name}");
 
 	private static void EnsureSuccess(TransportResponse response)
 	{
 		if (!response.ApiCallDetails.HasSuccessfulStatusCode)
 		{
-			var body = response is StringResponse sr ? $": {sr.Body}" : string.Empty;
+			var body = response.ApiCallDetails.ResponseBodyInBytes is { Length: > 0 } bytes
+				? $": {Encoding.UTF8.GetString(bytes)}"
+				: string.Empty;
 			throw new AgentBuilderException(
 				$"Agent Builder API returned {response.ApiCallDetails.HttpStatusCode}{body}",
 				response.ApiCallDetails);
