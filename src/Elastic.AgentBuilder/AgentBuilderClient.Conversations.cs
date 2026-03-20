@@ -2,6 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System;
 using System.Collections.Generic;
 using System.Net.ServerSentEvents;
 using System.Runtime.CompilerServices;
@@ -26,10 +27,10 @@ public partial class AgentBuilderClient
 		using var response = await PostStreamAsync("/converse/async", request, Ctx.ConverseRequest, ct)
 			.ConfigureAwait(false);
 
-		await foreach (var item in SseParser.Create(response.Body).EnumerateAsync(ct).ConfigureAwait(false))
+		var parser = SseParser.Create(response.Body, ParseSseEvent);
+		await foreach (var item in parser.EnumerateAsync(ct).ConfigureAwait(false))
 		{
-			var evt = ParseStreamEvent(item.EventType, item.Data);
-			if (evt != null)
+			if (item.Data is { } evt)
 				yield return evt;
 		}
 	}
@@ -46,27 +47,40 @@ public partial class AgentBuilderClient
 	public Task DeleteConversationAsync(string conversationId, CancellationToken ct = default) =>
 		DeleteAsync($"/conversations/{conversationId}", ct);
 
-	private static ConverseStreamEvent? ParseStreamEvent(string eventType, string rawData)
+	/// <summary>
+	/// Parses the raw UTF-8 bytes of an SSE <c>data:</c> line directly into a typed
+	/// <see cref="ConverseStreamEvent"/>. Kibana wraps every event payload in a
+	/// <c>{"data": {…}}</c> envelope, so we use a <see cref="Utf8JsonReader"/> to
+	/// navigate to the inner value and deserialize from there — single pass, zero
+	/// intermediate string allocations, fully AOT-safe.
+	/// </summary>
+	private static ConverseStreamEvent? ParseSseEvent(string eventType, ReadOnlySpan<byte> data)
 	{
-		using var doc = JsonDocument.Parse(rawData);
-		if (!doc.RootElement.TryGetProperty("data", out var dataElement))
+		var reader = new Utf8JsonReader(data);
+
+		if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+			return null;
+		if (!reader.Read() || reader.TokenType != JsonTokenType.PropertyName)
+			return null;
+		if (!reader.ValueTextEquals("data"u8))
 			return null;
 
-		var json = dataElement.GetRawText();
+		reader.Read();
+
 		var ctx = AgentBuilderSerializationContext.Default;
 		return eventType switch
 		{
-			"conversation_id_set" => JsonSerializer.Deserialize(json, ctx.ConversationIdSetEvent),
-			"conversation_created" => JsonSerializer.Deserialize(json, ctx.ConversationCreatedEvent),
-			"conversation_updated" => JsonSerializer.Deserialize(json, ctx.ConversationUpdatedEvent),
-			"reasoning" => JsonSerializer.Deserialize(json, ctx.ReasoningEvent),
-			"tool_call" => JsonSerializer.Deserialize(json, ctx.ToolCallEvent),
-			"tool_progress" => JsonSerializer.Deserialize(json, ctx.ToolProgressEvent),
-			"tool_result" => JsonSerializer.Deserialize(json, ctx.ToolResultEvent),
-			"message_chunk" => JsonSerializer.Deserialize(json, ctx.MessageChunkEvent),
-			"message_complete" => JsonSerializer.Deserialize(json, ctx.MessageCompleteEvent),
-			"thinking_complete" => JsonSerializer.Deserialize(json, ctx.ThinkingCompleteEvent),
-			"round_complete" => JsonSerializer.Deserialize(json, ctx.RoundCompleteEvent),
+			"conversation_id_set" => JsonSerializer.Deserialize(ref reader, ctx.ConversationIdSetEvent),
+			"conversation_created" => JsonSerializer.Deserialize(ref reader, ctx.ConversationCreatedEvent),
+			"conversation_updated" => JsonSerializer.Deserialize(ref reader, ctx.ConversationUpdatedEvent),
+			"reasoning" => JsonSerializer.Deserialize(ref reader, ctx.ReasoningEvent),
+			"tool_call" => JsonSerializer.Deserialize(ref reader, ctx.ToolCallEvent),
+			"tool_progress" => JsonSerializer.Deserialize(ref reader, ctx.ToolProgressEvent),
+			"tool_result" => JsonSerializer.Deserialize(ref reader, ctx.ToolResultEvent),
+			"message_chunk" => JsonSerializer.Deserialize(ref reader, ctx.MessageChunkEvent),
+			"message_complete" => JsonSerializer.Deserialize(ref reader, ctx.MessageCompleteEvent),
+			"thinking_complete" => JsonSerializer.Deserialize(ref reader, ctx.ThinkingCompleteEvent),
+			"round_complete" => JsonSerializer.Deserialize(ref reader, ctx.RoundCompleteEvent),
 			_ => null
 		};
 	}
