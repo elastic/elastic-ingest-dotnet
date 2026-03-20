@@ -29,4 +29,10 @@ public partial class AgentBuilderClient
 	/// <summary> Delete an agent by its ID. </summary>
 	public Task DeleteAgentAsync(string agentId, CancellationToken ct = default) =>
 		DeleteAsync($"/agents/{agentId}", ct);
+
+	/// <summary> Get paginated, per-conversation token consumption data for an agent. </summary>
+	public Task<AgentConsumptionResponse> GetAgentConsumptionAsync(
+		string agentId, AgentConsumptionRequest request, CancellationToken ct = default) =>
+		PostAsync<AgentConsumptionRequest, AgentConsumptionResponse>(
+			$"/agents/{agentId}/consumption", request, ct);
 }

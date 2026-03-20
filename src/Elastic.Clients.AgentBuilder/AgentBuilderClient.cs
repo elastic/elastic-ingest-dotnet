@@ -109,6 +109,17 @@ public partial class AgentBuilderClient
 		EnsureSuccess(response);
 	}
 
+	private async Task<TResponse> PostEmptyAsync<TResponse>(string path, CancellationToken ct)
+		where TResponse : TransportResponse, new()
+	{
+		var response = await _transport
+			.RequestAsync<TResponse>(HttpMethod.POST, Path(path),
+				PostData.Empty, cancellationToken: ct)
+			.ConfigureAwait(false);
+		EnsureSuccess(response);
+		return response;
+	}
+
 	private static void EnsureSuccess(TransportResponse response)
 	{
 		if (!response.ApiCallDetails.HasSuccessfulStatusCode)
