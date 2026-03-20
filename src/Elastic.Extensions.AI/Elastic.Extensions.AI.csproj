@@ -6,7 +6,7 @@
     <PackageTags>elastic, kibana, agent-builder, mcp, ai, microsoft-extensions-ai</PackageTags>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
+    <IsPackable>True</IsPackable>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
@@ -28,8 +28,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.AI" Version="9.5.0" />
-    <PackageReference Include="ModelContextProtocol" Version="0.2.0-preview.3" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.4.1" />
+    <PackageReference Include="Microsoft.Bcl.Memory" Version="10.0.5" />
+    <PackageReference Include="ModelContextProtocol" Version="1.1.0" />
   </ItemGroup>
 
 </Project>
