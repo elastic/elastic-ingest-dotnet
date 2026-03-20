@@ -25,7 +25,7 @@ This package bridges Elastic Agent Builder into that ecosystem:
 
 ```csharp
 using Elastic.Transport;
-using Elastic.AgentBuilder;
+using Elastic.Clients.AgentBuilder;
 using Elastic.Extensions.AI;
 using Microsoft.Extensions.AI;
 

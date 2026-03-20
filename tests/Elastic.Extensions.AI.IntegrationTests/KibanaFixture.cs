@@ -3,8 +3,8 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using Elastic.AgentBuilder;
-using Elastic.AgentBuilder.Agents;
+using Elastic.Clients.AgentBuilder;
+using Elastic.Clients.AgentBuilder.Agents;
 using Elastic.Transport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;

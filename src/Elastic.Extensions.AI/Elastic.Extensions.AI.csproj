@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Elastic.AgentBuilder\Elastic.AgentBuilder.csproj" />
+    <ProjectReference Include="..\Elastic.Clients.AgentBuilder\Elastic.Clients.AgentBuilder.csproj" />
   </ItemGroup>
 
   <ItemGroup Condition="!$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">

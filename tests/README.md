@@ -11,7 +11,7 @@ directory and every integration test project will read them.
 Run these commands from any project under `tests/`:
 
 ```bash
-cd tests/Elastic.AgentBuilder.IntegrationTests   # or any other test project
+cd tests/Elastic.Clients.AgentBuilder.IntegrationTests   # or any other test project
 
 # Elasticsearch (for Elastic.Ingest.Elasticsearch.IntegrationTests)
 dotnet user-secrets set "Parameters:ElasticsearchUrl" "https://localhost:9200"
@@ -60,10 +60,10 @@ dotnet user-secrets clear
 
 ```bash
 # Unit tests (no secrets needed)
-dotnet test --project tests/Elastic.AgentBuilder.Tests
+dotnet test --project tests/Elastic.Clients.AgentBuilder.Tests
 
 # Integration tests (requires secrets above)
-dotnet test --project tests/Elastic.AgentBuilder.IntegrationTests
+dotnet test --project tests/Elastic.Clients.AgentBuilder.IntegrationTests
 dotnet test --project tests/Elastic.Extensions.AI.IntegrationTests
 dotnet test --project tests/Elastic.Ingest.Elasticsearch.IntegrationTests
 ```
