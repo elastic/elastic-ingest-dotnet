@@ -12,8 +12,15 @@ public class PluginTests : AgentBuilderTestBase
 	[Test]
 	public async Task CanListPlugins()
 	{
-		var response = await Client.ListPluginsAsync();
-		response.Should().NotBeNull();
-		response.Results.Should().NotBeNull();
+		try
+		{
+			var response = await Client.ListPluginsAsync();
+			response.Should().NotBeNull();
+			response.Results.Should().NotBeNull();
+		}
+		catch (AgentBuilderException ex) when (ex.ApiCallDetails.HttpStatusCode == 404)
+		{
+			Skip.Test("Plugins API not available (requires Kibana 9.4.0+)");
+		}
 	}
 }
