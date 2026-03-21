@@ -14,7 +14,7 @@ namespace Elastic.Clients.AgentBuilder.Conversations;
 /// </summary>
 public class Conversation : TransportResponse
 {
-	[JsonPropertyName("conversation_id")]
+	[JsonPropertyName("id")]
 	public string ConversationId { get; set; } = default!;
 
 	[JsonPropertyName("title")]

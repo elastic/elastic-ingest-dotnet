@@ -16,15 +16,28 @@ public class SkillCrudTests : AgentBuilderTestBase
 	[Test]
 	public async Task CanListSkills()
 	{
-		var response = await Client.ListSkillsAsync();
-		response.Should().NotBeNull();
-		response.Results.Should().NotBeNull();
+		try
+		{
+			var response = await Client.ListSkillsAsync();
+			response.Should().NotBeNull();
+			response.Results.Should().NotBeNull();
+		}
+		catch (AgentBuilderException ex) when (ex.ApiCallDetails.HttpStatusCode == 404)
+		{
+			Skip.Test("Skills API not available (requires Kibana 9.4.0+)");
+		}
 	}
 
 	[Test]
 	public async Task CanCreateGetUpdateDeleteSkill()
 	{
-		try { await Client.DeleteSkillAsync(TestSkillId); } catch { /* cleanup from previous runs */ }
+		try { await Client.DeleteSkillAsync(TestSkillId); }
+		catch (AgentBuilderException ex) when (ex.ApiCallDetails.HttpStatusCode == 404)
+		{
+			Skip.Test("Skills API not available (requires Kibana 9.4.0+)");
+			return;
+		}
+		catch { /* cleanup from previous runs */ }
 
 		var created = await Client.CreateSkillAsync(new CreateSkillRequest
 		{
