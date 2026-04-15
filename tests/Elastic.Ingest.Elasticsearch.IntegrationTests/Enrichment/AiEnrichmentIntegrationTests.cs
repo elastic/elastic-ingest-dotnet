@@ -571,7 +571,7 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 		await Transport.RequestAsync<StringResponse>(
 			HttpMethod.DELETE, $"_ingest/pipeline/{Provider.PipelineName}");
 		await Transport.RequestAsync<StringResponse>(
-			HttpMethod.DELETE, $"_enrich/policy/{Provider.EnrichPolicyName}");
+			HttpMethod.DELETE, $"_enrich/policy/{Provider.EnrichPolicyName}-{Provider.FieldsHash}");
 	}
 
 	private static string UrlHash(string url)

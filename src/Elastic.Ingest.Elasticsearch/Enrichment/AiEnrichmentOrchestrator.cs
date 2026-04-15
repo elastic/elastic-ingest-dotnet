@@ -85,10 +85,12 @@ public partial class AiEnrichmentOrchestrator : IDisposable
 	public async Task InitializeAsync(CancellationToken ct = default)
 	{
 		await EnsureLookupIndexAsync(ct).ConfigureAwait(false);
-		await EnsureEnrichPolicyAsync(ct).ConfigureAwait(false);
+		var policyCreated = await EnsureEnrichPolicyAsync(ct).ConfigureAwait(false);
 		await ExecuteEnrichPolicyAsync(ct).ConfigureAwait(false);
 		await EnsurePipelineAsync(ct).ConfigureAwait(false);
-		await CleanupStalePoliciesAsync(ct).ConfigureAwait(false);
+
+		if (policyCreated)
+			await CleanupStalePoliciesAsync(ct).ConfigureAwait(false);
 	}
 
 	/// <summary>

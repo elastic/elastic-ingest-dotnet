@@ -28,16 +28,17 @@ public partial class AiEnrichmentOrchestrator
 			throw new Exception($"Failed to create lookup index '{_infra.LookupIndexName}': HTTP {put.ApiCallDetails.HttpStatusCode}");
 	}
 
-	private async Task EnsureEnrichPolicyAsync(CancellationToken ct)
+	/// <returns><c>true</c> if a new policy was created; <c>false</c> if it already existed.</returns>
+	private async Task<bool> EnsureEnrichPolicyAsync(CancellationToken ct)
 	{
 		// Policy name is hash-versioned (e.g. my-cache-ai-policy-a1b2c3d4),
-		// so existence == current schema. No need to compare fields.
+		// so existence == current schema.
 		var exists = await _transport.RequestAsync<JsonResponse>(
 			HttpMethod.GET, $"_enrich/policy/{_versionedPolicyName}",
 			cancellationToken: ct).ConfigureAwait(false);
 
 		if (exists.ApiCallDetails.HttpStatusCode == 200)
-			return;
+			return false;
 
 		var put = await _transport.RequestAsync<StringResponse>(
 			HttpMethod.PUT, $"_enrich/policy/{_versionedPolicyName}",
@@ -47,6 +48,8 @@ public partial class AiEnrichmentOrchestrator
 			throw new Exception(
 				$"Failed to create enrich policy '{_versionedPolicyName}': " +
 				$"HTTP {put.ApiCallDetails.HttpStatusCode} — {put.Body}");
+
+		return true;
 	}
 
 	private async Task ExecuteEnrichPolicyAsync(CancellationToken ct)
@@ -107,6 +110,10 @@ public partial class AiEnrichmentOrchestrator
 
 			var name = match["name"]?.GetValue<string>();
 			if (name == null || name == _versionedPolicyName)
+				continue;
+
+			// Only delete policies owned by this orchestrator (same base name prefix)
+			if (!name.StartsWith(_infra.EnrichPolicyName, StringComparison.Ordinal))
 				continue;
 
 			var indicesNode = match["indices"];
