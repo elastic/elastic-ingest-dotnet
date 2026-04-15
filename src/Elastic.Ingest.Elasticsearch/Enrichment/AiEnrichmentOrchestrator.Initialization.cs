@@ -37,7 +37,9 @@ public partial class AiEnrichmentOrchestrator
 			HttpMethod.GET, $"_enrich/policy/{_versionedPolicyName}",
 			cancellationToken: ct).ConfigureAwait(false);
 
-		if (exists.ApiCallDetails.HttpStatusCode == 200)
+		if (exists.ApiCallDetails.HttpStatusCode == 200
+			&& exists.Body is JsonObject root
+			&& root["policies"]?.AsArray() is { Count: > 0 })
 			return false;
 
 		var put = await _transport.RequestAsync<StringResponse>(
