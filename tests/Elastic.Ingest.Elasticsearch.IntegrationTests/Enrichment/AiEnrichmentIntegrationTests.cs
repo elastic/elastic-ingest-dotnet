@@ -67,7 +67,7 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 	public void ProviderGeneratesValidInfrastructureJson()
 	{
 		Provider.LookupIndexName.Should().NotBeNullOrEmpty();
-		Provider.EnrichPolicyName.Should().Be($"{Provider.LookupIndexName}-ai-policy");
+		Provider.EnrichPolicyName.Should().Be($"{Provider.LookupIndexName}-ai-policy-{Provider.FieldsHash}");
 		Provider.PipelineName.Should().Be($"{Provider.LookupIndexName}-ai-pipeline");
 		Provider.MatchField.Should().Be("url");
 
@@ -567,10 +567,11 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 
 	private async Task CleanupPolicyAndPipelineAsync()
 	{
-		await Transport.RequestAsync<StringResponse>(
-			HttpMethod.DELETE, $"_enrich/policy/{Provider.EnrichPolicyName}");
+		// Delete pipeline first so the policy is unreferenced (avoids 409)
 		await Transport.RequestAsync<StringResponse>(
 			HttpMethod.DELETE, $"_ingest/pipeline/{Provider.PipelineName}");
+		await Transport.RequestAsync<StringResponse>(
+			HttpMethod.DELETE, $"_enrich/policy/{Provider.EnrichPolicyName}");
 	}
 
 	private static string UrlHash(string url)

@@ -85,6 +85,7 @@ public partial class AiEnrichmentOrchestrator : IDisposable
 		await EnsureEnrichPolicyAsync(ct).ConfigureAwait(false);
 		await ExecuteEnrichPolicyAsync(ct).ConfigureAwait(false);
 		await EnsurePipelineAsync(ct).ConfigureAwait(false);
+		await CleanupStalePoliciesAsync(ct).ConfigureAwait(false);
 	}
 
 	/// <summary>

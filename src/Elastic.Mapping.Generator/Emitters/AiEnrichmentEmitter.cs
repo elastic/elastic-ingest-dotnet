@@ -44,7 +44,7 @@ internal static class AiEnrichmentEmitter
 			?? (model.WriteAlias != null ? $"{model.WriteAlias}-ai-cache" : $"{model.DocumentTypeName.ToLowerInvariant()}-ai-cache");
 		var lookupIndexName = baseName;
 		var fieldsHash = ComputeFieldsHash(model);
-		var policyName = $"{lookupIndexName}-ai-policy";
+		var policyName = $"{lookupIndexName}-ai-policy-{fieldsHash}";
 		var pipelineName = $"{lookupIndexName}-ai-pipeline";
 
 		sb.AppendLine($"{indent}/// <summary>Generated AI enrichment provider for <see cref=\"global::{model.DocumentTypeFullyQualifiedName}\"/>.</summary>");
@@ -443,7 +443,7 @@ internal static class AiEnrichmentEmitter
 		sb.AppendLine($"{indent}/// </summary>");
 		sb.AppendLine($"{indent}public global::Elastic.Mapping.AiInfrastructure CreateInfrastructure(string lookupIndexName)");
 		sb.AppendLine($"{indent}{{");
-		sb.AppendLine($"{indent}\tvar policyName = lookupIndexName + \"-ai-policy\";");
+		sb.AppendLine($"{indent}\tvar policyName = lookupIndexName + \"-ai-policy-{fieldsHash}\";");
 		sb.AppendLine($"{indent}\tvar pipelineName = lookupIndexName + \"-ai-pipeline\";");
 		sb.AppendLine();
 		sb.AppendLine($"{indent}\tvar policyBody = \"{{\\\"match\\\":{{\\\"indices\\\":\\\"\" + lookupIndexName + \"\\\",\\\"match_field\\\":\\\"{model.MatchFieldName}\\\",\\\"enrich_fields\\\":[{enrichFieldsForInterpolation}]}}}}\";");
