@@ -567,10 +567,11 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 
 	private async Task CleanupPolicyAndPipelineAsync()
 	{
-		await Transport.RequestAsync<StringResponse>(
-			HttpMethod.DELETE, $"_enrich/policy/{Provider.EnrichPolicyName}");
+		// Delete pipeline first so the policy is unreferenced (avoids 409)
 		await Transport.RequestAsync<StringResponse>(
 			HttpMethod.DELETE, $"_ingest/pipeline/{Provider.PipelineName}");
+		await Transport.RequestAsync<StringResponse>(
+			HttpMethod.DELETE, $"_enrich/policy/{Provider.EnrichPolicyName}-{Provider.FieldsHash}");
 	}
 
 	private static string UrlHash(string url)

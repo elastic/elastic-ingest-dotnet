@@ -3,7 +3,6 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Collections.Generic;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
@@ -29,108 +28,38 @@ public partial class AiEnrichmentOrchestrator
 			throw new Exception($"Failed to create lookup index '{_infra.LookupIndexName}': HTTP {put.ApiCallDetails.HttpStatusCode}");
 	}
 
-	private async Task EnsureEnrichPolicyAsync(CancellationToken ct)
+	/// <returns><c>true</c> if a new policy was created; <c>false</c> if it already existed.</returns>
+	private async Task<bool> EnsureEnrichPolicyAsync(CancellationToken ct)
 	{
+		// Policy name is hash-versioned (e.g. my-cache-ai-policy-a1b2c3d4),
+		// so existence == current schema.
 		var exists = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.GET, $"_enrich/policy/{_infra.EnrichPolicyName}",
+			HttpMethod.GET, $"_enrich/policy/{_versionedPolicyName}",
 			cancellationToken: ct).ConfigureAwait(false);
 
 		if (exists.ApiCallDetails.HttpStatusCode == 200)
-		{
-			var matchResult = PolicyMatchesCurrentFields(exists);
-			if (matchResult == PolicyMatch.Matches)
-				return;
-
-			if (matchResult == PolicyMatch.SchemaChanged)
-			{
-				await _transport.RequestAsync<StringResponse>(
-					HttpMethod.DELETE, $"_ingest/pipeline/{_infra.PipelineName}",
-					cancellationToken: ct).ConfigureAwait(false);
-
-				var del = await _transport.RequestAsync<StringResponse>(
-					HttpMethod.DELETE, $"_enrich/policy/{_infra.EnrichPolicyName}",
-					cancellationToken: ct).ConfigureAwait(false);
-
-				if (del.ApiCallDetails.HttpStatusCode is not (200 or 404))
-					throw new Exception(
-						$"Failed to delete stale enrich policy '{_infra.EnrichPolicyName}': " +
-						$"HTTP {del.ApiCallDetails.HttpStatusCode} — {del.Body}");
-			}
-		}
+			return false;
 
 		var put = await _transport.RequestAsync<StringResponse>(
-			HttpMethod.PUT, $"_enrich/policy/{_infra.EnrichPolicyName}",
+			HttpMethod.PUT, $"_enrich/policy/{_versionedPolicyName}",
 			PostData.String(_infra.EnrichPolicyBody), cancellationToken: ct).ConfigureAwait(false);
 
 		if (put.ApiCallDetails.HttpStatusCode is not (200 or 201))
 			throw new Exception(
-				$"Failed to create enrich policy '{_infra.EnrichPolicyName}': " +
+				$"Failed to create enrich policy '{_versionedPolicyName}': " +
 				$"HTTP {put.ApiCallDetails.HttpStatusCode} — {put.Body}");
-	}
 
-	private enum PolicyMatch { NotFound, Matches, SchemaChanged }
-
-	private PolicyMatch PolicyMatchesCurrentFields(JsonResponse response)
-	{
-		if (response.Body is not JsonObject root)
-			return PolicyMatch.NotFound;
-
-		var policies = root["policies"]?.AsArray();
-		if (policies == null || policies.Count == 0)
-			return PolicyMatch.NotFound;
-
-		foreach (var policy in policies)
-		{
-			var match = policy?["config"]?["match"];
-			if (match == null)
-				continue;
-
-			var indicesNode = match["indices"];
-			if (indicesNode != null)
-			{
-				var indexName = indicesNode is JsonArray arr
-					? arr.Count == 1 ? arr[0]?.GetValue<string>() : null
-					: indicesNode.GetValue<string>();
-
-				if (indexName != _infra.LookupIndexName)
-					return PolicyMatch.SchemaChanged;
-			}
-
-			var fields = match["enrich_fields"]?.AsArray();
-			if (fields == null)
-				continue;
-
-			var existingFields = new HashSet<string>();
-			foreach (var f in fields)
-			{
-				if (f?.GetValue<string>() is { } s)
-					existingFields.Add(s);
-			}
-
-			var expectedFields = new HashSet<string>();
-			foreach (var field in _provider.EnrichmentFields)
-			{
-				expectedFields.Add(field);
-				if (_provider.FieldPromptHashFieldNames.TryGetValue(field, out var phField))
-					expectedFields.Add(phField);
-			}
-
-			return existingFields.SetEquals(expectedFields)
-				? PolicyMatch.Matches
-				: PolicyMatch.SchemaChanged;
-		}
-
-		return PolicyMatch.NotFound;
+		return true;
 	}
 
 	private async Task ExecuteEnrichPolicyAsync(CancellationToken ct)
 	{
 		var response = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.POST, $"_enrich/policy/{_infra.EnrichPolicyName}/_execute",
+			HttpMethod.POST, $"_enrich/policy/{_versionedPolicyName}/_execute",
 			PostData.Empty, cancellationToken: ct).ConfigureAwait(false);
 
 		if (response.ApiCallDetails.HttpStatusCode is not 200)
-			throw new Exception($"Failed to execute enrich policy '{_infra.EnrichPolicyName}': HTTP {response.ApiCallDetails.HttpStatusCode}");
+			throw new Exception($"Failed to execute enrich policy '{_versionedPolicyName}': HTTP {response.ApiCallDetails.HttpStatusCode}");
 	}
 
 	private async Task EnsurePipelineAsync(CancellationToken ct)
@@ -148,11 +77,60 @@ public partial class AiEnrichmentOrchestrator
 				return;
 		}
 
+		// Replace the base policy name with the versioned name in the pipeline body
+		// so the enrich processor references the hash-versioned policy.
+		var pipelineBody = _infra.PipelineBody.Replace(_infra.EnrichPolicyName, _versionedPolicyName);
+
 		var response = await _transport.RequestAsync<JsonResponse>(
 			HttpMethod.PUT, $"_ingest/pipeline/{_infra.PipelineName}",
-			PostData.String(_infra.PipelineBody), cancellationToken: ct).ConfigureAwait(false);
+			PostData.String(pipelineBody), cancellationToken: ct).ConfigureAwait(false);
 
 		if (response.ApiCallDetails.HttpStatusCode is not 200)
 			throw new Exception($"Failed to create pipeline '{_infra.PipelineName}': HTTP {response.ApiCallDetails.HttpStatusCode}");
+	}
+
+	private async Task CleanupStalePoliciesAsync(CancellationToken ct)
+	{
+		var response = await _transport.RequestAsync<JsonResponse>(
+			HttpMethod.GET, "_enrich/policy",
+			cancellationToken: ct).ConfigureAwait(false);
+
+		if (response.ApiCallDetails.HttpStatusCode != 200 || response.Body is not JsonObject root)
+			return;
+
+		var policies = root["policies"]?.AsArray();
+		if (policies == null || policies.Count == 0)
+			return;
+
+		foreach (var policy in policies)
+		{
+			var match = policy?["config"]?["match"];
+			if (match == null)
+				continue;
+
+			var name = match["name"]?.GetValue<string>();
+			if (name == null || name == _versionedPolicyName)
+				continue;
+
+			// Only delete policies owned by this orchestrator (same base name prefix)
+			if (!name.StartsWith(_infra.EnrichPolicyName, StringComparison.Ordinal))
+				continue;
+
+			var indicesNode = match["indices"];
+			if (indicesNode == null)
+				continue;
+
+			var indexName = indicesNode is JsonArray arr
+				? arr.Count == 1 ? arr[0]?.GetValue<string>() : null
+				: indicesNode.GetValue<string>();
+
+			if (indexName != _infra.LookupIndexName)
+				continue;
+
+			// Stale policy referencing our lookup index — best-effort delete
+			await _transport.RequestAsync<StringResponse>(
+				HttpMethod.DELETE, $"_enrich/policy/{name}",
+				cancellationToken: ct).ConfigureAwait(false);
+		}
 	}
 }
