@@ -532,7 +532,7 @@ internal sealed class FakeAiEnrichmentProvider : IAiEnrichmentProvider
 	public string LookupIndexName => "test-ai-enrichment-cache";
 	public string LookupIndexMapping => """{"mappings":{"properties":{"url":{"type":"keyword"}}}}""";
 	public string MatchField => "url";
-	public string EnrichPolicyName => "test-ai-enrichment-policy-abcd1234";
+	public string EnrichPolicyName => "test-ai-enrichment-policy";
 	public string EnrichPolicyBody => """{"match":{"indices":"test-ai-enrichment-cache","match_field":"url","enrich_fields":["ai_summary"]}}""";
 	public string PipelineName => "test-ai-enrichment-pipeline";
 	public string PipelineBody => """{"description":"AI enrichment pipeline [fields_hash:abcd1234]","processors":[]}""";

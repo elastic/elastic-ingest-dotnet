@@ -30,6 +30,7 @@ public partial class AiEnrichmentOrchestrator : IDisposable
 	private readonly ITransport _transport;
 	private readonly IAiEnrichmentProvider _provider;
 	private readonly AiInfrastructure _infra;
+	private readonly string _versionedPolicyName;
 
 	private readonly JsonElement _stalenessQuery;
 
@@ -51,6 +52,7 @@ public partial class AiEnrichmentOrchestrator : IDisposable
 		_transport = transport ?? throw new ArgumentNullException(nameof(transport));
 		_provider = provider;
 		_infra = infra;
+		_versionedPolicyName = $"{infra.EnrichPolicyName}-{infra.FieldsHash}";
 		_stalenessQuery = BuildStalenessQuery();
 	}
 
@@ -72,6 +74,7 @@ public partial class AiEnrichmentOrchestrator : IDisposable
 		_transport = transport ?? throw new ArgumentNullException(nameof(transport));
 		_provider = provider ?? throw new ArgumentNullException(nameof(provider));
 		_infra = infrastructure ?? AiInfrastructure.FromProvider(provider);
+		_versionedPolicyName = $"{_infra.EnrichPolicyName}-{_infra.FieldsHash}";
 		_stalenessQuery = BuildStalenessQuery();
 	}
 

@@ -67,7 +67,7 @@ public class AiEnrichmentIntegrationTests(IngestionCluster cluster) : Integratio
 	public void ProviderGeneratesValidInfrastructureJson()
 	{
 		Provider.LookupIndexName.Should().NotBeNullOrEmpty();
-		Provider.EnrichPolicyName.Should().Be($"{Provider.LookupIndexName}-ai-policy-{Provider.FieldsHash}");
+		Provider.EnrichPolicyName.Should().Be($"{Provider.LookupIndexName}-ai-policy");
 		Provider.PipelineName.Should().Be($"{Provider.LookupIndexName}-ai-pipeline");
 		Provider.MatchField.Should().Be("url");
 

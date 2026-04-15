@@ -105,7 +105,7 @@ public class AiEnrichmentGeneratorTests
 	public void EnrichPolicyNameIsNotEmpty()
 	{
 		Provider.EnrichPolicyName.Should().NotBeNullOrEmpty();
-		Provider.EnrichPolicyName.Should().Be($"{Provider.LookupIndexName}-ai-policy-{Provider.FieldsHash}");
+		Provider.EnrichPolicyName.Should().Be($"{Provider.LookupIndexName}-ai-policy");
 	}
 
 	[Test]
@@ -329,7 +329,7 @@ public class AiEnrichmentGeneratorTests
 		var infra = AiTestMappingContext.AiEnrichment.CreateInfrastructure("docs-semantic-production-ai-cache");
 
 		infra.LookupIndexName.Should().Be("docs-semantic-production-ai-cache");
-		infra.EnrichPolicyName.Should().Be($"docs-semantic-production-ai-cache-ai-policy-{Provider.FieldsHash}");
+		infra.EnrichPolicyName.Should().Be("docs-semantic-production-ai-cache-ai-policy");
 		infra.PipelineName.Should().Be("docs-semantic-production-ai-cache-ai-pipeline");
 	}
 
@@ -366,7 +366,7 @@ public class AiEnrichmentGeneratorTests
 	{
 		var infra = AiTestMappingContext.AiEnrichment.CreateInfrastructure("my-env-cache");
 
-		infra.PipelineBody.Should().Contain($"my-env-cache-ai-policy-{Provider.FieldsHash}");
+		infra.PipelineBody.Should().Contain("my-env-cache-ai-policy");
 		infra.PipelineBody.Should().Contain($"[fields_hash:{Provider.FieldsHash}]");
 	}
 
@@ -406,7 +406,7 @@ public class AiEnrichmentGeneratorTests
 	public void IndexVariantPolicyAndPipelineDeriveFromSecondary()
 	{
 		var provider = AiVariantTestMappingContext.AiEnrichment;
-		provider.EnrichPolicyName.Should().Be($"docs-secondary-ai-cache-ai-policy-{provider.FieldsHash}");
+		provider.EnrichPolicyName.Should().Be("docs-secondary-ai-cache-ai-policy");
 		provider.PipelineName.Should().Be("docs-secondary-ai-cache-ai-pipeline");
 		provider.EnrichPolicyBody.Should().Contain("docs-secondary-ai-cache");
 	}
@@ -418,7 +418,7 @@ public class AiEnrichmentGeneratorTests
 		var infra = provider.CreateInfrastructure("custom-env-ai-cache");
 
 		infra.LookupIndexName.Should().Be("custom-env-ai-cache");
-		infra.EnrichPolicyName.Should().Be($"custom-env-ai-cache-ai-policy-{provider.FieldsHash}");
+		infra.EnrichPolicyName.Should().Be("custom-env-ai-cache-ai-policy");
 		infra.PipelineName.Should().Be("custom-env-ai-cache-ai-pipeline");
 	}
 

@@ -33,30 +33,30 @@ public partial class AiEnrichmentOrchestrator
 		// Policy name is hash-versioned (e.g. my-cache-ai-policy-a1b2c3d4),
 		// so existence == current schema. No need to compare fields.
 		var exists = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.GET, $"_enrich/policy/{_infra.EnrichPolicyName}",
+			HttpMethod.GET, $"_enrich/policy/{_versionedPolicyName}",
 			cancellationToken: ct).ConfigureAwait(false);
 
 		if (exists.ApiCallDetails.HttpStatusCode == 200)
 			return;
 
 		var put = await _transport.RequestAsync<StringResponse>(
-			HttpMethod.PUT, $"_enrich/policy/{_infra.EnrichPolicyName}",
+			HttpMethod.PUT, $"_enrich/policy/{_versionedPolicyName}",
 			PostData.String(_infra.EnrichPolicyBody), cancellationToken: ct).ConfigureAwait(false);
 
 		if (put.ApiCallDetails.HttpStatusCode is not (200 or 201))
 			throw new Exception(
-				$"Failed to create enrich policy '{_infra.EnrichPolicyName}': " +
+				$"Failed to create enrich policy '{_versionedPolicyName}': " +
 				$"HTTP {put.ApiCallDetails.HttpStatusCode} — {put.Body}");
 	}
 
 	private async Task ExecuteEnrichPolicyAsync(CancellationToken ct)
 	{
 		var response = await _transport.RequestAsync<JsonResponse>(
-			HttpMethod.POST, $"_enrich/policy/{_infra.EnrichPolicyName}/_execute",
+			HttpMethod.POST, $"_enrich/policy/{_versionedPolicyName}/_execute",
 			PostData.Empty, cancellationToken: ct).ConfigureAwait(false);
 
 		if (response.ApiCallDetails.HttpStatusCode is not 200)
-			throw new Exception($"Failed to execute enrich policy '{_infra.EnrichPolicyName}': HTTP {response.ApiCallDetails.HttpStatusCode}");
+			throw new Exception($"Failed to execute enrich policy '{_versionedPolicyName}': HTTP {response.ApiCallDetails.HttpStatusCode}");
 	}
 
 	private async Task EnsurePipelineAsync(CancellationToken ct)
@@ -74,9 +74,13 @@ public partial class AiEnrichmentOrchestrator
 				return;
 		}
 
+		// Replace the base policy name with the versioned name in the pipeline body
+		// so the enrich processor references the hash-versioned policy.
+		var pipelineBody = _infra.PipelineBody.Replace(_infra.EnrichPolicyName, _versionedPolicyName);
+
 		var response = await _transport.RequestAsync<JsonResponse>(
 			HttpMethod.PUT, $"_ingest/pipeline/{_infra.PipelineName}",
-			PostData.String(_infra.PipelineBody), cancellationToken: ct).ConfigureAwait(false);
+			PostData.String(pipelineBody), cancellationToken: ct).ConfigureAwait(false);
 
 		if (response.ApiCallDetails.HttpStatusCode is not 200)
 			throw new Exception($"Failed to create pipeline '{_infra.PipelineName}': HTTP {response.ApiCallDetails.HttpStatusCode}");
@@ -102,7 +106,7 @@ public partial class AiEnrichmentOrchestrator
 				continue;
 
 			var name = match["name"]?.GetValue<string>();
-			if (name == null || name == _infra.EnrichPolicyName)
+			if (name == null || name == _versionedPolicyName)
 				continue;
 
 			var indicesNode = match["indices"];
