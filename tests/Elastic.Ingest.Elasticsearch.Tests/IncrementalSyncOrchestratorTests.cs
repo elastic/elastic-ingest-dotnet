@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Mapping;
@@ -333,6 +334,19 @@ public class IncrementalSyncOrchestratorTests
 
 		var result = await orchestrator.CompleteAsync(drainMaxWait: TimeSpan.FromSeconds(10));
 		result.Should().BeTrue();
+	}
+
+	[Test]
+	public async Task CompleteAsyncWithNoWritesReturnsTrueQuickly()
+	{
+		using var orchestrator = CreateSimpleOrchestrator(Transport);
+		await orchestrator.StartAsync(BootstrapMethod.Silent);
+		orchestrator.Strategy.Should().Be(IngestSyncStrategy.Multiplex);
+		var sw = Stopwatch.StartNew();
+		var result = await orchestrator.CompleteAsync(drainMaxWait: TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+		sw.Stop();
+		result.Should().BeTrue();
+		sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(8));
 	}
 
 	[Test]

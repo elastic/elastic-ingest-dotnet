@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +15,19 @@ namespace Elastic.Channels.Tests;
 
 public class BehaviorTests
 {
+	[Test]
+	public async Task WaitForDrainWithNoWritesReturnsTrueQuickly()
+	{
+		var bufferOptions = new BufferOptions { InboundBufferMaxSize = 1000, OutboundBufferMaxSize = 100 };
+		using var channel = new NoopBufferedChannel(bufferOptions);
+		channel.TryComplete();
+		var sw = Stopwatch.StartNew();
+		var drained = await channel.WaitForDrainAsync(maxWait: TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+		sw.Stop();
+		drained.Should().BeTrue();
+		sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(2));
+	}
+
 	[Test] public async Task RespectsPagination()
 	{
 		int totalEvents = 500_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
