@@ -42,6 +42,7 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests.Helpers;
 public class PointInTimeSearchTests(IngestionCluster cluster) : IntegrationTestBase(cluster)
 {
 	private const string IndexName = "pit-test";
+	private static readonly string[] SkuPriceProjection = ["sku", "price"];
 
 	[Before(Test)]
 	public async Task Setup() => await CleanupPrefixAsync("pit-test");
@@ -113,6 +114,29 @@ public class PointInTimeSearchTests(IngestionCluster cluster) : IntegrationTestB
 			allDocs.Add(doc);
 
 		allDocs.Should().HaveCount(6, "prices 100, 105, 110, 115, 120, 125 match gte:100");
+	}
+
+	[Test]
+	public async Task SourceIncludesReturnsProjectedDocuments()
+	{
+		await SeedDocuments(5);
+
+		await using var pit = new PointInTimeSearch<ProductCatalog>(
+			Transport,
+			new PointInTimeSearchOptions
+			{
+				Index = IndexName,
+				Size = 10,
+				KeepAlive = "1m",
+				SourceIncludes = SkuPriceProjection
+			});
+
+		var allDocs = new List<ProductCatalog>();
+		await foreach (var doc in pit.SearchDocumentsAsync())
+			allDocs.Add(doc);
+
+		allDocs.Should().HaveCount(5);
+		allDocs.Should().OnlyContain(d => d.Sku.StartsWith("PIT-", StringComparison.Ordinal) && d.Price > 0);
 	}
 
 	private async Task SeedDocuments(int count)

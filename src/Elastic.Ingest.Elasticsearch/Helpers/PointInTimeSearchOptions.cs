@@ -2,6 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
+using System.Collections.Generic;
 using Elastic.Mapping;
 
 namespace Elastic.Ingest.Elasticsearch.Helpers;
@@ -34,4 +35,28 @@ public class PointInTimeSearchOptions
 	/// 0 or 1 = no slicing.
 	/// </summary>
 	public int? Slices { get; init; }
+
+	/// <summary>
+	/// Field names to include in each hit’s <c>_source</c>, matching Elasticsearch’s
+	/// <c>_source.includes</c> filtering. When null or empty and <see cref="SourceExcludes"/> is also
+	/// unset or empty, no <c>_source</c> clause is sent and the full stored source is returned.
+	/// </summary>
+	/// <remarks>
+	/// Responses may contain only a subset of JSON properties; <see cref="PointInTimeSearch{TDocument}"/>
+	/// still deserializes each hit’s <c>_source</c> into the document type using
+	/// <see cref="System.Text.Json.JsonSerializer"/>, so members missing from the JSON remain at their
+	/// default values. Use a narrower document type or <see cref="System.Text.Json.JsonElement"/> when
+	/// you only map a few fields.
+	/// </remarks>
+	public IReadOnlyList<string>? SourceIncludes { get; init; }
+
+	/// <summary>
+	/// Field names to exclude from each hit’s <c>_source</c>, matching Elasticsearch’s
+	/// <c>_source.excludes</c> filtering. When null or empty and <see cref="SourceIncludes"/> is also
+	/// unset or empty, no <c>_source</c> clause is sent.
+	/// </summary>
+	/// <remarks>
+	/// See <see cref="SourceIncludes"/> for how partial <c>_source</c> JSON interacts with deserialization.
+	/// </remarks>
+	public IReadOnlyList<string>? SourceExcludes { get; init; }
 }
