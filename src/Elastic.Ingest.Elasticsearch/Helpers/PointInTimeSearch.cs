@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Channels;
@@ -212,28 +211,8 @@ public sealed class PointInTimeSearch<TDocument> : IAsyncDisposable
 			yield return page;
 	}
 
-	private string BuildSearchBody(string? searchAfter, int? sliceId, int? sliceMax)
-	{
-		var sb = new StringBuilder(256);
-		sb.Append("{\"pit\":{\"id\":\"").Append(EscapeJson(_pitId!)).Append("\",\"keep_alive\":\"").Append(_options.KeepAlive).Append("\"}");
-
-		sb.Append(",\"size\":").Append(_options.Size);
-
-		var sort = _options.Sort ?? "\"_shard_doc\"";
-		sb.Append(",\"sort\":[").Append(sort).Append(']');
-
-		if (_options.QueryBody != null)
-			sb.Append(",\"query\":").Append(_options.QueryBody);
-
-		if (searchAfter != null)
-			sb.Append(",\"search_after\":").Append(searchAfter);
-
-		if (sliceId.HasValue && sliceMax.HasValue)
-			sb.Append(",\"slice\":{\"id\":").Append(sliceId.Value).Append(",\"max\":").Append(sliceMax.Value).Append('}');
-
-		sb.Append('}');
-		return sb.ToString();
-	}
+	private string BuildSearchBody(string? searchAfter, int? sliceId, int? sliceMax) =>
+		PointInTimeSearchRequestBuilder.BuildSearchBody(_pitId!, _options, searchAfter, sliceId, sliceMax);
 
 	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "Callers provide JsonSerializerOptions with appropriate context")]
 	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "Callers provide JsonSerializerOptions with appropriate context")]
