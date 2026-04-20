@@ -368,6 +368,13 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			}
 		}
 		await Task.WhenAll(_taskList).ConfigureAwait(false);
+
+		// Empty outbound completion: if TryComplete ran with nothing ever written, OutChannel completes
+		// with no buffers — the inner TryRead loop never runs, so _outBoundChannelConsumed stays false
+		// and WaitForDrainAsync spins until RequestTimeout-scaled max wait with no elastic traffic.
+		if (!_outBoundChannelConsumed && InflightEvents == 0 && InflightExportOperations == 0)
+			_outBoundChannelConsumed = true;
+
 		_exitCancelSource.Cancel();
 		_callbacks.OutboundChannelExitedCallback?.Invoke();
 	}
