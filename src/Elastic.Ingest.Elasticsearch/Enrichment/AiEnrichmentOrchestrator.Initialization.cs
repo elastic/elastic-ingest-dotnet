@@ -46,6 +46,11 @@ public partial class AiEnrichmentOrchestrator
 			HttpMethod.PUT, $"_enrich/policy/{_versionedPolicyName}",
 			PostData.String(_infra.EnrichPolicyBody), cancellationToken: ct).ConfigureAwait(false);
 
+		// A 400 "already exists" means a concurrent instance created the policy between our GET and PUT.
+		if (put.ApiCallDetails.HttpStatusCode is 400
+			&& put.Body?.Contains("resource_already_exists_exception") == true)
+			return false;
+
 		if (put.ApiCallDetails.HttpStatusCode is not (200 or 201))
 			throw new Exception(
 				$"Failed to create enrich policy '{_versionedPolicyName}': " +
