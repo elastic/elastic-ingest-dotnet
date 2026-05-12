@@ -76,6 +76,38 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests;
 	DatePattern = "yyyy.MM.dd.HHmmss",
 	Configuration = typeof(HashableArticleConfig))]
 
+// ── Delta sync: delta-primary / delta-secondary (V1 + V2) ───────────────
+[Index<HashableArticle>(
+	Name = "delta-primary",
+	Variant = "DeltaPrimary",
+	WriteAlias = "delta-primary",
+	ReadAlias = "delta-primary-search",
+	DatePattern = "yyyy.MM.dd.HHmmss",
+	Configuration = typeof(HashableArticleConfig))]
+[Index<HashableArticle>(
+	Name = "delta-secondary",
+	Variant = "DeltaSecondary",
+	WriteAlias = "delta-secondary",
+	ReadAlias = "delta-secondary-search",
+	DatePattern = "yyyy.MM.dd.HHmmss",
+	Configuration = typeof(HashableArticleConfig))]
+
+// V2 variants share the same aliases but produce a different mapping hash
+[Index<HashableArticleV2>(
+	Name = "delta-primary",
+	Variant = "DeltaPrimaryV2",
+	WriteAlias = "delta-primary",
+	ReadAlias = "delta-primary-search",
+	DatePattern = "yyyy.MM.dd.HHmmss",
+	Configuration = typeof(HashableArticleV2Config))]
+[Index<HashableArticleV2>(
+	Name = "delta-secondary",
+	Variant = "DeltaSecondaryV2",
+	WriteAlias = "delta-secondary",
+	ReadAlias = "delta-secondary-search",
+	DatePattern = "yyyy.MM.dd.HHmmss",
+	Configuration = typeof(HashableArticleV2Config))]
+
 // ── Semantic search: semantic-articles ──────────────────────────────────
 [Index<SemanticArticle>(
 	Name = "semantic-articles",
