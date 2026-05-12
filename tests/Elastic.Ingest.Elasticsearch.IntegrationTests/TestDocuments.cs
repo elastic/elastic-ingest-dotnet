@@ -251,6 +251,33 @@ public class HashableArticleConfig : IConfigureElasticsearch<HashableArticle>
 }
 
 /// <summary>
+/// V2 of HashableArticle — adds a tags field, producing a different mapping hash from V1
+/// so the channel detects template changes during rollover tests.
+/// </summary>
+public partial class HashableArticleV2 : HashableArticle
+{
+	[Keyword]
+	[JsonPropertyName("tags")]
+	public string[] Tags { get; set; } = [];
+}
+
+public class HashableArticleV2Config : IConfigureElasticsearch<HashableArticleV2>
+{
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+		analysis
+			.CharFilter("html_stripper", c => c.HtmlStrip())
+			.Analyzer("html_content", a => a.Custom()
+				.Tokenizer(Tokenizers.Standard)
+				.CharFilters("html_stripper")
+				.Filters(TokenFilters.Lowercase, TokenFilters.AsciiFolding));
+
+	public MappingsBuilder<HashableArticleV2> ConfigureMappings(MappingsBuilder<HashableArticleV2> mappings) =>
+		mappings;
+
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
+}
+
+/// <summary>
 /// Simulates a documentation page with AI enrichment fields.
 /// </summary>
 public partial class AiDocumentationPage

@@ -261,42 +261,51 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		string? batchIndexDatePropName = null, batchIndexDateFieldName = null;
 		string? lastUpdatedPropName = null, lastUpdatedFieldName = null;
 
-		foreach (var member in targetType.GetMembers())
+		// Walk the full inheritance chain so attributes declared on a base class
+		// (e.g. [BatchIndexDate] on a property in a parent type) are visible to derived types.
+		// GetMembers() returns only directly declared members, so we must traverse BaseType
+		// ourselves. Most-derived wins: once a field is found we stop searching for it.
+		var type = targetType;
+		while (type != null && type.SpecialType == SpecialType.None)
 		{
-			if (member is not IPropertySymbol prop)
-				continue;
-
-			foreach (var propAttr in prop.GetAttributes())
+			foreach (var member in type.GetMembers())
 			{
-				var attrName = propAttr.AttributeClass?.ToDisplayString();
-				if (attrName == IdAttributeName)
-				{
-					idPropName = prop.Name;
-					idPropType = prop.Type.ToDisplayString();
-				}
-				else if (attrName == ContentHashAttributeName)
-				{
-					contentHashPropName = prop.Name;
-					contentHashPropType = prop.Type.ToDisplayString();
+				if (member is not IPropertySymbol prop)
+					continue;
 
-					contentHashFieldName = ResolveJsonFieldName(prop, stjConfig);
-				}
-				else if (attrName == TimestampAttributeName)
+				foreach (var propAttr in prop.GetAttributes())
 				{
-					timestampPropName = prop.Name;
-					timestampPropType = prop.Type.ToDisplayString();
-				}
-				else if (attrName == BatchIndexDateAttributeName)
-				{
-					batchIndexDatePropName = prop.Name;
-					batchIndexDateFieldName = ResolveJsonFieldName(prop, stjConfig);
-				}
-				else if (attrName == LastUpdatedAttributeName)
-				{
-					lastUpdatedPropName = prop.Name;
-					lastUpdatedFieldName = ResolveJsonFieldName(prop, stjConfig);
+					var attrName = propAttr.AttributeClass?.ToDisplayString();
+					if (attrName == IdAttributeName && idPropName == null)
+					{
+						idPropName = prop.Name;
+						idPropType = prop.Type.ToDisplayString();
+					}
+					else if (attrName == ContentHashAttributeName && contentHashPropName == null)
+					{
+						contentHashPropName = prop.Name;
+						contentHashPropType = prop.Type.ToDisplayString();
+						contentHashFieldName = ResolveJsonFieldName(prop, stjConfig);
+					}
+					else if (attrName == TimestampAttributeName && timestampPropName == null)
+					{
+						timestampPropName = prop.Name;
+						timestampPropType = prop.Type.ToDisplayString();
+					}
+					else if (attrName == BatchIndexDateAttributeName && batchIndexDatePropName == null)
+					{
+						batchIndexDatePropName = prop.Name;
+						batchIndexDateFieldName = ResolveJsonFieldName(prop, stjConfig);
+					}
+					else if (attrName == LastUpdatedAttributeName && lastUpdatedPropName == null)
+					{
+						lastUpdatedPropName = prop.Name;
+						lastUpdatedFieldName = ResolveJsonFieldName(prop, stjConfig);
+					}
 				}
 			}
+
+			type = type.BaseType;
 		}
 
 		return new IngestPropertyModel(
