@@ -30,7 +30,7 @@ public record IndexRolloverInfo(string Label, string LocalHash, string RemoteHas
 /// Context returned by <see cref="IncrementalSyncOrchestrator{TEvent}.StartAsync"/> and passed
 /// to <see cref="IncrementalSyncOrchestrator{TEvent}.OnPostComplete"/> hooks.
 /// </summary>
-public class OrchestratorContext<TEvent> where TEvent : class
+public class OrchestratorContext<TEvent> : ISyncOrchestratorContext where TEvent : class
 {
 	/// <summary> The resolved ingest strategy (Reindex or Multiplex). </summary>
 	public IngestSyncStrategy Strategy { get; init; }
@@ -65,7 +65,7 @@ public class OrchestratorContext<TEvent> where TEvent : class
 /// has changed, a new backing index is created and all data is reindexed from primary.
 /// Multiplex (write to both) is only used when creating entirely new backing indices.
 /// </summary>
-public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDisposable
+public class IncrementalSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	where TEvent : class
 {
 	private readonly ITransport _transport;
@@ -170,7 +170,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	/// <summary>
 	/// Adds a task that runs before channel bootstrap (e.g., creating synonym sets or query rules).
 	/// </summary>
-	public IncrementalSyncOrchestrator<TEvent> AddPreBootstrapTask(
+	public ISyncOrchestrator<TEvent> AddPreBootstrapTask(
 		Func<ITransport, CancellationToken, Task> task)
 	{
 		_preBootstrapTasks.Add(task);
@@ -184,7 +184,7 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 	/// hash changed, a new backing index is created and all data is reindexed from primary.
 	/// Multiplex (write to both) is only used when creating entirely new backing indices.
 	/// </summary>
-	public async Task<OrchestratorContext<TEvent>> StartAsync(BootstrapMethod method, CancellationToken ctx = default)
+	public async Task<ISyncOrchestratorContext> StartAsync(BootstrapMethod method, CancellationToken ctx = default)
 	{
 		// 1. Run pre-bootstrap tasks
 		foreach (var task in _preBootstrapTasks)
@@ -453,6 +453,8 @@ public class IncrementalSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDi
 		_secondaryChannel?.Dispose();
 		GC.SuppressFinalize(this);
 	}
+
+	// ── Private helpers ───────────────────────────────────────────────────
 
 	private void StampDocument(TEvent item)
 	{

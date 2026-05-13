@@ -34,7 +34,7 @@ namespace Elastic.Ingest.Elasticsearch;
 /// noop when no rollover occurred.
 /// </para>
 /// </summary>
-public class DeltaSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDisposable
+public class DeltaSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	where TEvent : class
 {
 	private readonly ITransport _transport;
@@ -148,7 +148,7 @@ public class DeltaSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDisposab
 	/// <summary>
 	/// Adds a task that runs before channel bootstrap (e.g., creating synonym sets or query rules).
 	/// </summary>
-	public DeltaSyncOrchestrator<TEvent> AddPreBootstrapTask(
+	public ISyncOrchestrator<TEvent> AddPreBootstrapTask(
 		Func<ITransport, CancellationToken, Task> task)
 	{
 		_preBootstrapTasks.Add(task);
@@ -162,7 +162,7 @@ public class DeltaSyncOrchestrator<TEvent> : IBufferedChannel<TEvent>, IDisposab
 	/// completed (via <see cref="BackfillRolledOverIndicesAsync"/>) before calling
 	/// <see cref="TryWrite"/>.
 	/// </summary>
-	public async Task<DeltaOrchestratorContext<TEvent>> StartAsync(
+	public async Task<ISyncOrchestratorContext> StartAsync(
 		BootstrapMethod method, CancellationToken ctx = default)
 	{
 		foreach (var task in _preBootstrapTasks)

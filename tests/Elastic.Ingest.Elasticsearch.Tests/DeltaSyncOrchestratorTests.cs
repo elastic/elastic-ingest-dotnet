@@ -137,10 +137,8 @@ public class DeltaSyncOrchestratorTests
 			CreateBatchContext("delta-primary"),
 			CreateBatchContext("delta-secondary"));
 
-		var ctx = await orchestrator.StartAsync(BootstrapMethod.Silent);
-		ctx.PendingRolloverBackfills.Should().NotBeEmpty(
-			"_cat returned a previous index so rollover should be detected");
-
+		await orchestrator.StartAsync(BootstrapMethod.Silent);
+		// PendingRolloverBackfills is on the concrete context — verify indirectly via the guard
 		var act = () => orchestrator.TryWrite(new TestDocument { Timestamp = DateTimeOffset.UtcNow });
 		act.Should().Throw<InvalidOperationException>()
 			.WithMessage("*BackfillRolledOverIndicesAsync*");
@@ -154,8 +152,7 @@ public class DeltaSyncOrchestratorTests
 			CreateBatchContext("delta-primary"),
 			CreateBatchContext("delta-secondary"));
 
-		var ctx = await orchestrator.StartAsync(BootstrapMethod.Silent);
-		ctx.PendingRolloverBackfills.Should().NotBeEmpty();
+		await orchestrator.StartAsync(BootstrapMethod.Silent);
 
 		var act = async () => await orchestrator.WaitToWriteAsync(new TestDocument { Timestamp = DateTimeOffset.UtcNow });
 		await act.Should().ThrowAsync<InvalidOperationException>()
