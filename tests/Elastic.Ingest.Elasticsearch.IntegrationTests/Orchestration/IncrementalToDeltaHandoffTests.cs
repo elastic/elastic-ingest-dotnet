@@ -95,7 +95,7 @@ public class IncrementalToDeltaHandoffTests(IngestionCluster cluster)
 			TestMappingContext.HashableArticleDeltaPrimary,
 			TestMappingContext.HashableArticleDeltaSecondary))
 		{
-			var ctx2 = await orch2.StartAsync(BootstrapMethod.Failure);
+			var ctx2 = (DeltaOrchestratorContext<HashableArticle>)await orch2.StartAsync(BootstrapMethod.Failure);
 			ctx2.Strategy.Should().Be(IngestSyncStrategy.Reindex,
 				"Phase 2: secondary already exists + no mapping change → Reindex");
 			ctx2.PendingRolloverBackfills.Should().BeEmpty(
@@ -142,7 +142,7 @@ public class IncrementalToDeltaHandoffTests(IngestionCluster cluster)
 			TestMappingContext.HashableArticleV2DeltaPrimaryV2,
 			TestMappingContext.HashableArticleV2DeltaSecondaryV2))
 		{
-			var ctx3 = await orch3.StartAsync(BootstrapMethod.Failure);
+			var ctx3 = (DeltaOrchestratorContext<HashableArticleV2>)await orch3.StartAsync(BootstrapMethod.Failure);
 			ctx3.PendingRolloverBackfills.Should().NotBeEmpty(
 				"V2 mapping hash differs from V1 → at least one index rolled over → backfill required");
 			ctx3.PendingRolloverBackfills.Should().OnlyContain(

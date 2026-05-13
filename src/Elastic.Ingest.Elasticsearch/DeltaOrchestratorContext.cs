@@ -44,7 +44,7 @@ public class RolloverBackfillProgress
 /// Context returned by <see cref="DeltaSyncOrchestrator{TEvent}.StartAsync"/> and passed
 /// to <see cref="DeltaSyncOrchestrator{TEvent}.OnPostComplete"/> hooks.
 /// </summary>
-public class DeltaOrchestratorContext<TEvent> where TEvent : class
+public class DeltaOrchestratorContext<TEvent> : ISyncOrchestratorContext where TEvent : class
 {
 	/// <summary>The resolved ingest strategy (Reindex or Multiplex). Diagnostic; auto-resolved.</summary>
 	public IngestSyncStrategy Strategy { get; init; }
@@ -58,10 +58,10 @@ public class DeltaOrchestratorContext<TEvent> where TEvent : class
 	/// <summary>The resolved secondary write alias.</summary>
 	public string SecondaryWriteAlias { get; init; } = null!;
 
-	/// <summary>The resolved primary read target.</summary>
+	/// <summary>The resolved primary read target (read alias or fallback to write alias).</summary>
 	public string PrimaryReadAlias { get; init; } = null!;
 
-	/// <summary>The resolved secondary read target.</summary>
+	/// <summary>The resolved secondary read target (read alias or fallback to write alias).</summary>
 	public string SecondaryReadAlias { get; init; } = null!;
 
 	/// <summary>Rollover decision details for the primary index.</summary>
