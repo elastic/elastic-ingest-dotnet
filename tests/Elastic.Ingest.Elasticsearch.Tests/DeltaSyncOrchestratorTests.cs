@@ -137,7 +137,7 @@ public class DeltaSyncOrchestratorTests
 			CreateBatchContext("delta-primary"),
 			CreateBatchContext("delta-secondary"));
 
-		var ctx = await orchestrator.StartAsync(BootstrapMethod.Silent);
+		var ctx = (DeltaOrchestratorContext<TestDocument>)await orchestrator.StartAsync(BootstrapMethod.Silent);
 		ctx.PendingRolloverBackfills.Should().NotBeEmpty(
 			"_cat returned a previous index so rollover should be detected");
 
@@ -154,7 +154,7 @@ public class DeltaSyncOrchestratorTests
 			CreateBatchContext("delta-primary"),
 			CreateBatchContext("delta-secondary"));
 
-		var ctx = await orchestrator.StartAsync(BootstrapMethod.Silent);
+		var ctx = (DeltaOrchestratorContext<TestDocument>)await orchestrator.StartAsync(BootstrapMethod.Silent);
 		ctx.PendingRolloverBackfills.Should().NotBeEmpty();
 
 		var act = async () => await orchestrator.WaitToWriteAsync(new TestDocument { Timestamp = DateTimeOffset.UtcNow });
