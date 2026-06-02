@@ -72,13 +72,83 @@ internal static class TypeAnalyzer
 		);
 	}
 
+	/// <summary>
+	/// Entry-point overload: walks the full base-type chain (most-derived first, up to <c>object</c>).
+	/// Properties declared on the registered type itself get <c>null</c> declaring-type fields;
+	/// properties from base types are stamped with the declaring type's identity.
+	/// </summary>
 	private static ImmutableArray<PropertyMappingModel> GetProperties(
 		INamedTypeSymbol typeSymbol,
 		StjContextConfig? stjConfig,
 		CancellationToken ct
-	) =>
-		GetProperties(typeSymbol, stjConfig, [], ct);
+	)
+	{
+		var builder = ImmutableArray.CreateBuilder<PropertyMappingModel>();
 
+		// Track names already added so most-derived-wins for overridden/shadowed properties.
+		var seenPropertyNames = new HashSet<string>(StringComparer.Ordinal);
+
+		var currentType = typeSymbol;
+		while (currentType != null && currentType.SpecialType == SpecialType.None)
+		{
+			ct.ThrowIfCancellationRequested();
+
+			// Determine whether properties at this level are "own" (same as registered type) or inherited.
+			var isRegisteredType = SymbolEqualityComparer.Default.Equals(currentType, typeSymbol);
+
+			foreach (var member in currentType.GetMembers())
+			{
+				ct.ThrowIfCancellationRequested();
+
+				if (member is not IPropertySymbol property)
+					continue;
+
+				if (property.DeclaredAccessibility != Accessibility.Public)
+					continue;
+
+				if (property.IsStatic || property.IsIndexer)
+					continue;
+
+				if (IsConfigureElasticsearchProperty(property))
+					continue;
+
+				// IgnoreReadOnlyProperties: skip properties with no setter
+				if (stjConfig?.IgnoreReadOnlyProperties == true && property.SetMethod == null && !property.IsReadOnly)
+					continue;
+				if (stjConfig?.IgnoreReadOnlyProperties == true && property.IsReadOnly)
+					continue;
+
+				// Most-derived-wins: skip if a more-derived type already added this property name.
+				if (!seenPropertyNames.Add(property.Name))
+					continue;
+
+				var propModel = AnalyzeProperty(property, stjConfig, [], ct);
+				if (propModel == null)
+					continue;
+
+				// Stamp declaring-type identity for inherited properties.
+				if (!isRegisteredType)
+				{
+					propModel = propModel with
+					{
+						DeclaringTypeName = currentType.Name,
+						DeclaringTypeNamespace = currentType.ContainingNamespace?.ToDisplayString() ?? string.Empty,
+						DeclaringTypeFullyQualifiedName = currentType.ToDisplayString()
+					};
+				}
+
+				builder.Add(propModel);
+			}
+
+			currentType = currentType.BaseType;
+		}
+
+		return builder.ToImmutable();
+	}
+
+	/// <summary>
+	/// Internal overload used by nested/object-type analysis: single type only, no base traversal.
+	/// </summary>
 	private static ImmutableArray<PropertyMappingModel> GetProperties(
 		INamedTypeSymbol typeSymbol,
 		StjContextConfig? stjConfig,

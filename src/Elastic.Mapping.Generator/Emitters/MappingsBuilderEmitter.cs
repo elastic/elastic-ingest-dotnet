@@ -120,14 +120,16 @@ internal static class MappingsBuilderEmitter
 		var nestedBuilders = new List<(string PropertyName, string FieldName, NestedTypeModel NestedType)>();
 
 		sb.AppendLine($"/// <summary>Extension methods for configuring {resolverName} mappings on <see cref=\"{MappingsBuilderFqn}{{TDocument}}\"/>.</summary>");
-		sb.AppendLine($"public static class {extensionClassName}");
+		sb.AppendLine($"public static partial class {extensionClassName}");
 		sb.AppendLine("{");
 
-		var props = model.Properties.Where(p => !p.IsIgnored).ToList();
+		// Only emit closed extension methods for own properties (DeclaringTypeName == null).
+		// Base-type properties are emitted once globally as generic-constrained methods via EmitBaseExtensionsClass.
+		var props = model.Properties.Where(p => !p.IsIgnored && p.DeclaringTypeName == null).ToList();
 		for (var i = 0; i < props.Count; i++)
 		{
 			var prop = props[i];
-			EmitPropertyExtensionMethod(sb, builderType, prop);
+			EmitPropertyExtensionMethod(sb, builderType, prop, null, null);
 
 			if (prop.NestedType != null)
 				nestedBuilders.Add((prop.PropertyName, prop.FieldName, prop.NestedType));
@@ -155,15 +157,36 @@ internal static class MappingsBuilderEmitter
 		}
 	}
 
-	private static void EmitPropertyExtensionMethod(StringBuilder sb, string builderType, PropertyMappingModel prop)
+	/// <summary>
+	/// Emits a single property extension method.
+	/// When <paramref name="typeParam"/> is <c>null</c>, emits a closed method for the concrete type
+	/// (<c>builderType</c> is already the fully-typed e.g. <c>MappingsBuilder&lt;global::Foo&gt;</c>).
+	/// When <paramref name="typeParam"/> is set (e.g. <c>"TDoc"</c>), emits a generic-constrained method
+	/// with a <c>where TDoc : global::{constraintFqn}</c> constraint and uses
+	/// <c>MappingsBuilder&lt;TDoc&gt;</c> as both receiver and return type.
+	/// </summary>
+	private static void EmitPropertyExtensionMethod(
+		StringBuilder sb,
+		string builderType,
+		PropertyMappingModel prop,
+		string? typeParam,
+		string? constraintFqn
+	)
 	{
 		var inputBuilder = GetBuilderTypeForFieldType(prop.FieldType);
 		var factoryMethod = GetFactoryMethodForFieldType(prop.FieldType);
 
+		// For generic form: receiver/return is MappingsBuilder<TDoc> with constraint
+		var effectiveBuilderType = typeParam != null
+			? $"{MappingsBuilderFqn}<{typeParam}>"
+			: builderType;
+		var genericSuffix = typeParam != null ? $"<{typeParam}>" : string.Empty;
+		var constraintClause = typeParam != null ? $" where {typeParam} : global::{constraintFqn}" : string.Empty;
+
 		if (factoryMethod != null)
 		{
 			sb.AppendLine($"\t/// <summary>Configure the {prop.PropertyName} field (maps to \"{prop.FieldName}\").</summary>");
-			sb.AppendLine($"\tpublic static {builderType} {prop.PropertyName}(this {builderType} self, global::System.Func<{inputBuilder}, {FieldBuilderFqn}> configure)");
+			sb.AppendLine($"\tpublic static {effectiveBuilderType} {prop.PropertyName}{genericSuffix}(this {effectiveBuilderType} self, global::System.Func<{inputBuilder}, {FieldBuilderFqn}> configure){constraintClause}");
 			sb.AppendLine("\t{");
 			sb.AppendLine($"\t\tvar fb = new {FieldBuilderFqn}();");
 			sb.AppendLine($"\t\t_ = configure(fb.{factoryMethod}());");
@@ -174,7 +197,7 @@ internal static class MappingsBuilderEmitter
 		else
 		{
 			sb.AppendLine($"\t/// <summary>Configure the {prop.PropertyName} field (maps to \"{prop.FieldName}\").</summary>");
-			sb.AppendLine($"\tpublic static {builderType} {prop.PropertyName}(this {builderType} self, global::System.Func<{FieldBuilderFqn}, {FieldBuilderFqn}> configure)");
+			sb.AppendLine($"\tpublic static {effectiveBuilderType} {prop.PropertyName}{genericSuffix}(this {effectiveBuilderType} self, global::System.Func<{FieldBuilderFqn}, {FieldBuilderFqn}> configure){constraintClause}");
 			sb.AppendLine("\t{");
 			sb.AppendLine($"\t\tself.AddPropertyField(\"{prop.FieldName}\", configure);");
 			sb.AppendLine("\t\treturn self;");
@@ -268,5 +291,100 @@ internal static class MappingsBuilderEmitter
 			sb.AppendLine("\t\treturn this;");
 			sb.AppendLine("\t}");
 		}
+	}
+
+	/// <summary>
+	/// Emits a standalone file containing generic-constrained extension methods for all properties
+	/// declared on a single base type. This ensures that a shared generic helper
+	/// <c>MappingsBuilder&lt;T&gt; where T : BaseType</c> can call these methods on any derived type
+	/// without ambiguity (no CS0121), because the methods are emitted exactly once per declaring type.
+	/// </summary>
+	public static string EmitBaseExtensionsClass(
+		string emitNamespace,
+		string declaringTypeName,
+		string declaringTypeFullyQualifiedName,
+		IReadOnlyList<PropertyMappingModel> props,
+		HashSet<string> emittedNestedBuilders
+	)
+	{
+		var sb = new StringBuilder();
+
+		SharedEmitterHelpers.EmitHeader(sb);
+
+		// Nested builder classes from base types may already be compiled into a referenced assembly
+		// (e.g. the base type's project compiled them first). CS0436 is a harmless warning in that
+		// scenario — suppress it for the duration of this generated file.
+		sb.AppendLine("#pragma warning disable CS0436");
+		sb.AppendLine();
+
+		if (!string.IsNullOrEmpty(emitNamespace))
+		{
+			sb.AppendLine($"namespace {emitNamespace};");
+			sb.AppendLine();
+		}
+
+		const string typeParam = "TDoc";
+		var extensionClassName = $"{declaringTypeName}MappingsExtensions";
+
+		var nestedBuilders = new List<(string PropertyName, string FieldName, NestedTypeModel NestedType)>();
+
+		sb.AppendLine($"/// <summary>Generic-constrained extension methods for configuring {declaringTypeName} base-type mappings.</summary>");
+		sb.AppendLine($"public static partial class {extensionClassName}");
+		sb.AppendLine("{");
+
+		var nonIgnored = props.Where(p => !p.IsIgnored).ToList();
+		for (var i = 0; i < nonIgnored.Count; i++)
+		{
+			var prop = nonIgnored[i];
+			EmitPropertyExtensionMethod(sb, builderType: string.Empty /* unused in generic form */, prop, typeParam, declaringTypeFullyQualifiedName);
+
+			if (prop.NestedType != null)
+				nestedBuilders.Add((prop.PropertyName, prop.FieldName, prop.NestedType));
+
+			if (i < nonIgnored.Count - 1)
+				sb.AppendLine();
+		}
+
+		// Emit generic-constrained nested property overloads
+		foreach (var (propertyName, fieldName, nestedType) in nestedBuilders)
+		{
+			sb.AppendLine();
+			EmitGenericNestedPropertyOverload(sb, typeParam, declaringTypeFullyQualifiedName, propertyName, fieldName, nestedType);
+		}
+
+		sb.AppendLine("}");
+		sb.AppendLine();
+
+		// Emit nested builder classes for base-type nested properties — deduplicate via shared set
+		foreach (var (propertyName, fieldName, nestedType) in nestedBuilders)
+		{
+			if (emittedNestedBuilders.Add(nestedType.TypeName))
+				EmitNestedBuilderClass(sb, declaringTypeName, propertyName, fieldName, nestedType);
+		}
+
+		return sb.ToString();
+	}
+
+	private static void EmitGenericNestedPropertyOverload(
+		StringBuilder sb,
+		string typeParam,
+		string constraintFqn,
+		string propertyName,
+		string fieldName,
+		NestedTypeModel nestedType
+	)
+	{
+		var nestedBuilderClassName = $"{nestedType.TypeName}NestedBuilder";
+		var effectiveBuilderType = $"{MappingsBuilderFqn}<{typeParam}>";
+		var constraintClause = $" where {typeParam} : global::{constraintFqn}";
+
+		sb.AppendLine($"\t/// <summary>Configure nested properties of the {propertyName} field (maps to \"{fieldName}\").</summary>");
+		sb.AppendLine($"\tpublic static {effectiveBuilderType} {propertyName}<{typeParam}>(this {effectiveBuilderType} self, global::System.Func<{nestedBuilderClassName}, {nestedBuilderClassName}> configure){constraintClause}");
+		sb.AppendLine("\t{");
+		sb.AppendLine($"\t\tvar nested = new {nestedBuilderClassName}(\"{fieldName}\");");
+		sb.AppendLine("\t\t_ = configure(nested);");
+		sb.AppendLine("\t\tself.MergeNestedFields(nested.GetFields());");
+		sb.AppendLine("\t\treturn self;");
+		sb.AppendLine("\t}");
 	}
 }

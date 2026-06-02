@@ -635,6 +635,12 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		// reference the same nested type (e.g. IndexedProduct).
 		var emittedNestedBuilders = new HashSet<string>();
 
+		// Track emitted generic-constrained base-type extension classes globally.
+		// Keyed by "{declaringNamespace}::{declaringTypeFullyQualifiedName}" so each
+		// base type's methods are emitted exactly once regardless of how many concrete
+		// derived types are registered.
+		var emittedBaseExtensionKeys = new HashSet<string>();
+
 		// Enforce: only one [AiEnrichment<T>] per document type across all contexts
 		var aiEnrichmentTypes = new Dictionary<string, string>();
 		foreach (var model in models)
@@ -701,6 +707,25 @@ public class MappingSourceGenerator : IIncrementalGenerator
 				{
 					var mappingsExtensionsSource = MappingsBuilderEmitter.EmitForContext(model, reg, emittedNestedBuilders);
 					context.AddSource($"{model.ContextTypeName}.{reg.TypeName}MappingsExtensions.g.cs", mappingsExtensionsSource);
+				}
+
+				// Emit generic-constrained extension methods for base-type properties.
+				// Group by declaring type FQN so each base type's class is emitted exactly once globally.
+				var baseGroups = reg.TypeModel.Properties
+					.Where(p => p.DeclaringTypeName != null && !p.IsIgnored)
+					.GroupBy(p => p.DeclaringTypeFullyQualifiedName!);
+				foreach (var group in baseGroups)
+				{
+					var declaringFqn = group.Key;
+					var declaringName = group.First().DeclaringTypeName!;
+					var declaringNs = group.First().DeclaringTypeNamespace ?? string.Empty;
+					var baseKey = $"{declaringNs}::{declaringFqn}";
+					if (emittedBaseExtensionKeys.Add(baseKey))
+					{
+						var baseExtSource = MappingsBuilderEmitter.EmitBaseExtensionsClass(
+							declaringNs, declaringName, declaringFqn, group.ToList(), emittedNestedBuilders);
+						context.AddSource($"{declaringName}MappingsExtensions.g.cs", baseExtSource);
+					}
 				}
 
 				var analysisNamesSource = AnalysisNamesEmitter.EmitForContext(model, reg);
