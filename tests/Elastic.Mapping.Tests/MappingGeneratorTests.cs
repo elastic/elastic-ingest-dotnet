@@ -368,4 +368,43 @@ public class MappingGeneratorTests
 		subProps.GetProperty("repository").GetProperty("type").GetString().Should().Be("keyword");
 		subProps.GetProperty("displayName").GetProperty("type").GetString().Should().Be("text");
 	}
+
+	// ----- ExplicitContainer tests: AddField / AddProperty through the generated pipeline -----
+
+	[Test]
+	public void ExplicitContainer_AddFieldOnText_UsesFields()
+	{
+		// title is [Text], ConfigureMappings uses AddField("title.semantic", ...).
+		// The leaf must land under title.fields, not title.properties.
+		var json = ExplicitContainerMappingContext.ExplicitContainerDocument.GetMappingJson();
+		using var doc = System.Text.Json.JsonDocument.Parse(json);
+		var props = doc.RootElement.GetProperty("properties");
+
+		var title = props.GetProperty("title");
+		title.GetProperty("type").GetString().Should().Be("text",
+			"base [Text] type must be preserved");
+		title.TryGetProperty("properties", out _).Should().BeFalse(
+			"leaf parent must not get a properties key");
+		var semantic = title.GetProperty("fields").GetProperty("semantic");
+		semantic.GetProperty("type").GetString().Should().Be("semantic_text");
+		semantic.GetProperty("inference_id").GetString().Should().Be("my-elser");
+	}
+
+	[Test]
+	public void ExplicitContainer_AddPropertyOnObject_UsesProperties()
+	{
+		// meta is [Object], ConfigureMappings uses AddProperty("meta.extra", ...).
+		// The leaf must land under meta.properties.
+		var json = ExplicitContainerMappingContext.ExplicitContainerDocument.GetMappingJson();
+		using var doc = System.Text.Json.JsonDocument.Parse(json);
+		var props = doc.RootElement.GetProperty("properties");
+
+		var meta = props.GetProperty("meta");
+		meta.GetProperty("type").GetString().Should().Be("object",
+			"base [Object] type must be preserved");
+		meta.TryGetProperty("fields", out _).Should().BeFalse(
+			"object parent must not get a fields key");
+		var extra = meta.GetProperty("properties").GetProperty("extra");
+		extra.GetProperty("type").GetString().Should().Be("keyword");
+	}
 }

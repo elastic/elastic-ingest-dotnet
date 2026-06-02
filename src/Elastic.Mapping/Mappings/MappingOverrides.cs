@@ -23,14 +23,19 @@ public sealed class MappingOverrides
 	/// <summary>The configured dynamic templates.</summary>
 	public IReadOnlyList<DynamicTemplateDefinition> DynamicTemplates { get; }
 
+	/// <summary>The container intent per field path (internal; not part of the public contract).</summary>
+	internal IReadOnlyDictionary<string, FieldContainer> FieldContainers { get; }
+
 	internal MappingOverrides(
 		IReadOnlyDictionary<string, IFieldDefinition> fields,
 		IReadOnlyDictionary<string, RuntimeFieldDefinition> runtimeFields,
-		IReadOnlyList<DynamicTemplateDefinition> dynamicTemplates)
+		IReadOnlyList<DynamicTemplateDefinition> dynamicTemplates,
+		IReadOnlyDictionary<string, FieldContainer>? fieldContainers = null)
 	{
 		Fields = fields;
 		RuntimeFields = runtimeFields;
 		DynamicTemplates = dynamicTemplates;
+		FieldContainers = fieldContainers ?? new Dictionary<string, FieldContainer>();
 	}
 
 	/// <summary>Returns true if any mapping overrides are configured.</summary>
@@ -42,6 +47,11 @@ public sealed class MappingOverrides
 	/// <summary>
 	/// Merges these mapping overrides into an existing mappings JSON string.
 	/// </summary>
+	/// <exception cref="InvalidOperationException">
+	/// Thrown when a field's <see cref="FieldContainer"/> intent contradicts the known parent type,
+	/// e.g. <see cref="FieldContainer.Field"/> on an object/nested parent, or
+	/// <see cref="FieldContainer.Property"/> on a leaf parent.
+	/// </exception>
 	public string MergeIntoMappings(string mappingsJson)
 	{
 		if (!HasConfiguration)
@@ -59,8 +69,13 @@ public sealed class MappingOverrides
 				node["properties"] = properties;
 			}
 
-			foreach (var kvp in Fields)
-				MergeFieldAtPath(properties, kvp.Key, kvp.Value);
+			// Sort by depth ascending so parent fields are always merged before their children,
+			// making explicit-intent merges order-independent regardless of declaration order.
+			foreach (var kvp in Fields.OrderBy(f => f.Key.Count(c => c == '.')))
+			{
+				var container = FieldContainers.TryGetValue(kvp.Key, out var c) ? c : FieldContainer.Auto;
+				MergeFieldAtPath(properties, kvp.Key, kvp.Value, container);
+			}
 		}
 
 		// Merge runtime fields
@@ -96,7 +111,7 @@ public sealed class MappingOverrides
 
 	private static readonly HashSet<string> ObjectTypes = ["object", "nested"];
 
-	private static void MergeFieldAtPath(JsonObject properties, string path, IFieldDefinition definition)
+	private static void MergeFieldAtPath(JsonObject properties, string path, IFieldDefinition definition, FieldContainer intent)
 	{
 		var parts = path.Split('.');
 		var current = properties;
@@ -105,28 +120,99 @@ public sealed class MappingOverrides
 		{
 			var part = parts[i];
 			var next = current[part]?.AsObject();
+			var isTerminalParent = i == parts.Length - 2;
 
 			if (next == null)
 			{
+				if (isTerminalParent && intent == FieldContainer.Field)
+				{
+					// Cannot attach a multi-field to a non-existent parent.
+					// Silently creating type:object would be wrong and reproduce the bug.
+					throw new InvalidOperationException(
+						$"Cannot add '{parts[parts.Length - 1]}' as a multi-field of '{string.Join(".", parts, 0, parts.Length - 1)}': " +
+						$"the parent field is not defined. " +
+						$"Define the parent field first, or use AddProperty(\"{path}\", ...) if you intended a sub-property.");
+				}
+
+				// Property intent or intermediate segment: create an object parent.
 				next = new JsonObject { ["type"] = "object" };
 				current[part] = next;
 			}
 
 			var parentType = next["type"]?.GetValue<string>();
-			var isLeafType = parentType != null && !ObjectTypes.Contains(parentType);
-			var containerKey = isLeafType ? "fields" : "properties";
+			var isObjectLike = parentType == null || ObjectTypes.Contains(parentType);
 
-			var container = next[containerKey]?.AsObject();
-			if (container == null)
+			if (isTerminalParent)
 			{
-				container = [];
-				next[containerKey] = container;
-			}
+				string containerKey;
+				switch (intent)
+				{
+					case FieldContainer.Field:
+						if (!isObjectLike)
+						{
+							// Leaf parent — correct for Field intent. Container = fields.
+							containerKey = "fields";
+						}
+						else if (parentType != null)
+						{
+							// Known object/nested — contradiction.
+							throw new InvalidOperationException(
+								$"Cannot add '{parts[parts.Length - 1]}' as a multi-field of '{string.Join(".", parts, 0, parts.Length - 1)}' " +
+								$"(type: {parentType}): object and nested fields use sub-properties. " +
+								$"Use AddProperty(\"{path}\", ...) instead.");
+						}
+						else
+						{
+							// Parent exists but type is null/unknown — fall back to properties to avoid corruption.
+							containerKey = "properties";
+						}
+						break;
 
-			current = container;
+					case FieldContainer.Property:
+						if (isObjectLike)
+						{
+							// Object/nested parent — correct for Property intent. Container = properties.
+							containerKey = "properties";
+						}
+						else
+						{
+							// Known leaf type — contradiction.
+							throw new InvalidOperationException(
+								$"Cannot add '{parts[parts.Length - 1]}' as a sub-property of '{string.Join(".", parts, 0, parts.Length - 1)}' " +
+								$"(type: {parentType}): leaf fields use multi-fields. " +
+								$"Use AddField(\"{path}\", ...) instead.");
+						}
+						break;
+
+					default: // Auto — preserve today's inference
+						containerKey = isObjectLike ? "properties" : "fields";
+						break;
+				}
+
+				var container = next[containerKey]?.AsObject();
+				if (container == null)
+				{
+					container = [];
+					next[containerKey] = container;
+				}
+				current = container;
+			}
+			else
+			{
+				// Intermediate segment: use Auto inference unconditionally.
+				var isLeafType = parentType != null && !ObjectTypes.Contains(parentType);
+				var containerKey = isLeafType ? "fields" : "properties";
+				var container = next[containerKey]?.AsObject();
+				if (container == null)
+				{
+					container = [];
+					next[containerKey] = container;
+				}
+				current = container;
+			}
 		}
 
-		var fieldName = parts[^1];
+		var fieldName = parts[parts.Length - 1];
 		var existing = current[fieldName]?.AsObject();
 		var newDef = definition.ToJson();
 

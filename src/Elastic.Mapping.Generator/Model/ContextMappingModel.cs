@@ -38,7 +38,12 @@ internal sealed record TypeRegistration(
 	string? ContextConfigureMappingsReference,
 	AnalysisComponentsModel AnalysisComponents,
 	string? Variant = null,
-	string? IndexSettingsReference = null
+	string? IndexSettingsReference = null,
+	/// <summary>
+	/// Compile-time misuse findings for AddField/AddProperty in ConfigureMappings.
+	/// Reported as EMAP001 / EMAP002 diagnostics.
+	/// </summary>
+	ImmutableArray<MappingMisuseFinding> MisuseFindings = default
 )
 {
 	/// <summary>
