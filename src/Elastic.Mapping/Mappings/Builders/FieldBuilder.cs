@@ -13,69 +13,196 @@ namespace Elastic.Mapping.Mappings.Builders;
 public sealed class FieldBuilder
 {
 	private IFieldDefinition? _definition;
+	private object? _typeBuilder;
 
 	/// <summary>Creates a text field.</summary>
-	public TextFieldBuilder Text() => new(this);
+	public TextFieldBuilder Text()
+	{
+		if (_typeBuilder is TextFieldBuilder tb) return tb;
+		var result = new TextFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a keyword field.</summary>
-	public KeywordFieldBuilder Keyword() => new(this);
+	public KeywordFieldBuilder Keyword()
+	{
+		if (_typeBuilder is KeywordFieldBuilder kb) return kb;
+		var result = new KeywordFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a date field.</summary>
-	public DateFieldBuilder Date() => new(this);
+	public DateFieldBuilder Date()
+	{
+		if (_typeBuilder is DateFieldBuilder db) return db;
+		var result = new DateFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a long field.</summary>
-	public LongFieldBuilder Long() => new(this);
+	public LongFieldBuilder Long()
+	{
+		if (_typeBuilder is LongFieldBuilder lb) return lb;
+		var result = new LongFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates an integer field.</summary>
-	public IntegerFieldBuilder Integer() => new(this);
+	public IntegerFieldBuilder Integer()
+	{
+		if (_typeBuilder is IntegerFieldBuilder ib) return ib;
+		var result = new IntegerFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a short field.</summary>
-	public ShortFieldBuilder Short() => new(this);
+	public ShortFieldBuilder Short()
+	{
+		if (_typeBuilder is ShortFieldBuilder sb) return sb;
+		var result = new ShortFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a byte field.</summary>
-	public ByteFieldBuilder Byte() => new(this);
+	public ByteFieldBuilder Byte()
+	{
+		if (_typeBuilder is ByteFieldBuilder bb) return bb;
+		var result = new ByteFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a double field.</summary>
-	public DoubleFieldBuilder Double() => new(this);
+	public DoubleFieldBuilder Double()
+	{
+		if (_typeBuilder is DoubleFieldBuilder dob) return dob;
+		var result = new DoubleFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a float field.</summary>
-	public FloatFieldBuilder Float() => new(this);
+	public FloatFieldBuilder Float()
+	{
+		if (_typeBuilder is FloatFieldBuilder fb) return fb;
+		var result = new FloatFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a boolean field.</summary>
-	public BooleanFieldBuilder Boolean() => new(this);
+	public BooleanFieldBuilder Boolean()
+	{
+		if (_typeBuilder is BooleanFieldBuilder boolb) return boolb;
+		var result = new BooleanFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates an IP field.</summary>
-	public IpFieldBuilder Ip() => new(this);
+	public IpFieldBuilder Ip()
+	{
+		if (_typeBuilder is IpFieldBuilder ipb) return ipb;
+		var result = new IpFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a geo_point field.</summary>
-	public GeoPointFieldBuilder GeoPoint() => new(this);
+	public GeoPointFieldBuilder GeoPoint()
+	{
+		if (_typeBuilder is GeoPointFieldBuilder gpb) return gpb;
+		var result = new GeoPointFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a geo_shape field.</summary>
-	public GeoShapeFieldBuilder GeoShape() => new(this);
+	public GeoShapeFieldBuilder GeoShape()
+	{
+		if (_typeBuilder is GeoShapeFieldBuilder gsb) return gsb;
+		var result = new GeoShapeFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a nested field.</summary>
-	public NestedFieldBuilder Nested() => new(this);
+	public NestedFieldBuilder Nested()
+	{
+		if (_typeBuilder is NestedFieldBuilder nb) return nb;
+		var result = new NestedFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates an object field.</summary>
-	public ObjectFieldBuilder Object() => new(this);
+	public ObjectFieldBuilder Object()
+	{
+		if (_typeBuilder is ObjectFieldBuilder ob) return ob;
+		var result = new ObjectFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a completion field.</summary>
-	public CompletionFieldBuilder Completion() => new(this);
+	public CompletionFieldBuilder Completion()
+	{
+		if (_typeBuilder is CompletionFieldBuilder cb) return cb;
+		var result = new CompletionFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a dense_vector field.</summary>
-	public DenseVectorFieldBuilder DenseVector() => new(this);
+	public DenseVectorFieldBuilder DenseVector()
+	{
+		if (_typeBuilder is DenseVectorFieldBuilder dvb) return dvb;
+		var result = new DenseVectorFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a semantic_text field.</summary>
-	public SemanticTextFieldBuilder SemanticText() => new(this);
+	public SemanticTextFieldBuilder SemanticText()
+	{
+		if (_typeBuilder is SemanticTextFieldBuilder stb) return stb;
+		var result = new SemanticTextFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a search_as_you_type field.</summary>
-	public SearchAsYouTypeFieldBuilder SearchAsYouType() => new(this);
+	public SearchAsYouTypeFieldBuilder SearchAsYouType()
+	{
+		if (_typeBuilder is SearchAsYouTypeFieldBuilder saytb) return saytb;
+		var result = new SearchAsYouTypeFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a flattened field.</summary>
-	public FlattenedFieldBuilder Flattened() => new(this);
+	public FlattenedFieldBuilder Flattened()
+	{
+		if (_typeBuilder is FlattenedFieldBuilder flatb) return flatb;
+		var result = new FlattenedFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a binary field.</summary>
-	public BinaryFieldBuilder Binary() => new(this);
+	public BinaryFieldBuilder Binary()
+	{
+		if (_typeBuilder is BinaryFieldBuilder binb) return binb;
+		var result = new BinaryFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a range field.</summary>
 	public RangeFieldBuilder Range(string rangeType) => new(this, rangeType);
@@ -83,6 +210,7 @@ public sealed class FieldBuilder
 	/// <summary>Creates an alias field.</summary>
 	public FieldBuilder Alias(string path)
 	{
+		_typeBuilder = null;
 		_definition = new AliasFieldDefinition(path);
 		return this;
 	}
@@ -90,16 +218,24 @@ public sealed class FieldBuilder
 	/// <summary>Creates a percolator field.</summary>
 	public FieldBuilder Percolator()
 	{
+		_typeBuilder = null;
 		_definition = new PercolatorFieldDefinition();
 		return this;
 	}
 
 	/// <summary>Creates a rank_feature field.</summary>
-	public RankFeatureFieldBuilder RankFeature() => new(this);
+	public RankFeatureFieldBuilder RankFeature()
+	{
+		if (_typeBuilder is RankFeatureFieldBuilder rfb) return rfb;
+		var result = new RankFeatureFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a rank_features field.</summary>
 	public FieldBuilder RankFeatures()
 	{
+		_typeBuilder = null;
 		_definition = new RankFeaturesFieldDefinition();
 		return this;
 	}
@@ -107,22 +243,42 @@ public sealed class FieldBuilder
 	/// <summary>Creates a histogram field.</summary>
 	public FieldBuilder Histogram()
 	{
+		_typeBuilder = null;
 		_definition = new HistogramFieldDefinition();
 		return this;
 	}
 
 	/// <summary>Creates a constant_keyword field.</summary>
-	public ConstantKeywordFieldBuilder ConstantKeyword() => new(this);
+	public ConstantKeywordFieldBuilder ConstantKeyword()
+	{
+		if (_typeBuilder is ConstantKeywordFieldBuilder ckb) return ckb;
+		var result = new ConstantKeywordFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a wildcard field.</summary>
-	public WildcardFieldBuilder Wildcard() => new(this);
+	public WildcardFieldBuilder Wildcard()
+	{
+		if (_typeBuilder is WildcardFieldBuilder wb) return wb;
+		var result = new WildcardFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a token_count field.</summary>
-	public TokenCountFieldBuilder TokenCount() => new(this);
+	public TokenCountFieldBuilder TokenCount()
+	{
+		if (_typeBuilder is TokenCountFieldBuilder tcb) return tcb;
+		var result = new TokenCountFieldBuilder(this);
+		_typeBuilder = result;
+		return result;
+	}
 
 	/// <summary>Creates a version field.</summary>
 	public FieldBuilder Version()
 	{
+		_typeBuilder = null;
 		_definition = new VersionFieldDefinition();
 		return this;
 	}

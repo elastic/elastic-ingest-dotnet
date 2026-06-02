@@ -188,9 +188,7 @@ internal static class MappingsBuilderEmitter
 			sb.AppendLine($"\t/// <summary>Configure the {prop.PropertyName} field (maps to \"{prop.FieldName}\").</summary>");
 			sb.AppendLine($"\tpublic static {effectiveBuilderType} {prop.PropertyName}{genericSuffix}(this {effectiveBuilderType} self, global::System.Func<{inputBuilder}, {FieldBuilderFqn}> configure){constraintClause}");
 			sb.AppendLine("\t{");
-			sb.AppendLine($"\t\tvar fb = new {FieldBuilderFqn}();");
-			sb.AppendLine($"\t\t_ = configure(fb.{factoryMethod}());");
-			sb.AppendLine($"\t\tself.AddFieldDirect(\"{prop.FieldName}\", fb.GetDefinition());");
+			sb.AppendLine($"\t\tself.AddFieldDirect(\"{prop.FieldName}\", fb => configure(fb.{factoryMethod}()));");
 			sb.AppendLine("\t\treturn self;");
 			sb.AppendLine("\t}");
 		}

@@ -20,8 +20,8 @@ public sealed class MappingsBuilder<TDocument> : MappingsBuilderBase<MappingsBui
 		base.AddPropertyField(path, configure);
 
 	/// <inheritdoc cref="MappingsBuilderBase{TSelf}.AddFieldDirect"/>
-	public new MappingsBuilder<TDocument> AddFieldDirect(string path, IFieldDefinition definition) =>
-		base.AddFieldDirect(path, definition);
+	public MappingsBuilder<TDocument> AddFieldDirect(string path, Action<FieldBuilder> action) =>
+		base.AddFieldDirect(path, action);
 
 	/// <inheritdoc cref="MappingsBuilderBase{TSelf}.MergeNestedFields"/>
 	public new void MergeNestedFields(IReadOnlyList<(string Path, IFieldDefinition Definition)> fields) =>

@@ -615,4 +615,79 @@ public class MappingsBuilderTests
 			.GetProperty("fields").GetProperty("a");
 		a.GetProperty("ignore_above").GetInt32().Should().Be(512, "last definition wins");
 	}
+
+	[Test]
+	public void MappingsBuilder_Additive_SecondCallMergesMultiFields()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("title", f => f.Text().MultiField("keyword", mf => mf.Keyword()))
+			.AddField("title", f => f.Text().MultiField("semantic_text", mf => mf.SemanticText()));
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var title = doc.RootElement.GetProperty("properties").GetProperty("title");
+		title.GetProperty("fields").GetProperty("keyword").GetProperty("type").GetString().Should().Be("keyword");
+		title.GetProperty("fields").GetProperty("semantic_text").GetProperty("type").GetString().Should().Be("semantic_text");
+	}
+
+	[Test]
+	public void MappingsBuilder_Additive_SecondCallCanAddSearchAnalyzerWithoutLosingMultiFields()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("title", f => f.Text()
+				.MultiField("keyword", mf => mf.Keyword())
+				.MultiField("completion", mf => mf.SearchAsYouType()))
+			.AddField("title", f => f.Text().SearchAnalyzer("synonyms"));
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var title = doc.RootElement.GetProperty("properties").GetProperty("title");
+		title.GetProperty("search_analyzer").GetString().Should().Be("synonyms");
+		title.GetProperty("fields").GetProperty("keyword").GetProperty("type").GetString().Should().Be("keyword");
+		title.GetProperty("fields").GetProperty("completion").GetProperty("type").GetString().Should().Be("search_as_you_type");
+	}
+
+	[Test]
+	public void MappingsBuilder_Clear_ResetsAccumulatedState()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("title", f => f.Text()
+				.MultiField("keyword", mf => mf.Keyword())
+				.MultiField("completion", mf => mf.SearchAsYouType()))
+			.AddField("title", f => f.Text().Clear()
+				.MultiField("semantic_text", mf => mf.SemanticText()));
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var title = doc.RootElement.GetProperty("properties").GetProperty("title");
+		var fields = title.GetProperty("fields");
+		fields.TryGetProperty("keyword", out _).Should().BeFalse("keyword should have been cleared");
+		fields.TryGetProperty("completion", out _).Should().BeFalse("completion should have been cleared");
+		fields.GetProperty("semantic_text").GetProperty("type").GetString().Should().Be("semantic_text");
+	}
+
+	[Test]
+	public void MappingsBuilder_Additive_SameMultiFieldNameOverwrites()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("title", f => f.Text().MultiField("keyword", mf => mf.Keyword().Normalizer("first")))
+			.AddField("title", f => f.Text().MultiField("keyword", mf => mf.Keyword().Normalizer("second")));
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var keyword = doc.RootElement.GetProperty("properties").GetProperty("title").GetProperty("fields").GetProperty("keyword");
+		keyword.GetProperty("normalizer").GetString().Should().Be("second");
+	}
 }

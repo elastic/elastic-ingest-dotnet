@@ -15,15 +15,13 @@ namespace Elastic.Mapping.Mappings;
 /// <typeparam name="TSelf">The derived builder type.</typeparam>
 public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBase<TSelf>
 {
-	private readonly List<(string Path, IFieldDefinition Definition, FieldContainer Container)> _fields = [];
+	private readonly List<(string Path, Action<FieldBuilder> Action, FieldContainer Container)> _fieldActions = [];
 	private readonly List<(string Name, RuntimeFieldDefinition Definition)> _runtimeFields = [];
 	private readonly List<DynamicTemplateDefinition> _dynamicTemplates = [];
 
 	private TSelf AddFieldCore(string path, Func<FieldBuilder, FieldBuilder> configure, FieldContainer container)
 	{
-		var builder = new FieldBuilder();
-		_ = configure(builder);
-		_fields.Add((path, builder.GetDefinition(), container));
+		_fieldActions.Add((path, fb => { _ = configure(fb); }, container));
 		return (TSelf)this;
 	}
 
@@ -35,12 +33,12 @@ public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBa
 		AddFieldCore(path, configure, FieldContainer.Auto);
 
 	/// <summary>
-	/// Adds a field definition directly at the specified path.
+	/// Adds a field action directly at the specified path.
 	/// Called by generated type-constrained property methods.
 	/// </summary>
-	protected TSelf AddFieldDirect(string path, IFieldDefinition definition)
+	protected TSelf AddFieldDirect(string path, Action<FieldBuilder> action, FieldContainer container = FieldContainer.Auto)
 	{
-		_fields.Add((path, definition, FieldContainer.Auto));
+		_fieldActions.Add((path, action, container));
 		return (TSelf)this;
 	}
 
@@ -51,7 +49,7 @@ public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBa
 	protected void MergeNestedFields(IReadOnlyList<(string Path, IFieldDefinition Definition)> fields)
 	{
 		foreach (var (path, def) in fields)
-			_fields.Add((path, def, FieldContainer.Auto));
+			_fieldActions.Add((path, fb => fb.SetDefinition(def), FieldContainer.Auto));
 	}
 
 	/// <summary>
@@ -101,23 +99,29 @@ public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBa
 	/// Returns true if any mapping configurations have been added.
 	/// </summary>
 	public bool HasConfiguration =>
-		_fields.Count > 0 ||
+		_fieldActions.Count > 0 ||
 		_runtimeFields.Count > 0 ||
 		_dynamicTemplates.Count > 0;
 
 	/// <summary>
 	/// Builds the mapping overrides from all configured fields, runtime fields, and dynamic templates.
-	/// Later entries override earlier ones when paths collide.
+	/// Multiple actions for the same path are accumulated additively on a single shared builder.
 	/// </summary>
 	public MappingOverrides Build()
 	{
-		var fields = new Dictionary<string, IFieldDefinition>();
+		var builders = new Dictionary<string, FieldBuilder>();
 		var containers = new Dictionary<string, FieldContainer>();
-		foreach (var (path, def, container) in _fields)
+		foreach (var (path, action, container) in _fieldActions)
 		{
-			fields[path] = def;
+			if (!builders.TryGetValue(path, out var fb))
+			{
+				fb = new FieldBuilder();
+				builders[path] = fb;
+			}
+			action(fb);
 			containers[path] = container;
 		}
+		var fields = builders.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.GetDefinition());
 
 		var runtimeFields = new Dictionary<string, RuntimeFieldDefinition>();
 		foreach (var (name, def) in _runtimeFields)
