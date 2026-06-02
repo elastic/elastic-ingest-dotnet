@@ -161,4 +161,41 @@ public class InheritanceMappingTests
 	private static Elastic.Mapping.Mappings.MappingsBuilder<T> ConfigureViaSectionHelper<T>(
 		Elastic.Mapping.Mappings.MappingsBuilder<T> m) where T : IntermediatePage =>
 		m.Section(f => f.IgnoreAbove(512));
+
+	// ── [Id] on a base class: accessor delegate + keyword type ───────────────
+
+	[Test]
+	public void IntermediatePage_GetId_ReturnsInheritedIdValue()
+	{
+		// [Id] is declared on InheritanceBase; IntermediatePage inherits it.
+		// The generated GetId delegate must cast to IntermediatePage and access Id.
+		var ctx = InheritanceMappingContext.IntermediatePage.Context;
+		var doc = new IntermediatePage { Id = "abc-123" };
+		ctx.GetId!(doc).Should().Be("abc-123");
+	}
+
+	[Test]
+	public void DerivedPage_GetId_ReturnsIdFromThreeLevelChain()
+	{
+		// [Id] flows through InheritanceBase → IntermediatePage → DerivedPage.
+		var ctx = InheritanceMappingContext.DerivedPage.Context;
+		var doc = new DerivedPage { Id = "xyz-789" };
+		ctx.GetId!(doc).Should().Be("xyz-789");
+	}
+
+	[Test]
+	public void InheritedId_IsMappedAsKeyword()
+	{
+		// [Id][Keyword] on InheritanceBase must produce a keyword-typed field
+		// in the mapping JSON for every derived type.
+		//
+		// IntermediatePage has no ConfigureMappings, so GetMappingJson() returns
+		// the raw pretty-printed generator output.  DerivedPage has DerivedPageConfig,
+		// so its JSON is produced by MergeIntoMappings (compact, no spaces).
+		var intermediateJson = InheritanceMappingContext.IntermediatePage.GetMappingJson();
+		var derivedJson      = InheritanceMappingContext.DerivedPage.GetMappingJson();
+
+		intermediateJson.Should().Contain("\"id\": { \"type\": \"keyword\"");  // pretty
+		derivedJson.Should().Contain("\"id\":{\"type\":\"keyword\"");           // compact
+	}
 }
