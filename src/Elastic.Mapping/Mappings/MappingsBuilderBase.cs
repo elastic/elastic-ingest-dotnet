@@ -15,21 +15,24 @@ namespace Elastic.Mapping.Mappings;
 /// <typeparam name="TSelf">The derived builder type.</typeparam>
 public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBase<TSelf>
 {
-	private readonly List<(string Path, IFieldDefinition Definition)> _fields = [];
+	private readonly List<(string Path, IFieldDefinition Definition, FieldContainer Container)> _fields = [];
 	private readonly List<(string Name, RuntimeFieldDefinition Definition)> _runtimeFields = [];
 	private readonly List<DynamicTemplateDefinition> _dynamicTemplates = [];
+
+	private TSelf AddFieldCore(string path, Func<FieldBuilder, FieldBuilder> configure, FieldContainer container)
+	{
+		var builder = new FieldBuilder();
+		_ = configure(builder);
+		_fields.Add((path, builder.GetDefinition(), container));
+		return (TSelf)this;
+	}
 
 	/// <summary>
 	/// Adds a field definition at the specified path.
 	/// Called by generated property methods.
 	/// </summary>
-	protected TSelf AddPropertyField(string path, Func<FieldBuilder, FieldBuilder> configure)
-	{
-		var builder = new FieldBuilder();
-		_ = configure(builder);
-		_fields.Add((path, builder.GetDefinition()));
-		return (TSelf)this;
-	}
+	protected TSelf AddPropertyField(string path, Func<FieldBuilder, FieldBuilder> configure) =>
+		AddFieldCore(path, configure, FieldContainer.Auto);
 
 	/// <summary>
 	/// Adds a field definition directly at the specified path.
@@ -37,7 +40,7 @@ public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBa
 	/// </summary>
 	protected TSelf AddFieldDirect(string path, IFieldDefinition definition)
 	{
-		_fields.Add((path, definition));
+		_fields.Add((path, definition, FieldContainer.Auto));
 		return (TSelf)this;
 	}
 
@@ -48,19 +51,29 @@ public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBa
 	protected void MergeNestedFields(IReadOnlyList<(string Path, IFieldDefinition Definition)> fields)
 	{
 		foreach (var (path, def) in fields)
-			_fields.Add((path, def));
+			_fields.Add((path, def, FieldContainer.Auto));
 	}
 
 	/// <summary>
-	/// Adds a field that is not a property on the model (e.g., copy_to target field).
+	/// Adds a multi-field under the parent field's <c>"fields"</c> container.
+	/// For dotted paths (e.g. <c>"title.semantic_text"</c>) the leaf is always placed in the
+	/// immediate parent's <c>fields</c> — the parent must be a leaf type (text, keyword, date, etc.).
+	/// Throws at build if the parent is an object or nested type; use <see cref="AddProperty"/> instead.
+	/// For single-segment paths the field is placed directly in the root <c>properties</c>.
 	/// </summary>
-	public TSelf AddField(string name, Func<FieldBuilder, FieldBuilder> configure)
-	{
-		var builder = new FieldBuilder();
-		_ = configure(builder);
-		_fields.Add((name, builder.GetDefinition()));
-		return (TSelf)this;
-	}
+	public TSelf AddField(string name, Func<FieldBuilder, FieldBuilder> configure) =>
+		AddFieldCore(name, configure, FieldContainer.Field);
+
+	/// <summary>
+	/// Adds a sub-property under the parent field's <c>"properties"</c> container.
+	/// For dotted paths (e.g. <c>"applies_to.type"</c>) the leaf is always placed in the
+	/// immediate parent's <c>properties</c> — the parent must be an object or nested type.
+	/// Throws at build if the parent is a leaf type; use <see cref="AddField"/> instead.
+	/// Creates a new <c>type: object</c> parent when no parent is defined yet.
+	/// For single-segment paths the field is placed directly in the root <c>properties</c>.
+	/// </summary>
+	public TSelf AddProperty(string name, Func<FieldBuilder, FieldBuilder> configure) =>
+		AddFieldCore(name, configure, FieldContainer.Property);
 
 	/// <summary>
 	/// Adds a runtime field definition.
@@ -99,13 +112,17 @@ public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBa
 	public MappingOverrides Build()
 	{
 		var fields = new Dictionary<string, IFieldDefinition>();
-		foreach (var (path, def) in _fields)
+		var containers = new Dictionary<string, FieldContainer>();
+		foreach (var (path, def, container) in _fields)
+		{
 			fields[path] = def;
+			containers[path] = container;
+		}
 
 		var runtimeFields = new Dictionary<string, RuntimeFieldDefinition>();
 		foreach (var (name, def) in _runtimeFields)
 			runtimeFields[name] = def;
 
-		return new(fields, runtimeFields, [.. _dynamicTemplates]);
+		return new(fields, runtimeFields, [.. _dynamicTemplates], containers);
 	}
 }

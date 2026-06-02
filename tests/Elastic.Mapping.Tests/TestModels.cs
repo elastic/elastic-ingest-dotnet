@@ -593,3 +593,42 @@ public class GapFixDocument : IConfigureElasticsearch<GapFixDocument>
 [ElasticsearchMappingContext]
 [Index<GapFixDocument>(Name = "gap-fix-test")]
 public static partial class GapFixMappingContext;
+
+// ============================================================================
+// EXPLICIT CONTAINER TEST MODEL
+// Exercises the new AddField (multi-field) / AddProperty (sub-property) API.
+// ============================================================================
+
+/// <summary>
+/// Document with an explicit [Text] field for AddField and an [Object] field for AddProperty,
+/// demonstrating that the explicit container intent is honoured through the generated pipeline.
+/// </summary>
+public class ExplicitContainerDocument : IConfigureElasticsearch<ExplicitContainerDocument>
+{
+	[Id]
+	[Keyword]
+	public string Id { get; set; } = string.Empty;
+
+	[Text]
+	[JsonPropertyName("title")]
+	public string Title { get; set; } = string.Empty;
+
+	[Object]
+	[JsonPropertyName("meta")]
+	public IndexedProduct? Meta { get; set; }
+
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) => analysis;
+
+	public MappingsBuilder<ExplicitContainerDocument> ConfigureMappings(MappingsBuilder<ExplicitContainerDocument> mappings) =>
+		mappings
+			// title is [Text] (leaf) → AddField puts the child under fields
+			.AddField("title.semantic", f => f.SemanticText().InferenceId("my-elser"))
+			// meta is [Object] → AddProperty puts the child under properties
+			.AddProperty("meta.extra", f => f.Keyword());
+
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
+}
+
+[ElasticsearchMappingContext]
+[Index<ExplicitContainerDocument>(Name = "explicit-container-test")]
+public static partial class ExplicitContainerMappingContext;

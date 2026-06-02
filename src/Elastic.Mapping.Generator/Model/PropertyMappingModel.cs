@@ -44,6 +44,9 @@ internal sealed record PropertyMappingModel(
 /// </summary>
 internal static class FieldTypes
 {
+	/// <summary>Returns true if the field type is object-like (object or nested).</summary>
+	public static bool IsObjectLike(string fieldType) =>
+		fieldType == Object || fieldType == Nested;
 	public const string Keyword = "keyword";
 	public const string Text = "text";
 	public const string Long = "long";

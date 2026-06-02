@@ -125,9 +125,10 @@ public class MappingsBuilderTests
 	[Test]
 	public void MappingsBuilder_DottedPath_ObjectParent_UsesProperties()
 	{
+		// AddField on a parent, then AddProperty for the child (object parent → properties).
 		var builder = new MappingsBuilder<LogEntry>()
 			.AddField("metadata", f => f.Object())
-			.AddField("metadata.inner", f => f.Keyword());
+			.AddProperty("metadata.inner", f => f.Keyword());
 
 		var overrides = builder.Build();
 		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
@@ -397,5 +398,221 @@ public class MappingsBuilderTests
 		var completion = doc.RootElement.GetProperty("properties").GetProperty("message")
 			.GetProperty("fields").GetProperty("completion");
 		completion.GetProperty("index_options").GetString().Should().Be("offsets");
+	}
+
+	// ----- Explicit AddField / AddProperty intent tests -----
+
+	[Test]
+	public void AddField_TextParent_LeafUnderFields()
+	{
+		// AddField on a text parent → leaf goes under "fields" (multi-field)
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("summary", f => f.Text().Analyzer("standard"))
+			.AddField("summary.semantic", f => f.SemanticText().InferenceId("my-elser"));
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var summary = doc.RootElement.GetProperty("properties").GetProperty("summary");
+		summary.GetProperty("type").GetString().Should().Be("text");
+		summary.TryGetProperty("properties", out _).Should().BeFalse("leaf parent must not get a properties key");
+		var semantic = summary.GetProperty("fields").GetProperty("semantic");
+		semantic.GetProperty("type").GetString().Should().Be("semantic_text");
+		semantic.GetProperty("inference_id").GetString().Should().Be("my-elser");
+	}
+
+	[Test]
+	public void AddField_KeywordParent_LeafUnderFields()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("tag", f => f.Keyword())
+			.AddField("tag.text", f => f.Text().Analyzer("standard"));
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var tag = doc.RootElement.GetProperty("properties").GetProperty("tag");
+		tag.GetProperty("type").GetString().Should().Be("keyword");
+		tag.TryGetProperty("properties", out _).Should().BeFalse();
+		var text = tag.GetProperty("fields").GetProperty("text");
+		text.GetProperty("type").GetString().Should().Be("text");
+	}
+
+	[Test]
+	public void AddProperty_ObjectParent_LeafUnderProperties()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("metadata", f => f.Object())
+			.AddProperty("metadata.extra", f => f.Keyword());
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var metadata = doc.RootElement.GetProperty("properties").GetProperty("metadata");
+		metadata.GetProperty("type").GetString().Should().Be("object");
+		metadata.TryGetProperty("fields", out _).Should().BeFalse("object parent must not get a fields key");
+		var extra = metadata.GetProperty("properties").GetProperty("extra");
+		extra.GetProperty("type").GetString().Should().Be("keyword");
+	}
+
+	[Test]
+	public void AddField_ObjectParent_Throws()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("metadata", f => f.Object())
+			.AddField("metadata.inner", f => f.Keyword());
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+
+		var act = () => overrides.MergeIntoMappings(baseMappings);
+		act.Should().Throw<InvalidOperationException>()
+			.WithMessage("*AddProperty*");
+	}
+
+	[Test]
+	public void AddProperty_LeafParent_Throws()
+	{
+		// message is a text field in the base mapping
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddProperty("message.sub", f => f.Keyword());
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+
+		var act = () => overrides.MergeIntoMappings(baseMappings);
+		act.Should().Throw<InvalidOperationException>()
+			.WithMessage("*AddField*");
+	}
+
+	[Test]
+	public void AddField_MissingParent_Throws()
+	{
+		// "ghost" is not defined anywhere — AddField requires the parent to exist
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("ghost.child", f => f.Keyword());
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+
+		var act = () => overrides.MergeIntoMappings(baseMappings);
+		act.Should().Throw<InvalidOperationException>()
+			.WithMessage("*parent field is not defined*");
+	}
+
+	[Test]
+	public void AddProperty_MissingParent_CreatesObjectParent()
+	{
+		// "ghost" is not defined — AddProperty creates it as object
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddProperty("ghost.child", f => f.Keyword());
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var ghost = doc.RootElement.GetProperty("properties").GetProperty("ghost");
+		ghost.GetProperty("type").GetString().Should().Be("object");
+		var child = ghost.GetProperty("properties").GetProperty("child");
+		child.GetProperty("type").GetString().Should().Be("keyword");
+	}
+
+	[Test]
+	public void AddField_ChildBeforeParent_LeafUnderFieldsRegardlessOfOrder()
+	{
+		// The ordering trap: child declared first, parent second.
+		// The depth-first sort in MergeIntoMappings must make this order-independent.
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("title.semantic_text", f => f.SemanticText().InferenceId("my-elser"))
+			.AddField("title", f => f.Text());
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var title = doc.RootElement.GetProperty("properties").GetProperty("title");
+		title.GetProperty("type").GetString().Should().Be("text",
+			"parent type must be preserved regardless of declaration order");
+		title.TryGetProperty("properties", out _).Should().BeFalse(
+			"leaf parent must never get a properties key");
+		var semantic = title.GetProperty("fields").GetProperty("semantic_text");
+		semantic.GetProperty("type").GetString().Should().Be("semantic_text");
+	}
+
+	[Test]
+	public void AddProperty_ChildBeforeParent_LeafUnderPropertiesRegardlessOfOrder()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddProperty("meta.inner", f => f.Keyword())
+			.AddField("meta", f => f.Object());
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var meta = doc.RootElement.GetProperty("properties").GetProperty("meta");
+		meta.GetProperty("type").GetString().Should().Be("object",
+			"parent type must be preserved regardless of declaration order");
+		meta.TryGetProperty("fields", out _).Should().BeFalse();
+		var inner = meta.GetProperty("properties").GetProperty("inner");
+		inner.GetProperty("type").GetString().Should().Be("keyword");
+	}
+
+	[Test]
+	public void AddField_TopLevelSingleSegment_RootProperty()
+	{
+		// Single-segment path: intent is ignored; leaf goes to root properties
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("standalone", f => f.Keyword());
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var standalone = doc.RootElement.GetProperty("properties").GetProperty("standalone");
+		standalone.GetProperty("type").GetString().Should().Be("keyword");
+	}
+
+	[Test]
+	public void AddProperty_TopLevelSingleSegment_RootProperty()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddProperty("standalone2", f => f.Keyword());
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var standalone2 = doc.RootElement.GetProperty("properties").GetProperty("standalone2");
+		standalone2.GetProperty("type").GetString().Should().Be("keyword");
+	}
+
+	[Test]
+	public void AddField_SamePathAddedTwice_LastWins()
+	{
+		var builder = new MappingsBuilder<LogEntry>()
+			.AddField("summary", f => f.Text())
+			.AddField("summary.a", f => f.Keyword().IgnoreAbove(128))
+			.AddField("summary.a", f => f.Keyword().IgnoreAbove(512));
+
+		var overrides = builder.Build();
+		var baseMappings = TestMappingContext.LogEntry.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var a = doc.RootElement.GetProperty("properties").GetProperty("summary")
+			.GetProperty("fields").GetProperty("a");
+		a.GetProperty("ignore_above").GetInt32().Should().Be(512, "last definition wins");
 	}
 }

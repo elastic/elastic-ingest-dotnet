@@ -4,11 +4,13 @@
 
 using System.Collections.Immutable;
 using Elastic.Mapping.Generator.Analysis;
+using Elastic.Mapping.Generator.Diagnostics;
 using Elastic.Mapping.Generator.Emitters;
 using Elastic.Mapping.Generator.Model;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Elastic.Mapping.Generator;
 
@@ -514,6 +516,11 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		if (resolvedConfigClassName == null && entityImplementsInterface)
 			resolvedConfigClassName = targetType.ToDisplayString();
 
+		// --- Detect AddField/AddProperty misuse in ConfigureMappings ---
+		var misuseFindings = DetectMappingMisuse(
+			typeModel, targetType, contextConfigureMappings, configTypeSymbol,
+			configClassImplementsInterface, configClassMappings, entityImplementsInterface, ct);
+
 		return new TypeRegistration(
 			targetType.Name,
 			targetType.ToDisplayString(),
@@ -528,8 +535,74 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			contextConfigureMappingsRef,
 			analysisComponents,
 			variant,
-			indexSettingsRef
+			indexSettingsRef,
+			misuseFindings
 		);
+	}
+
+	/// <summary>
+	/// Builds a field-name → field-type map from the top-level properties of the type model
+	/// and runs the misuse parser against the applicable ConfigureMappings method(s).
+	/// </summary>
+	private static ImmutableArray<MappingMisuseFinding> DetectMappingMisuse(
+		TypeMappingModel typeModel,
+		INamedTypeSymbol targetType,
+		IMethodSymbol? contextConfigureMappings,
+		INamedTypeSymbol? configTypeSymbol,
+		bool configClassImplementsInterface,
+		IMethodSymbol? configClassMappings,
+		bool entityImplementsInterface,
+		CancellationToken ct)
+	{
+		// Build the field-name → field-type map from known model properties.
+		var fieldNameToType = new Dictionary<string, string>(StringComparer.Ordinal);
+		foreach (var prop in typeModel.Properties)
+		{
+			if (!prop.IsIgnored)
+				fieldNameToType[prop.FieldName] = prop.FieldType;
+		}
+
+		if (fieldNameToType.Count == 0)
+			return ImmutableArray<MappingMisuseFinding>.Empty;
+
+		var allFindings = ImmutableArray.CreateBuilder<MappingMisuseFinding>();
+
+		// Context-level static method (Priority 1)
+		if (contextConfigureMappings != null)
+		{
+			allFindings.AddRange(AddPropertyFieldMisuseParser.Parse(contextConfigureMappings, fieldNameToType, ct));
+			return allFindings.ToImmutable();
+		}
+
+		// Configuration class via interface (Priority 2a)
+		if (configClassImplementsInterface && configTypeSymbol != null)
+		{
+			var method = configTypeSymbol.GetMembers("ConfigureMappings")
+				.OfType<IMethodSymbol>()
+				.FirstOrDefault(m => m.Parameters.Length == 1);
+			if (method != null)
+				allFindings.AddRange(AddPropertyFieldMisuseParser.Parse(method, fieldNameToType, ct));
+			return allFindings.ToImmutable();
+		}
+
+		// Configuration class legacy static method (Priority 2b)
+		if (configClassMappings != null)
+		{
+			allFindings.AddRange(AddPropertyFieldMisuseParser.Parse(configClassMappings, fieldNameToType, ct));
+			return allFindings.ToImmutable();
+		}
+
+		// Entity type via interface (Priority 3)
+		if (entityImplementsInterface)
+		{
+			var method = targetType.GetMembers("ConfigureMappings")
+				.OfType<IMethodSymbol>()
+				.FirstOrDefault(m => m.Parameters.Length == 1);
+			if (method != null)
+				allFindings.AddRange(AddPropertyFieldMisuseParser.Parse(method, fieldNameToType, ct));
+		}
+
+		return allFindings.ToImmutable();
 	}
 
 	private static AnalysisComponentsModel ParseAnalysisFromConfigureMethod(INamedTypeSymbol typeSymbol, CancellationToken ct)
@@ -580,6 +653,37 @@ public class MappingSourceGenerator : IIncrementalGenerator
 				else
 				{
 					aiEnrichmentTypes[docFqn] = model.ContextTypeName;
+				}
+			}
+		}
+
+		// Report EMAP001 / EMAP002: AddField/AddProperty misuse in ConfigureMappings
+		foreach (var model in models)
+		{
+			foreach (var reg in model.TypeRegistrations)
+			{
+				foreach (var finding in reg.MisuseFindings)
+				{
+					var descriptor = finding.DiagnosticId == "EMAP001"
+						? MappingDiagnostics.AddFieldOnObjectParent
+						: MappingDiagnostics.AddPropertyOnLeafParent;
+
+					// Reconstruct the source location from the serialised span so the IDE
+					// can point at the string-literal argument in the ConfigureMappings method.
+					var location = !string.IsNullOrEmpty(finding.FilePath)
+						? Location.Create(
+							finding.FilePath,
+							new TextSpan(finding.SpanStart, finding.SpanLength),
+							new LinePositionSpan())
+						: Location.None;
+
+					context.ReportDiagnostic(Diagnostic.Create(
+						descriptor,
+						location,
+						finding.ParentFieldName,
+						finding.FullPath,
+						finding.ChildSegment,
+						finding.ParentFieldType));
 				}
 			}
 		}
