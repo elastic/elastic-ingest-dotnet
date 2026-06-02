@@ -25,7 +25,16 @@ internal sealed record PropertyMappingModel(
 	string FieldType,
 	bool IsIgnored,
 	ImmutableDictionary<string, string?> Options,
-	NestedTypeModel? NestedType = null
+	NestedTypeModel? NestedType = null,
+	/// <summary>
+	/// Simple name of the type that declares this property (e.g. <c>SearchDocumentBase</c>).
+	/// <c>null</c> means the property is declared on the registered concrete type itself ("own property").
+	/// </summary>
+	string? DeclaringTypeName = null,
+	/// <summary>Namespace of the declaring type (e.g. <c>Elastic.Internal.Search</c>). <c>null</c> for own properties.</summary>
+	string? DeclaringTypeNamespace = null,
+	/// <summary>Full display string of the declaring type (e.g. <c>Elastic.Internal.Search.SearchDocumentBase</c>). <c>null</c> for own properties.</summary>
+	string? DeclaringTypeFullyQualifiedName = null
 )
 {
 	public static PropertyMappingModel Create(
@@ -34,9 +43,13 @@ internal sealed record PropertyMappingModel(
 		string fieldType,
 		bool isIgnored = false,
 		ImmutableDictionary<string, string?>? options = null,
-		NestedTypeModel? nestedType = null
+		NestedTypeModel? nestedType = null,
+		string? declaringTypeName = null,
+		string? declaringTypeNamespace = null,
+		string? declaringTypeFullyQualifiedName = null
 	) =>
-		new(propertyName, fieldName, fieldType, isIgnored, options ?? ImmutableDictionary<string, string?>.Empty, nestedType);
+		new(propertyName, fieldName, fieldType, isIgnored, options ?? ImmutableDictionary<string, string?>.Empty, nestedType,
+			declaringTypeName, declaringTypeNamespace, declaringTypeFullyQualifiedName);
 }
 
 /// <summary>
