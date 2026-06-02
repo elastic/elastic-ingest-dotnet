@@ -17,7 +17,7 @@ public sealed class TextFieldBuilder
 	private bool? _index;
 	private string? _copyTo;
 	private string? _termVector;
-	private readonly List<(string Name, IFieldDefinition Definition)> _multiFields = [];
+	private readonly Dictionary<string, IFieldDefinition> _multiFields = [];
 
 	internal TextFieldBuilder(FieldBuilder parent) => _parent = parent;
 
@@ -63,12 +63,25 @@ public sealed class TextFieldBuilder
 		return this;
 	}
 
-	/// <summary>Adds a multi-field.</summary>
+	/// <summary>Adds a multi-field. If a multi-field with the same name already exists, it is overwritten.</summary>
 	public TextFieldBuilder MultiField(string name, Func<MultiFieldBuilder, MultiFieldBuilder> configure)
 	{
 		var builder = new MultiFieldBuilder();
 		_ = configure(builder);
-		_multiFields.Add((name, builder.GetDefinition()));
+		_multiFields[name] = builder.GetDefinition();
+		return this;
+	}
+
+	/// <summary>Clears all accumulated state, resetting this builder to its initial empty state.</summary>
+	public TextFieldBuilder Clear()
+	{
+		_analyzer = null;
+		_searchAnalyzer = null;
+		_norms = null;
+		_index = null;
+		_copyTo = null;
+		_termVector = null;
+		_multiFields.Clear();
 		return this;
 	}
 
@@ -83,7 +96,7 @@ public sealed class TextFieldBuilder
 			builder._copyTo,
 			builder._termVector,
 			builder._multiFields.Count > 0
-				? builder._multiFields.ToDictionary(x => x.Name, x => x.Definition)
+				? new Dictionary<string, IFieldDefinition>(builder._multiFields)
 				: null
 		));
 		return builder._parent;
@@ -98,7 +111,7 @@ public sealed class KeywordFieldBuilder
 	private int? _ignoreAbove;
 	private bool? _docValues;
 	private bool? _index;
-	private readonly List<(string Name, IFieldDefinition Definition)> _multiFields = [];
+	private readonly Dictionary<string, IFieldDefinition> _multiFields = [];
 
 	internal KeywordFieldBuilder(FieldBuilder parent) => _parent = parent;
 
@@ -130,12 +143,23 @@ public sealed class KeywordFieldBuilder
 		return this;
 	}
 
-	/// <summary>Adds a multi-field.</summary>
+	/// <summary>Adds a multi-field. If a multi-field with the same name already exists, it is overwritten.</summary>
 	public KeywordFieldBuilder MultiField(string name, Func<MultiFieldBuilder, MultiFieldBuilder> configure)
 	{
 		var builder = new MultiFieldBuilder();
 		_ = configure(builder);
-		_multiFields.Add((name, builder.GetDefinition()));
+		_multiFields[name] = builder.GetDefinition();
+		return this;
+	}
+
+	/// <summary>Clears all accumulated state, resetting this builder to its initial empty state.</summary>
+	public KeywordFieldBuilder Clear()
+	{
+		_normalizer = null;
+		_ignoreAbove = null;
+		_docValues = null;
+		_index = null;
+		_multiFields.Clear();
 		return this;
 	}
 
@@ -148,7 +172,7 @@ public sealed class KeywordFieldBuilder
 			builder._docValues,
 			builder._index,
 			builder._multiFields.Count > 0
-				? builder._multiFields.ToDictionary(x => x.Name, x => x.Definition)
+				? new Dictionary<string, IFieldDefinition>(builder._multiFields)
 				: null
 		));
 		return builder._parent;
