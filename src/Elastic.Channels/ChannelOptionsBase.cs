@@ -76,6 +76,8 @@ public abstract class ChannelOptionsBase<TEvent, TResponse> : IChannelCallbacks<
 	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.PublishToOutboundChannelFailureCallback"/>
 	public Action? PublishToOutboundChannelFailureCallback { get; set; }
 
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.ItemExceedsBytesBudgetCallback"/>
 	public Action<TEvent, long>? ItemExceedsBytesBudgetCallback { get; set; }
+#endif
 }

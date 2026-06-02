@@ -20,8 +20,7 @@ public interface IWriteTrackingBuffer
 	TimeSpan? DurationSinceFirstWrite { get; }
 	/// <summary>
 	/// The estimated serialized size in bytes of the events in the buffer.
-	/// <para>Only populated when <see cref="BufferOptions.OutboundBufferMaxBytes"/> is set and the channel measures event
-	/// sizes; otherwise <c>0</c>.</para>
+	/// Populated by channel implementations that measure serialized event sizes; otherwise <c>0</c>.
 	/// </summary>
 	long EstimatedBytes { get; }
 }

@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,18 +37,6 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}"/>
 	protected IngestChannelBase(TChannelOptions options)
 		: base(options) { }
-
-	// Reused across measurements — safe because the inbound consumer is single-reader.
-	private readonly CountingStream _measureStream = new();
-
-	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.CalculateOutboundBytesAsync"/>
-	protected override async ValueTask<long> CalculateOutboundBytesAsync(TDocument @event, CancellationToken ctx = default)
-	{
-		_measureStream.Reset();
-		var header = CreateBulkOperationHeader(@event);
-		await BulkRequestDataFactory.WriteEventToStreamAsync(_measureStream, @event, header, Options, ctx).ConfigureAwait(false);
-		return _measureStream.BytesWritten;
-	}
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Retry"/>
 	protected override bool Retry(BulkResponse response)
@@ -91,6 +80,9 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 	{
 		ctx = ctx == default ? TokenSource.Token : ctx;
 #if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
+		if (Options.BufferOptions.OutboundBufferMaxBytes is { } maxBytes)
+			return ExportWithSubBatchingAsync(transport, page, maxBytes, ctx);
+
 		// Option is obsolete to prevent external users to set it.
 #pragma warning disable CS0618
 		if (Options.UseReadOnlyMemory)
@@ -100,19 +92,91 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 			return transport.RequestAsync<BulkResponse>(HttpMethod.POST, BulkPathAndQuery, PostData.ReadOnlyMemory(bytes), ctx);
 		}
 #endif
-#pragma warning disable IDE0022 // Use expression body for method
-		return transport.RequestAsync<BulkResponse>(new (HttpMethod.POST, BulkPathAndQuery),
+		return ExportStreamingAsync(transport, page, ctx);
+	}
+
+	private Task<BulkResponse> ExportStreamingAsync(ITransport transport, ArraySegment<TDocument> page, CancellationToken ctx) =>
+		transport.RequestAsync<BulkResponse>(new(HttpMethod.POST, BulkPathAndQuery),
 			PostData.StreamHandler(page,
-				(_, _) =>
-				{
-					/* NOT USED */
-				},
+				(_, _) => { /* sync writer not used */ },
 				async (b, stream, localCtx) =>
 					await BulkRequestDataFactory.WriteBufferToStreamAsync(b, stream, Options, CreateBulkOperationHeader, localCtx)
-						.ConfigureAwait(false))
-			, ctx);
-#pragma warning restore IDE0022 // Use expression body for method
+						.ConfigureAwait(false)),
+			ctx);
+
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
+	private async Task<BulkResponse> ExportWithSubBatchingAsync(
+		ITransport transport, ArraySegment<TDocument> page, long maxBytes, CancellationToken ctx)
+	{
+		var responses = new List<BulkResponse>(capacity: 4);
+
+		// eventStream: holds one event's NDJSON at a time — reused across events, bounded by max single-event size.
+		// subBatchStream: accumulates one sub-batch body — bounded by maxBytes.
+		using var eventStream = new MemoryStream();
+		using var subBatchStream = new MemoryStream();
+
+		for (var i = 0; i < page.Count; i++)
+		{
+			var @event = page[i];
+			var header = CreateBulkOperationHeader(@event);
+
+			// Serialize this event exactly once into the event temp buffer.
+			eventStream.SetLength(0);
+			await BulkRequestDataFactory.WriteEventToStreamAsync(eventStream, @event, header, Options, ctx)
+				.ConfigureAwait(false);
+			var eventBytes = eventStream.Length;
+
+			// Notify callers about events that individually exceed the budget (still exported, best-effort).
+			if (eventBytes > maxBytes)
+				NotifyItemExceedsBytesBudget(@event, eventBytes);
+
+			// If adding this event would push the sub-batch over the limit, flush first.
+			if (subBatchStream.Length > 0 && subBatchStream.Length + eventBytes > maxBytes)
+			{
+				responses.Add(await SendSubBatchAsync(transport, subBatchStream, ctx).ConfigureAwait(false));
+				subBatchStream.SetLength(0);
+			}
+
+			// Append this event's bytes to the sub-batch accumulator.
+			eventStream.Position = 0;
+			await eventStream.CopyToAsync(subBatchStream, ctx).ConfigureAwait(false);
+		}
+
+		if (subBatchStream.Length > 0)
+			responses.Add(await SendSubBatchAsync(transport, subBatchStream, ctx).ConfigureAwait(false));
+
+		return MergeSubBatchResponses(responses);
 	}
+
+	private Task<BulkResponse> SendSubBatchAsync(ITransport transport, MemoryStream buffer, CancellationToken ctx)
+	{
+		buffer.TryGetBuffer(out var segment);
+		var bytes = new ReadOnlyMemory<byte>(segment.Array, segment.Offset, (int)buffer.Length);
+		return transport.RequestAsync<BulkResponse>(HttpMethod.POST, BulkPathAndQuery,
+			PostData.ReadOnlyMemory(bytes), ctx);
+	}
+
+	private static BulkResponse MergeSubBatchResponses(List<BulkResponse> responses)
+	{
+		if (responses.Count == 1) return responses[0];
+
+		// Concatenate items in page order — preserves the positional Zip / RetryBuffer contract.
+		var combined = new List<BulkResponseItem>(responses.Sum(r => r.Items?.Count ?? 0));
+		foreach (var r in responses)
+			if (r.Items != null) combined.AddRange(r.Items);
+
+		// Reuse the "worst" real ApiCallDetails as the merged carrier:
+		//   429 (retryAll) > any other error > last response.
+		// This preserves the Retry / RetryAllItems behaviour for the full item set.
+		var carrier = responses.Find(r => r.ApiCallDetails.HttpStatusCode == 429)
+			?? responses.Find(r => !r.ApiCallDetails.HasSuccessfulStatusCode)
+			?? responses[^1];
+
+		// BulkResponse.Items has a public setter — replace with the combined list.
+		carrier.Items = combined;
+		return carrier;
+	}
+#endif
 
 	/// <summary>
 	/// Asks implementations to create a <see cref="BulkOperationHeader"/> based on the <paramref name="document"/> being exported.

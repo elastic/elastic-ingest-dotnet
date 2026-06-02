@@ -118,8 +118,10 @@ public class ChannelDiagnosticsListener<TEvent, TResponse> : IChannelCallbacks<T
 	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.PublishToOutboundChannelFailureCallback"/>
 	public Action? PublishToOutboundChannelFailureCallback { get; }
 
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.ItemExceedsBytesBudgetCallback"/>
 	public Action<TEvent, long>? ItemExceedsBytesBudgetCallback => null;
+#endif
 
 	/// <summary>
 	/// Provides a debug message to give insights to the machinery of <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}"/>

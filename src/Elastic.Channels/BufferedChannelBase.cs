@@ -192,7 +192,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			FullMode = options.BufferOptions.BoundedChannelFullMode
 		}, itemDropped);
 
-		InboundBuffer = new InboundBuffer<TEvent>(BatchExportSize, BufferOptions.OutboundBufferMaxLifetime, BufferOptions.OutboundBufferMaxBytes);
+		InboundBuffer = new InboundBuffer<TEvent>(BatchExportSize, BufferOptions.OutboundBufferMaxLifetime);
 
 		_outTask = Task.Factory.StartNew(async () =>
 				await ConsumeOutboundEventsAsync().ConfigureAwait(false),
@@ -213,15 +213,15 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// </summary>
 	protected abstract Task<TResponse> ExportAsync(ArraySegment<TEvent> buffer, CancellationToken ctx = default);
 
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 	/// <summary>
-	/// Returns the estimated serialized byte size of <paramref name="event"/> as it will appear in the outbound
-	/// request body. The default implementation returns <c>0</c>, which disables size-aware batching. Override
-	/// in a subclass to provide real measurements; the Elasticsearch channel does this automatically using the
-	/// library's own NDJSON serialization path.
-	/// <para>Only called when <see cref="BufferOptions.OutboundBufferMaxBytes"/> is set.</para>
+	/// Notifies all registered callback listeners that a single event's serialized size exceeds
+	/// <see cref="BufferOptions.OutboundBufferMaxBytes"/>. The event is still exported (best-effort).
+	/// Called by channel implementations from within <see cref="ExportAsync"/>.
 	/// </summary>
-	protected virtual ValueTask<long> CalculateOutboundBytesAsync(TEvent @event, CancellationToken ctx = default) =>
-		new(0L);
+	protected void NotifyItemExceedsBytesBudget(TEvent @event, long bytes) =>
+		_callbacks.ItemExceedsBytesBudgetCallback?.Invoke(@event, bytes);
+#endif
 
 	/// <inheritdoc cref="ChannelWriter{T}.WaitToWriteAsync"/>
 	public override async ValueTask<bool> WaitToWriteAsync(CancellationToken ctx = default)
@@ -479,23 +479,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 				if (item is null)
 					continue;
 
-				if (BufferOptions.OutboundBufferMaxBytes.HasValue)
-				{
-					var itemBytes = await CalculateOutboundBytesAsync(item, TokenSource.Token).ConfigureAwait(false);
-
-					// Report oversized items; they are still exported as their own batch (best-effort).
-					if (itemBytes > BufferOptions.OutboundBufferMaxBytes.GetValueOrDefault())
-						_callbacks.ItemExceedsBytesBudgetCallback?.Invoke(item, itemBytes);
-
-					// Pre-emptive flush: adding this item (or one of average size) would push bytes over budget.
-					if (InboundBuffer.WouldExceedBytes(itemBytes))
-						await FlushBufferAsync().ConfigureAwait(false);
-
-					InboundBuffer.Add(item, itemBytes);
-				}
-				else
-					InboundBuffer.Add(item);
-
+				InboundBuffer.Add(item);
 				Interlocked.Decrement(ref _inflightEvents);
 
 				if (InboundBuffer.DurationSinceFirstWaitToRead >= maxInterval)
