@@ -25,7 +25,13 @@ internal class InboundBuffer<TEvent>(int maxBufferSize, TimeSpan forceFlushAfter
 	private DateTimeOffset? TimeOfFirstWaitToRead { get; set; }
 
 	private int _count;
+
 	public int Count => _count;
+
+	/// <inheritdoc cref="IWriteTrackingBuffer.EstimatedBytes"/>
+	/// <remarks>Always 0 on the inbound buffer; populated at export time by the channel implementation.</remarks>
+	public long EstimatedBytes => 0;
+
 	public TimeSpan? DurationSinceFirstWrite => DateTimeOffset.UtcNow - TimeOfFirstWrite;
 	public TimeSpan? DurationSinceFirstWaitToRead => DateTimeOffset.UtcNow - TimeOfFirstWaitToRead;
 

@@ -68,6 +68,42 @@ var strategy = IngestStrategies.Index<Product>(context,
     BootstrapStrategies.IndexWithIlm("products-policy"));
 ```
 
+## Size-aware batching
+
+> Requires **netstandard2.1 / net8.0** or later.
+
+Elasticsearch's coordinating node rejects bulk requests whose body exceeds `http.max_content_length` (default 100 MB) or `indices.breaker.total.limit` (~95% of heap). When event sizes vary widely — a 5 MB document alongside a 2 KB one — a count-only batch can blow past these limits, causing 429 rejections that exhaust retries and drop documents.
+
+Set `OutboundBufferMaxBytes` to cap each request body:
+
+```csharp
+var options = new IngestChannelOptions<MyDoc>(transport, context)
+{
+    BufferOptions = new BufferOptions
+    {
+        OutboundBufferMaxSize  = 1_000,
+        OutboundBufferMaxBytes = 100 * 1024 * 1024, // 100 MB
+    }
+};
+```
+
+Count, age, and byte limits are independent — whichever fires first flushes the batch.
+
+**Each document is serialized exactly once.** When the budget is set, `ExportAsync` serializes each event once to a local buffer, tracks the running byte total, and issues a new `_bulk` HTTP request whenever the total would exceed the limit. A single outbound page may become N sub-requests; their responses are merged transparently before the retry loop sees them. There is no double-serialize, no background measurement pass, and no per-event byte array retained in memory.
+
+**Memory during export:** a local `MemoryStream` accumulates one sub-request body at a time (≤ `OutboundBufferMaxBytes`). It is freed when the export call returns. Peak = `MaxConcurrency × OutboundBufferMaxBytes`.
+
+**Oversized individual events** (a single document larger than the budget) are always emitted in their own sub-request. The `ItemExceedsBytesBudgetCallback` fires as a warning:
+
+```csharp
+var options = new IngestChannelOptions<MyDoc>(transport, context)
+{
+    BufferOptions = new BufferOptions { OutboundBufferMaxBytes = 100 * 1024 * 1024 },
+    ItemExceedsBytesBudgetCallback = (doc, bytes) =>
+        logger.LogWarning("Document {Id} is {Bytes:N0} bytes, exceeds batch budget", doc.Id, bytes),
+};
+```
+
 ## Helper APIs
 
 Beyond channel-based bulk ingest, the library provides helper APIs for common Elasticsearch operations.

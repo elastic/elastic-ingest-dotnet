@@ -213,6 +213,16 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// </summary>
 	protected abstract Task<TResponse> ExportAsync(ArraySegment<TEvent> buffer, CancellationToken ctx = default);
 
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
+	/// <summary>
+	/// Notifies all registered callback listeners that a single event's serialized size exceeds
+	/// <see cref="BufferOptions.OutboundBufferMaxBytes"/>. The event is still exported (best-effort).
+	/// Called by channel implementations from within <see cref="ExportAsync"/>.
+	/// </summary>
+	protected void NotifyItemExceedsBytesBudget(TEvent @event, long bytes) =>
+		_callbacks.ItemExceedsBytesBudgetCallback?.Invoke(@event, bytes);
+#endif
+
 	/// <inheritdoc cref="ChannelWriter{T}.WaitToWriteAsync"/>
 	public override async ValueTask<bool> WaitToWriteAsync(CancellationToken ctx = default)
 	{
@@ -401,7 +411,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 					new WriteTrackingBufferEventData
 					{
 						Count = outboundBuffer.Count,
-						DurationSinceFirstWrite = outboundBuffer.DurationSinceFirstWrite
+						DurationSinceFirstWrite = outboundBuffer.DurationSinceFirstWrite,
+						EstimatedBytes = outboundBuffer.EstimatedBytes
 					});
 			}
 			catch (Exception e)

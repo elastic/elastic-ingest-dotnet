@@ -65,6 +65,17 @@ public interface IChannelCallbacks<in TEvent, in TResponse>
 	/// </para>
 	/// </summary>
 	Action<int>? ExportRetryableCountCallback { get; }
+
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
+	/// <summary>
+	/// Called when a single event's serialized NDJSON size exceeds <see cref="BufferOptions.OutboundBufferMaxBytes"/>.
+	/// The event is still exported as its own sub-batch (best-effort). Use this hook to log, alert, or track
+	/// unexpectedly large events.
+	/// <para>Called with the event and its measured byte size.</para>
+	/// <para>Only available on netstandard2.1 / net8.0 or later.</para>
+	/// </summary>
+	Action<TEvent, long>? ItemExceedsBytesBudgetCallback { get; }
+#endif
 }
 
 internal class ChannelCallbackInvoker<TEvent, TResponse> : IChannelCallbacks<TEvent, TResponse>
@@ -141,6 +152,13 @@ internal class ChannelCallbackInvoker<TEvent, TResponse> : IChannelCallbacks<TEv
 			.Select(e => e.PublishToOutboundChannelFailureCallback)
 			.Where(e => e != null)
 			.Aggregate((Action?)null, (s, f) => s + f);
+
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
+		ItemExceedsBytesBudgetCallback = channelCallbacks
+			.Select(e => e.ItemExceedsBytesBudgetCallback)
+			.Where(e => e != null)
+			.Aggregate(ItemExceedsBytesBudgetCallback, (s, f) => s + f);
+#endif
 	}
 
 	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.ExportExceptionCallback"/>
@@ -184,4 +202,9 @@ internal class ChannelCallbackInvoker<TEvent, TResponse> : IChannelCallbacks<TEv
 
 	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.ExportRetryableCountCallback"/>
 	public Action<int>? ExportRetryableCountCallback { get; set; }
+
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
+	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.ItemExceedsBytesBudgetCallback"/>
+	public Action<TEvent, long>? ItemExceedsBytesBudgetCallback { get; set; }
+#endif
 }

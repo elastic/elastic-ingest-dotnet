@@ -198,70 +198,80 @@ public static class BulkRequestDataFactory
 #endif
 		// for is okay on ArraySegment, foreach performs bad:
 		// https://antao-almada.medium.com/how-to-use-span-t-and-memory-t-c0b126aae652
-		// TODO move to Memory<byte> overloads for WriteAsync (CA1835)
-#pragma warning disable CA1835
 		// ReSharper disable once ForCanBeConvertedToForeach
 		for (var i = 0; i < items.Count; i++)
 		{
 			var @event = items[i];
 			if (@event == null) continue;
-
 			var indexHeader = createHeaderFactory(@event);
-			await JsonSerializer.SerializeAsync(stream, indexHeader, indexHeader.GetType(), options.SerializerOptions, ctx)
-				.ConfigureAwait(false);
-			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
-
-			if (indexHeader is UpdateOperation)
-				await stream.WriteAsync(DocUpdateHeaderStart, 0, DocUpdateHeaderStart.Length, ctx).ConfigureAwait(false);
-
-			if (indexHeader is ScriptedHashUpdateOperation hashUpdate)
-			{
-				await stream.WriteAsync(ScriptedHashUpsertStart, 0, ScriptedHashUpsertStart.Length, ctx).ConfigureAwait(false);
-				var field = Encoding.UTF8.GetBytes(hashUpdate.UpdateInformation.Field);
-				await stream.WriteAsync(field, 0, field.Length, ctx).ConfigureAwait(false);
-				await stream.WriteAsync(ScriptedHashUpsertAfterIfCheck, 0, ScriptedHashUpsertAfterIfCheck.Length, ctx).ConfigureAwait(false);
-
-				if (hashUpdate.UpdateInformation.UpdateScript is { } script && !string.IsNullOrWhiteSpace(script))
-				{
-					var bytes = Encoding.UTF8.GetBytes(script);
-					await stream.WriteAsync(bytes, 0, bytes.Length, ctx).ConfigureAwait(false);
-				}
-				else
-					await stream.WriteAsync(ScriptedHashUpdateScript, 0, ScriptedHashUpdateScript.Length, ctx).ConfigureAwait(false);
-
-				await stream.WriteAsync(ScriptedHashElseBranchStart, 0, ScriptedHashElseBranchStart.Length, ctx).ConfigureAwait(false);
-				await stream.WriteAsync(field, 0, field.Length, ctx).ConfigureAwait(false);
-				await stream.WriteAsync(ScriptedHashElseBranchEnd, 0, ScriptedHashElseBranchEnd.Length, ctx).ConfigureAwait(false);
-
-				var hash = hashUpdate.UpdateInformation.Hash;
-				await JsonSerializer.SerializeAsync(stream, hash, options.SerializerOptions, ctx).ConfigureAwait(false);
-
-				if (hashUpdate.UpdateInformation.Parameters is { } parameters)
-					foreach (var kv in parameters)
-					{
-						await stream.WriteAsync(ScriptedHashParamComma, 0, ScriptedHashParamComma.Length, ctx ).ConfigureAwait(false);
-						await JsonSerializer.SerializeAsync(stream, kv.Key, options.SerializerOptions, ctx).ConfigureAwait(false);
-						await stream.WriteAsync(ScriptedHashKeySeparator, 0, ScriptedHashKeySeparator.Length, ctx ).ConfigureAwait(false);
-						await JsonSerializer.SerializeAsync(stream, kv.Value, options.SerializerOptions, ctx).ConfigureAwait(false);
-					}
-
-				await stream.WriteAsync(ScriptHashDocAsParameter, 0, ScriptHashDocAsParameter.Length, ctx).ConfigureAwait(false);
-			}
-
-			if (options.EventWriter?.WriteToStreamAsync != null)
-				await options.EventWriter.WriteToStreamAsync(stream, @event, ctx).ConfigureAwait(false);
-			else
-				await JsonSerializer.SerializeAsync(stream, @event, options.SerializerOptions, ctx)
-					.ConfigureAwait(false);
-
-			if (indexHeader is UpdateOperation)
-				await stream.WriteAsync(DocUpdateHeaderEnd, 0, DocUpdateHeaderEnd.Length, ctx).ConfigureAwait(false);
-
-			if (indexHeader is ScriptedHashUpdateOperation)
-				await stream.WriteAsync(ScriptedHashUpsertEnd, 0, ScriptedHashUpsertEnd.Length, ctx).ConfigureAwait(false);
-
-			await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
+			await WriteEventToStreamAsync(stream, @event, indexHeader, options, ctx).ConfigureAwait(false);
 		}
+	}
+
+	/// <summary>
+	/// Writes the NDJSON representation of a single event (action/meta line + source line) to <paramref name="stream"/>.
+	/// This is the canonical per-event serialization path; both the bulk export and the size-measurement code call it
+	/// to guarantee byte-identical output.
+	/// </summary>
+	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "We always provide a static JsonTypeInfoResolver")]
+	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "We always provide a static JsonTypeInfoResolver")]
+	internal static async Task WriteEventToStreamAsync<TEvent>(Stream stream, TEvent @event,
+		BulkOperationHeader indexHeader, IngestChannelOptionsBase<TEvent> options, CancellationToken ctx)
+	{
+#pragma warning disable CA1835
+		await JsonSerializer.SerializeAsync(stream, indexHeader, indexHeader.GetType(), options.SerializerOptions, ctx)
+			.ConfigureAwait(false);
+		await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
+
+		if (indexHeader is UpdateOperation)
+			await stream.WriteAsync(DocUpdateHeaderStart, 0, DocUpdateHeaderStart.Length, ctx).ConfigureAwait(false);
+
+		if (indexHeader is ScriptedHashUpdateOperation hashUpdate)
+		{
+			await stream.WriteAsync(ScriptedHashUpsertStart, 0, ScriptedHashUpsertStart.Length, ctx).ConfigureAwait(false);
+			var field = Encoding.UTF8.GetBytes(hashUpdate.UpdateInformation.Field);
+			await stream.WriteAsync(field, 0, field.Length, ctx).ConfigureAwait(false);
+			await stream.WriteAsync(ScriptedHashUpsertAfterIfCheck, 0, ScriptedHashUpsertAfterIfCheck.Length, ctx).ConfigureAwait(false);
+
+			if (hashUpdate.UpdateInformation.UpdateScript is { } script && !string.IsNullOrWhiteSpace(script))
+			{
+				var bytes = Encoding.UTF8.GetBytes(script);
+				await stream.WriteAsync(bytes, 0, bytes.Length, ctx).ConfigureAwait(false);
+			}
+			else
+				await stream.WriteAsync(ScriptedHashUpdateScript, 0, ScriptedHashUpdateScript.Length, ctx).ConfigureAwait(false);
+
+			await stream.WriteAsync(ScriptedHashElseBranchStart, 0, ScriptedHashElseBranchStart.Length, ctx).ConfigureAwait(false);
+			await stream.WriteAsync(field, 0, field.Length, ctx).ConfigureAwait(false);
+			await stream.WriteAsync(ScriptedHashElseBranchEnd, 0, ScriptedHashElseBranchEnd.Length, ctx).ConfigureAwait(false);
+
+			var hash = hashUpdate.UpdateInformation.Hash;
+			await JsonSerializer.SerializeAsync(stream, hash, options.SerializerOptions, ctx).ConfigureAwait(false);
+
+			if (hashUpdate.UpdateInformation.Parameters is { } parameters)
+				foreach (var kv in parameters)
+				{
+					await stream.WriteAsync(ScriptedHashParamComma, 0, ScriptedHashParamComma.Length, ctx).ConfigureAwait(false);
+					await JsonSerializer.SerializeAsync(stream, kv.Key, options.SerializerOptions, ctx).ConfigureAwait(false);
+					await stream.WriteAsync(ScriptedHashKeySeparator, 0, ScriptedHashKeySeparator.Length, ctx).ConfigureAwait(false);
+					await JsonSerializer.SerializeAsync(stream, kv.Value, options.SerializerOptions, ctx).ConfigureAwait(false);
+				}
+
+			await stream.WriteAsync(ScriptHashDocAsParameter, 0, ScriptHashDocAsParameter.Length, ctx).ConfigureAwait(false);
+		}
+
+		if (options.EventWriter?.WriteToStreamAsync != null)
+			await options.EventWriter.WriteToStreamAsync(stream, @event, ctx).ConfigureAwait(false);
+		else
+			await JsonSerializer.SerializeAsync(stream, @event, options.SerializerOptions, ctx).ConfigureAwait(false);
+
+		if (indexHeader is UpdateOperation)
+			await stream.WriteAsync(DocUpdateHeaderEnd, 0, DocUpdateHeaderEnd.Length, ctx).ConfigureAwait(false);
+
+		if (indexHeader is ScriptedHashUpdateOperation)
+			await stream.WriteAsync(ScriptedHashUpsertEnd, 0, ScriptedHashUpsertEnd.Length, ctx).ConfigureAwait(false);
+
+		await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
 #pragma warning restore CA1835
 	}
 

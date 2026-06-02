@@ -25,6 +25,20 @@ public class BufferOptions
 	/// </summary>
 	public int OutboundBufferMaxSize { get; set; } = 1_000;
 
+#if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
+	/// <summary>
+	/// Optional byte budget for a single outbound batch. When set, <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>
+	/// slices the buffer into multiple sub-batch requests so that each request body stays under this limit.
+	/// Item count and lifetime flushing still apply; whichever threshold fires first flushes the batch.
+	/// <para>For Elasticsearch channels the byte measurement uses the library's own NDJSON serialization path —
+	/// each event is serialized exactly once. Bytes live only for the duration of the export call (≤ this value
+	/// per concurrent export task).</para>
+	/// <para>Requires netstandard2.1 / net8.0 or later. Not available on netstandard2.0.</para>
+	/// <para>Defaults to <c>null</c> (disabled).</para>
+	/// </summary>
+	public long? OutboundBufferMaxBytes { get; set; }
+#endif
+
 	private TimeSpan _outboundBufferMaxLifetime = TimeSpan.FromSeconds(5);
 	private readonly TimeSpan _outboundBufferMinLifetime = TimeSpan.FromSeconds(1);
 

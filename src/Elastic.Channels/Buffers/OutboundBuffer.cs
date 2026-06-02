@@ -26,6 +26,11 @@ internal class OutboundBuffer<TEvent>(InboundBuffer<TEvent> buffer) : IOutboundB
 
 	public TimeSpan? DurationSinceFirstWrite { get; } = buffer.DurationSinceFirstWrite;
 
+	/// <inheritdoc cref="IWriteTrackingBuffer.EstimatedBytes"/>
+	/// <remarks>Always 0 here; the Elasticsearch channel populates this value in the response callback
+	/// once the sub-batch serialization is complete.</remarks>
+	public long EstimatedBytes => 0;
+
 	private TEvent[] ArrayItems { get; } = buffer.Reset();
 
 	public ArraySegment<TEvent> GetArraySegment() => new(ArrayItems, 0, Count);
