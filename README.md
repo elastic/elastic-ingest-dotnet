@@ -4,6 +4,8 @@ Production-ready bulk ingestion into Elasticsearch — batching, backpressure, r
 
 Define your document type, declare how it maps to Elasticsearch with source-generated attributes, and get an `IngestChannel<T>` that auto-configures itself from your declaration. Composable strategies let you customize data streams, indices, ILM policies, and lifecycle management. Helper APIs cover PIT search, server-side reindex, delete-by-query, and client-side reindex.
 
+Batches flush on count, age, **or byte budget** — whichever fires first — so wildly variable document sizes no longer blow past Elasticsearch's `max_coordinating_bytes` limit. The byte measurement re-uses the library's own NDJSON serialization path through a zero-allocation counting stream; no document is ever buffered twice.
+
 ## Documentation
 
 **<https://elastic.github.io/elastic-ingest-dotnet/>**

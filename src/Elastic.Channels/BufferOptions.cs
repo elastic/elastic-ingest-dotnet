@@ -25,6 +25,16 @@ public class BufferOptions
 	/// </summary>
 	public int OutboundBufferMaxSize { get; set; } = 1_000;
 
+	/// <summary>
+	/// Optional byte budget for a single outbound batch. When set, the buffer flushes early if the estimated size of
+	/// accumulated events exceeds this value, even if <see cref="OutboundBufferMaxSize"/> has not been reached. Item count
+	/// and lifetime flushing still apply; whichever threshold is hit first triggers the flush.
+	/// <para>For Elasticsearch channels the size is measured automatically from the real bulk serialization. Other channels
+	/// must override <c>BufferedChannelBase.CalculateOutboundBytesAsync</c> for this to have any effect.</para>
+	/// <para>Defaults to <c>null</c> (disabled).</para>
+	/// </summary>
+	public long? OutboundBufferMaxBytes { get; set; }
+
 	private TimeSpan _outboundBufferMaxLifetime = TimeSpan.FromSeconds(5);
 	private readonly TimeSpan _outboundBufferMinLifetime = TimeSpan.FromSeconds(1);
 

@@ -18,10 +18,17 @@ public interface IWriteTrackingBuffer
 	/// The duration since the first write
 	/// </summary>
 	TimeSpan? DurationSinceFirstWrite { get; }
+	/// <summary>
+	/// The estimated serialized size in bytes of the events in the buffer.
+	/// <para>Only populated when <see cref="BufferOptions.OutboundBufferMaxBytes"/> is set and the channel measures event
+	/// sizes; otherwise <c>0</c>.</para>
+	/// </summary>
+	long EstimatedBytes { get; }
 }
 
 internal class WriteTrackingBufferEventData : IWriteTrackingBuffer
 {
 	public int Count { get; set; }
 	public TimeSpan? DurationSinceFirstWrite { get; set; }
+	public long EstimatedBytes { get; set; }
 }

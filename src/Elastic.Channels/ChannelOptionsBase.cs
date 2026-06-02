@@ -75,4 +75,7 @@ public abstract class ChannelOptionsBase<TEvent, TResponse> : IChannelCallbacks<
 
 	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.PublishToOutboundChannelFailureCallback"/>
 	public Action? PublishToOutboundChannelFailureCallback { get; set; }
+
+	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.ItemExceedsBytesBudgetCallback"/>
+	public Action<TEvent, long>? ItemExceedsBytesBudgetCallback { get; set; }
 }

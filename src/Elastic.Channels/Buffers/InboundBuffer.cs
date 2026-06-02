@@ -14,7 +14,7 @@ namespace Elastic.Channels.Buffers;
 /// <see cref="InboundBuffer{TEvent}"/> is a buffer that will block <see cref="WaitToReadAsync"/> until
 /// sufficient items have been added to it or <see cref="DurationSinceFirstWrite"/> exceeds the buffer's maximum lifespan.
 /// </summary>
-internal class InboundBuffer<TEvent>(int maxBufferSize, TimeSpan forceFlushAfter) : IWriteTrackingBuffer, IDisposable
+internal class InboundBuffer<TEvent>(int maxBufferSize, TimeSpan forceFlushAfter, long? maxBufferBytes = null) : IWriteTrackingBuffer, IDisposable
 {
 	private TEvent[] Buffer { get; set; } = ArrayPool<TEvent>.Shared.Rent(maxBufferSize);
 
@@ -25,27 +25,50 @@ internal class InboundBuffer<TEvent>(int maxBufferSize, TimeSpan forceFlushAfter
 	private DateTimeOffset? TimeOfFirstWaitToRead { get; set; }
 
 	private int _count;
+	private long _estimatedBytes;
+
 	public int Count => _count;
+	public long EstimatedBytes => _estimatedBytes;
+
+	/// <summary> Average bytes per event in the current batch. Used to preemptively flush before the next item
+	/// would tip us over the budget even if its exact size is not yet known. </summary>
+	public long AverageItemBytes => _count > 0 ? _estimatedBytes / _count : 0;
+
 	public TimeSpan? DurationSinceFirstWrite => DateTimeOffset.UtcNow - TimeOfFirstWrite;
 	public TimeSpan? DurationSinceFirstWaitToRead => DateTimeOffset.UtcNow - TimeOfFirstWaitToRead;
 
 	public bool NoThresholdsHit => Count == 0
-		|| (Count < maxBufferSize && DurationSinceFirstWaitToRead <= forceFlushAfter);
+		|| (Count < maxBufferSize
+			&& DurationSinceFirstWaitToRead <= forceFlushAfter
+			&& (!maxBufferBytes.HasValue || _estimatedBytes < maxBufferBytes.Value));
 
 	public bool ThresholdsHit => !NoThresholdsHit;
 
+	/// <summary>
+	/// Returns true when adding an event whose serialized size is <paramref name="nextItemBytes"/> would push the
+	/// running byte total past the configured byte budget, taking into account the rolling average so the buffer
+	/// flushes preemptively when the next item is likely to tip it over (e.g. flush at 900 KB when average is
+	/// 100 KB and the budget is 1 MB).
+	/// </summary>
+	public bool WouldExceedBytes(long nextItemBytes) =>
+		maxBufferBytes.HasValue
+		&& _count > 0
+		&& _estimatedBytes + Math.Max(nextItemBytes, AverageItemBytes) > maxBufferBytes.Value;
+
 	// not thread safe, buffer is guarded by a single consumer on the inbound channel
-	public void Add(TEvent item)
+	public void Add(TEvent item, long itemBytes = 0)
 	{
 		TimeOfFirstWrite ??= DateTimeOffset.UtcNow;
 		Buffer[_count] = item;
 		Interlocked.Increment(ref _count);
+		_estimatedBytes += itemBytes;
 	}
 
 	public TEvent[] Reset()
 	{
 		var bufferRef = Buffer;
 		_count = 0;
+		_estimatedBytes = 0;
 		TimeOfFirstWrite = null;
 		TimeOfFirstWaitToRead = null;
 		Buffer = ArrayPool<TEvent>.Shared.Rent(maxBufferSize);

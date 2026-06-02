@@ -26,6 +26,9 @@ internal class OutboundBuffer<TEvent>(InboundBuffer<TEvent> buffer) : IOutboundB
 
 	public TimeSpan? DurationSinceFirstWrite { get; } = buffer.DurationSinceFirstWrite;
 
+	// Captured before Reset() zeroes the field on InboundBuffer
+	public long EstimatedBytes { get; } = buffer.EstimatedBytes;
+
 	private TEvent[] ArrayItems { get; } = buffer.Reset();
 
 	public ArraySegment<TEvent> GetArraySegment() => new(ArrayItems, 0, Count);

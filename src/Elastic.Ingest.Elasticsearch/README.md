@@ -68,6 +68,40 @@ var strategy = IngestStrategies.Index<Product>(context,
     BootstrapStrategies.IndexWithIlm("products-policy"));
 ```
 
+## Size-aware batching
+
+Elasticsearch's coordinating node rejects bulk requests whose body exceeds `http.max_content_length` (default 100 MB) or `indices.breaker.total.limit` (~95% of heap). When event sizes vary widely — a 5 MB document alongside a 2 KB one — a count-only batch can blow past these limits, causing 429 rejections that exhaust retries and drop documents.
+
+Set `OutboundBufferMaxBytes` to cap each batch's serialized body size:
+
+```csharp
+var options = new IngestChannelOptions<MyDoc>(transport, context)
+{
+    BufferOptions = new BufferOptions
+    {
+        OutboundBufferMaxSize  = 1_000,
+        OutboundBufferMaxBytes = 100 * 1024 * 1024, // 100 MB
+    }
+};
+```
+
+Count, age, and byte limits are independent — whichever fires first flushes the batch.
+
+**Measurement is automatic and allocation-free.** `IngestChannel` overrides `CalculateOutboundBytesAsync` to re-run the exact NDJSON serialization it uses for the bulk request — action/meta header line, source document, update wrappers, framing newlines — but writes to a discarding `CountingStream`. The document is never buffered twice; only a `long` byte count is retained per event.
+
+**Oversized individual events** (a single document larger than the budget) are always emitted as a solo batch. The `ItemExceedsBytesBudgetCallback` fires so you can log or alert:
+
+```csharp
+var options = new IngestChannelOptions<MyDoc>(transport, context)
+{
+    BufferOptions = new BufferOptions { OutboundBufferMaxBytes = 100 * 1024 * 1024 },
+    ItemExceedsBytesBudgetCallback = (doc, bytes) =>
+        logger.LogWarning("Document {Id} is {Bytes} bytes, exceeds batch budget", doc.Id, bytes),
+};
+```
+
+To observe the measured byte size of each exported batch, subscribe to `ExportResponseCallback` — the `IWriteTrackingBuffer` argument exposes `EstimatedBytes`.
+
 ## Helper APIs
 
 Beyond channel-based bulk ingest, the library provides helper APIs for common Elasticsearch operations.

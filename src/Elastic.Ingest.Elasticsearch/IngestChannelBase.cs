@@ -17,6 +17,7 @@ using Elastic.Transport;
 using Elastic.Transport.Products.Elasticsearch;
 using static Elastic.Ingest.Elasticsearch.IngestChannelStatics;
 
+
 namespace Elastic.Ingest.Elasticsearch;
 
 /// <summary>
@@ -35,6 +36,18 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}"/>
 	protected IngestChannelBase(TChannelOptions options)
 		: base(options) { }
+
+	// Reused across measurements — safe because the inbound consumer is single-reader.
+	private readonly CountingStream _measureStream = new();
+
+	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.CalculateOutboundBytesAsync"/>
+	protected override async ValueTask<long> CalculateOutboundBytesAsync(TDocument @event, CancellationToken ctx = default)
+	{
+		_measureStream.Reset();
+		var header = CreateBulkOperationHeader(@event);
+		await BulkRequestDataFactory.WriteEventToStreamAsync(_measureStream, @event, header, Options, ctx).ConfigureAwait(false);
+		return _measureStream.BytesWritten;
+	}
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Retry"/>
 	protected override bool Retry(BulkResponse response)

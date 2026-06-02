@@ -65,6 +65,14 @@ public interface IChannelCallbacks<in TEvent, in TResponse>
 	/// </para>
 	/// </summary>
 	Action<int>? ExportRetryableCountCallback { get; }
+
+	/// <summary>
+	/// Called when a single event's measured serialized size exceeds <see cref="BufferOptions.OutboundBufferMaxBytes"/>.
+	/// The event is still exported as its own batch (best-effort). This callback serves as a warning hook so callers
+	/// can log, alert, or track oversized events.
+	/// <para>Called with the event and its measured byte size.</para>
+	/// </summary>
+	Action<TEvent, long>? ItemExceedsBytesBudgetCallback { get; }
 }
 
 internal class ChannelCallbackInvoker<TEvent, TResponse> : IChannelCallbacks<TEvent, TResponse>
@@ -141,6 +149,11 @@ internal class ChannelCallbackInvoker<TEvent, TResponse> : IChannelCallbacks<TEv
 			.Select(e => e.PublishToOutboundChannelFailureCallback)
 			.Where(e => e != null)
 			.Aggregate((Action?)null, (s, f) => s + f);
+
+		ItemExceedsBytesBudgetCallback = channelCallbacks
+			.Select(e => e.ItemExceedsBytesBudgetCallback)
+			.Where(e => e != null)
+			.Aggregate(ItemExceedsBytesBudgetCallback, (s, f) => s + f);
 	}
 
 	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.ExportExceptionCallback"/>
@@ -184,4 +197,7 @@ internal class ChannelCallbackInvoker<TEvent, TResponse> : IChannelCallbacks<TEv
 
 	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.ExportRetryableCountCallback"/>
 	public Action<int>? ExportRetryableCountCallback { get; set; }
+
+	/// <inheritdoc cref="IChannelCallbacks{TEvent,TResponse}.ItemExceedsBytesBudgetCallback"/>
+	public Action<TEvent, long>? ItemExceedsBytesBudgetCallback { get; set; }
 }
