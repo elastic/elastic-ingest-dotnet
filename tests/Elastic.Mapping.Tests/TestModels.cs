@@ -632,3 +632,84 @@ public class ExplicitContainerDocument : IConfigureElasticsearch<ExplicitContain
 [ElasticsearchMappingContext]
 [Index<ExplicitContainerDocument>(Name = "explicit-container-test")]
 public static partial class ExplicitContainerMappingContext;
+
+// ============================================================================
+// INHERITANCE TEST MODELS
+// Covers base-type property inclusion and generic-constrained extension methods.
+// ============================================================================
+
+/// <summary>
+/// Root base — never directly registered; only appears as an ancestor.
+/// Its properties must appear in every derived document's mapping JSON,
+/// Fields accessor, and hash.
+/// </summary>
+public class InheritanceBase
+{
+	[Id]
+	[Keyword]
+	[JsonPropertyName("id")]
+	public string Id { get; set; } = string.Empty;
+
+	[Text]
+	[JsonPropertyName("title")]
+	public string Title { get; set; } = string.Empty;
+
+	[Keyword]
+	[JsonPropertyName("status")]
+	public string Status { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Mid-level type: directly registered in <see cref="InheritanceMappingContext"/>
+/// AND the base of <see cref="DerivedPage"/>.
+/// Exercises the partial-class dedup: both a closed extension class
+/// (<c>IntermediatePageMappingsExtensions</c>) and a generic-constrained base
+/// extension class (<c>IntermediatePageMappingsExtensions</c>, partial) must
+/// be emitted without CS0101.
+/// </summary>
+public class IntermediatePage : InheritanceBase
+{
+	[Keyword]
+	[JsonPropertyName("section")]
+	public string Section { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Leaf type: inherits from <see cref="IntermediatePage"/> which inherits from
+/// <see cref="InheritanceBase"/>. Exercises 3-level inheritance — DerivedPage's
+/// mapping must include title/status (from InheritanceBase), section (from
+/// IntermediatePage), and content (own).
+/// </summary>
+public class DerivedPage : IntermediatePage
+{
+	[Text]
+	[JsonPropertyName("content")]
+	public string Content { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Configuration for <see cref="DerivedPage"/> that uses generic-constrained
+/// helper methods. These helpers compile ONLY if the generator emitted correct
+/// generic-constrained extension methods for InheritanceBase and IntermediatePage.
+/// </summary>
+public class DerivedPageConfig : IConfigureElasticsearch<DerivedPage>
+{
+	// Generic helper constrained to InheritanceBase — exercises Title<TDoc>, Status<TDoc>
+	private static MappingsBuilder<T> AddBaseOverrides<T>(MappingsBuilder<T> m) where T : InheritanceBase =>
+		m.Title(f => f.Analyzer("standard"));
+
+	// Generic helper constrained to IntermediatePage — exercises Section<TDoc>
+	private static MappingsBuilder<T> AddIntermediateOverrides<T>(MappingsBuilder<T> m) where T : IntermediatePage =>
+		m.Section(f => f.IgnoreAbove(256));
+
+	public MappingsBuilder<DerivedPage> ConfigureMappings(MappingsBuilder<DerivedPage> mappings) =>
+		AddBaseOverrides(AddIntermediateOverrides(mappings));
+
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) => analysis;
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
+}
+
+[ElasticsearchMappingContext]
+[Index<IntermediatePage>(Name = "intermediate-docs")]
+[Index<DerivedPage>(Name = "derived-docs", Configuration = typeof(DerivedPageConfig))]
+public static partial class InheritanceMappingContext;
