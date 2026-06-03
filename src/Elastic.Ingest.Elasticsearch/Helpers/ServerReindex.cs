@@ -46,16 +46,17 @@ public sealed class ServerReindex
 	}
 
 	/// <summary>
-	/// Starts _reindex with wait_for_completion=false, then polls _tasks/{id}.
+	/// Starts _reindex with wait_for_completion=false, then polls <c>GET /_reindex/{id}</c>
+	/// (falling back to <c>GET /_tasks/{id}</c> on older clusters).
 	/// Yields progress on each poll. Completes when the task finishes.
 	/// </summary>
 	public async IAsyncEnumerable<ReindexProgress> MonitorAsync([EnumeratorCancellation] CancellationToken ctx = default)
 	{
 		var taskId = await StartReindexAsync(ctx).ConfigureAwait(false);
 
-		await foreach (var response in ElasticsearchTaskMonitor.PollTaskAsync(_transport, taskId, _options.PollInterval, ctx).ConfigureAwait(false))
+		await foreach (var result in ReindexTaskMonitor.PollAsync(_transport, taskId, _options.PollInterval, ctx).ConfigureAwait(false))
 		{
-			yield return ParseProgress(taskId, response);
+			yield return ParseProgress(taskId, result.Response, result.Shape);
 		}
 	}
 
@@ -96,18 +97,40 @@ public sealed class ServerReindex
 			sb.Append("&requests_per_second=").Append(_options.RequestsPerSecond.Value);
 		if (_options.Slices != null)
 			sb.Append("&slices=").Append(_options.Slices);
+		if (_options.MaxDocs.HasValue)
+			sb.Append("&max_docs=").Append(_options.MaxDocs.Value);
 		return sb.ToString();
 	}
 
-	private string BuildBody()
+	/// <summary>
+	/// Builds the JSON request body that will be sent to <c>POST /_reindex</c>.
+	/// Useful for inspecting or logging the body before execution.
+	/// </summary>
+	public string BuildBody()
 	{
 		if (_options.Body != null)
 			return _options.Body;
 
 		var sb = new StringBuilder(256);
-		sb.Append(@"{""source"":{""index"":""");
+		if (_options.Conflicts != null)
+		{
+			sb.Append(@"{""conflicts"":""");
+			sb.Append(_options.Conflicts);
+			sb.Append(@""",""source"":{""index"":""");
+		}
+		else
+			sb.Append(@"{""source"":{""index"":""");
 		sb.Append(_source);
 		sb.Append('"');
+		if (_options.Remote != null)
+			AppendRemote(sb, _options.Remote);
+		if (_options.SourceSize.HasValue)
+		{
+			sb.Append(@",""size"":");
+			sb.Append(_options.SourceSize.Value);
+		}
+		if (_options.ExcludeInferenceFields)
+			sb.Append(@",""_source"":{""excludes"":[""_inference_fields""]}");
 		if (_options.Query != null)
 		{
 			sb.Append(@",""query"":");
@@ -122,11 +145,120 @@ public sealed class ServerReindex
 			sb.Append(_options.Pipeline);
 			sb.Append('"');
 		}
-		sb.Append(@"}}");
+		sb.Append('}');
+		if (_options.Script != null)
+		{
+			sb.Append(@",""script"":");
+			sb.Append(_options.Script);
+		}
+		sb.Append('}');
 		return sb.ToString();
 	}
 
-	private static ReindexProgress ParseProgress(string taskId, JsonResponse response)
+	private static void AppendRemote(StringBuilder sb, RemoteSource remote)
+	{
+		sb.Append(@",""remote"":{""host"":""");
+		sb.Append(remote.Host);
+		sb.Append('"');
+		if (remote.Username != null)
+		{
+			sb.Append(@",""username"":""");
+			sb.Append(remote.Username);
+			sb.Append('"');
+		}
+		if (remote.Password != null)
+		{
+			sb.Append(@",""password"":""");
+			sb.Append(remote.Password);
+			sb.Append('"');
+		}
+		if (remote.ApiKey != null)
+		{
+			sb.Append(@",""api_key"":""");
+			sb.Append(remote.ApiKey);
+			sb.Append('"');
+		}
+		if (remote.Headers is { Count: > 0 })
+		{
+			sb.Append(@",""headers"":{");
+			var first = true;
+			foreach (var kvp in remote.Headers)
+			{
+				if (!first) sb.Append(',');
+				sb.Append('"').Append(kvp.Key).Append(@""":""").Append(kvp.Value).Append('"');
+				first = false;
+			}
+			sb.Append('}');
+		}
+		if (remote.SocketTimeout != null)
+		{
+			sb.Append(@",""socket_timeout"":""");
+			sb.Append(remote.SocketTimeout);
+			sb.Append('"');
+		}
+		if (remote.ConnectTimeout != null)
+		{
+			sb.Append(@",""connect_timeout"":""");
+			sb.Append(remote.ConnectTimeout);
+			sb.Append('"');
+		}
+		sb.Append('}');
+	}
+
+	internal static ReindexProgress ParseProgress(
+		string taskId, JsonResponse response, ReindexTaskMonitor.ApiShape shape)
+	{
+		if (shape == ReindexTaskMonitor.ApiShape.ReindexApi)
+			return ParseReindexApiProgress(taskId, response);
+
+		return ParseTaskApiProgress(taskId, response);
+	}
+
+	/// <summary>
+	/// Parses the <c>GET /_reindex/{id}</c> response shape (9.5.0+).
+	/// Status fields live at <c>status.*</c> and <c>running_time_in_nanos</c> is at the root.
+	/// </summary>
+	private static ReindexProgress ParseReindexApiProgress(string taskId, JsonResponse response)
+	{
+		var completed = response.Get<bool>("completed");
+		var error = response.Get<string>("error.reason");
+
+		if (completed)
+		{
+			var respError = response.Get<string>("response.failures");
+			if (!string.IsNullOrEmpty(respError))
+				error ??= respError;
+		}
+
+		var id = response.Get<string>("id") ?? taskId;
+		var startMillis = response.Get<long>("start_time_in_millis");
+		DateTimeOffset? startTime = startMillis > 0
+			? DateTimeOffset.FromUnixTimeMilliseconds(startMillis)
+			: null;
+
+		return new ReindexProgress
+		{
+			TaskId = id,
+			IsCompleted = completed,
+			Cancelled = response.Get<bool>("cancelled"),
+			Total = response.Get<long>("status.total"),
+			Created = response.Get<long>("status.created"),
+			Updated = response.Get<long>("status.updated"),
+			Deleted = response.Get<long>("status.deleted"),
+			Noops = response.Get<long>("status.noops"),
+			VersionConflicts = response.Get<long>("status.version_conflicts"),
+			Elapsed = TimeSpan.FromMilliseconds(response.Get<long>("running_time_in_nanos") / 1_000_000.0),
+			Description = response.Get<string>("description"),
+			StartTime = startTime,
+			Error = error
+		};
+	}
+
+	/// <summary>
+	/// Parses the legacy <c>GET /_tasks/{id}</c> response shape.
+	/// Status fields live at <c>task.status.*</c> and <c>running_time_in_nanos</c> is under <c>task</c>.
+	/// </summary>
+	private static ReindexProgress ParseTaskApiProgress(string taskId, JsonResponse response)
 	{
 		var completed = response.Get<bool>("completed");
 		var error = response.Get<string>("error.reason");
