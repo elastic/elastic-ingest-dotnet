@@ -10,11 +10,14 @@ namespace Elastic.Ingest.Elasticsearch.Helpers;
 /// </summary>
 public class ReindexProgress
 {
-	/// <summary> The Elasticsearch task ID. </summary>
+	/// <summary> The Elasticsearch task ID. Stable across node-shutdown relocations when using the reindex management API. </summary>
 	public string TaskId { get; init; } = string.Empty;
 
 	/// <summary> Whether the reindex task has completed. </summary>
 	public bool IsCompleted { get; init; }
+
+	/// <summary> Whether the reindex task has been cancelled. </summary>
+	public bool Cancelled { get; init; }
 
 	/// <summary> Total documents to process. </summary>
 	public long Total { get; init; }
@@ -39,6 +42,12 @@ public class ReindexProgress
 
 	/// <summary> Fraction of work completed (0.0 to 1.0), or null if total is unknown. </summary>
 	public double? FractionComplete => Total > 0 ? (double)(Created + Updated + Deleted + Noops) / Total : null;
+
+	/// <summary> A sanitized description of the reindex operation (source/dest indices, remote host). Only populated by the reindex management API. </summary>
+	public string? Description { get; init; }
+
+	/// <summary> When the task started. Only populated by the reindex management API. </summary>
+	public DateTimeOffset? StartTime { get; init; }
 
 	/// <summary> Error description if the task failed. </summary>
 	public string? Error { get; init; }
