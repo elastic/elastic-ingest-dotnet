@@ -15,6 +15,7 @@ internal static class AnalysisNamesEmitter
 {
 	/// <summary>
 	/// Emits analysis names for a type registration within a context.
+	/// Used for inline analysis authors — per-context <c>{ResolverName}Analysis</c> emission.
 	/// </summary>
 	public static string? EmitForContext(ContextMappingModel context, TypeRegistration reg)
 	{
@@ -32,6 +33,35 @@ internal static class AnalysisNamesEmitter
 		}
 
 		EmitAnalysisClass(sb, "", reg.ResolverName, reg.AnalysisComponents);
+
+		return sb.ToString();
+	}
+
+	/// <summary>
+	/// Emits a base-type-anchored analysis accessor class so that generic code constrained
+	/// on the base type can reference analysis component names without knowing the concrete
+	/// document type. The generated class is named <c>{anchorName}Analysis</c> and placed in
+	/// the anchor's namespace, emitted exactly once regardless of how many derived types share
+	/// the same analysis. This mirrors the #185 base-type extension pattern for field methods.
+	/// </summary>
+	public static string EmitBaseAnchored(string emitNamespace, string anchorName, AnalysisComponentsModel components)
+	{
+		var sb = new StringBuilder();
+
+		SharedEmitterHelpers.EmitHeader(sb);
+
+		// Anchored accessor may live in the same namespace as the base type's assembly —
+		// suppress CS0436 (duplicate type in referenced assembly) just in case.
+		sb.AppendLine("#pragma warning disable CS0436");
+		sb.AppendLine();
+
+		if (!string.IsNullOrEmpty(emitNamespace))
+		{
+			sb.AppendLine($"namespace {emitNamespace};");
+			sb.AppendLine();
+		}
+
+		EmitAnalysisClass(sb, "", anchorName, components);
 
 		return sb.ToString();
 	}

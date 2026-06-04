@@ -713,3 +713,133 @@ public class DerivedPageConfig : IConfigureElasticsearch<DerivedPage>
 [Index<IntermediatePage>(Name = "intermediate-docs")]
 [Index<DerivedPage>(Name = "derived-docs", Configuration = typeof(DerivedPageConfig))]
 public static partial class InheritanceMappingContext;
+
+// ============================================================================
+// DELEGATION TEST MODELS: analysis defined in a shared factory, referenced
+// via ConfigureAnalysis delegation — mirrors the website-ai-search pattern.
+// ============================================================================
+
+/// <summary>
+/// Shared analysis factory that lives in a separate class from the mapping context,
+/// mirroring the SharedAnalysisFactory pattern in website-ai-search.
+/// </summary>
+public static class SearchAnalysisFactory
+{
+	// Const reference — should resolve via semantic const-resolution in the parser.
+	public const string KeywordNormalizerName = "keyword_normalizer";
+
+	/// <summary>
+	/// Base analysis — names discoverable via delegation following.
+	/// </summary>
+	public static AnalysisBuilder BuildBaseAnalysis(AnalysisBuilder analysis) => analysis
+		.Normalizer(KeywordNormalizerName, n => n.Custom()
+			.Filters("lowercase", "asciifolding"))
+		.Analyzer("starts_with_analyzer", a => a.Custom()
+			.Tokenizer("starts_with_tokenizer")
+			.Filter("lowercase"))
+		.Analyzer("starts_with_analyzer_search", a => a.Custom()
+			.Tokenizer("keyword")
+			.Filter("lowercase"))
+		.CharFilter("strip_non_word", cf => cf.PatternReplace()
+			.Pattern(@"\W")
+			.Replacement(" "))
+		.TokenFilter("english_stop", tf => tf.Stop()
+			.Stopwords("_english_"))
+		.Tokenizer("starts_with_tokenizer", t => t.EdgeNGram()
+			.MinGram(1)
+			.MaxGram(10)
+			.TokenChars("letter", "digit"));
+
+	/// <summary>
+	/// Extended analysis — calls BuildBaseAnalysis transitively, verifying deep delegation.
+	/// </summary>
+	public static AnalysisBuilder BuildExtendedAnalysis(AnalysisBuilder analysis, string[] synonyms) =>
+		BuildBaseAnalysis(analysis)
+			.Analyzer("synonyms_analyzer", a => a.Custom()
+				.Tokenizer("standard")
+				.Filters("lowercase", "synonyms_filter"))
+			.TokenFilter("synonyms_filter", tf => tf.SynonymGraph()
+				.Synonyms(synonyms));
+}
+
+/// <summary>
+/// Base document type for delegation tests. The generator should anchor the analysis
+/// accessor to this type since all derived docs share SearchAnalysisFactory.
+/// </summary>
+public class SearchBaseDocument
+{
+	[Id]
+	[Keyword]
+	public string Id { get; set; } = string.Empty;
+
+	[Text]
+	[JsonPropertyName("title")]
+	public string Title { get; set; } = string.Empty;
+}
+
+/// <summary>First derived doc type — delegates to SearchAnalysisFactory.BuildBaseAnalysis.</summary>
+public class SearchArticle : SearchBaseDocument
+{
+	[Text]
+	[JsonPropertyName("body")]
+	public string Body { get; set; } = string.Empty;
+}
+
+/// <summary>Second derived doc type — delegates transitively (BuildExtendedAnalysis → BuildBaseAnalysis).</summary>
+public class SearchProduct : SearchBaseDocument
+{
+	[Keyword]
+	[JsonPropertyName("sku")]
+	public string Sku { get; set; } = string.Empty;
+}
+
+public class SearchArticleConfig : IConfigureElasticsearch<SearchArticle>
+{
+	// Delegates to shared factory — the parser must follow this call to find the names.
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+		SearchAnalysisFactory.BuildBaseAnalysis(analysis);
+
+	public MappingsBuilder<SearchArticle> ConfigureMappings(MappingsBuilder<SearchArticle> mappings) => mappings;
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
+}
+
+public class SearchProductConfig : IConfigureElasticsearch<SearchProduct>
+{
+	// Delegates transitively: BuildExtendedAnalysis → BuildBaseAnalysis.
+	public AnalysisBuilder ConfigureAnalysis(AnalysisBuilder analysis) =>
+		SearchAnalysisFactory.BuildExtendedAnalysis(analysis, ["elastic => search, find"]);
+
+	public MappingsBuilder<SearchProduct> ConfigureMappings(MappingsBuilder<SearchProduct> mappings) => mappings;
+	public IReadOnlyDictionary<string, string>? IndexSettings => null;
+}
+
+/// <summary>
+/// Compile-time reachability test for generated analysis accessor surfaces.
+/// This class compiles ONLY if the generator correctly emits:
+/// (1) SearchBaseDocumentAnalysis static accessor, and
+/// (2) generic-constrained extension methods on MappingsBuilder&lt;TDoc&gt; where TDoc : SearchBaseDocument.
+/// A build failure here means the generator did not produce the expected surfaces.
+/// </summary>
+public static class SearchMappingHelpers
+{
+	// Surface (1): static accessor — reachable anywhere without generic context.
+	public static string KeywordNormalizerKey => SearchBaseDocumentAnalysis.Normalizers.KeywordNormalizer;
+	public static string StartsWithAnalyzerKey => SearchBaseDocumentAnalysis.Analyzers.StartsWithAnalyzer;
+	public static string EnglishStopKey => SearchBaseDocumentAnalysis.TokenFilters.EnglishStop;
+
+	// Surface (2): generic-constrained extensions on MappingsBuilder<TDoc>.
+	// These compile only if the extensions are emitted with the correct `where TDoc : SearchBaseDocument` constraint.
+	public static MappingsBuilder<T> UseAnalysisKeys<T>(MappingsBuilder<T> m) where T : SearchBaseDocument
+	{
+		// Both surfaces reachable from the same generic method — this is the key consumer pattern.
+		var normalizerName = SearchBaseDocumentAnalysis.Normalizers.KeywordNormalizer;  // surface (1)
+		var sameViaExtension = m.Normalizers().KeywordNormalizer;                       // surface (2)
+		_ = normalizerName == sameViaExtension; // same value — both return "keyword_normalizer"
+		return m;
+	}
+}
+
+[ElasticsearchMappingContext]
+[Index<SearchArticle>(Name = "search-articles", Configuration = typeof(SearchArticleConfig))]
+[Index<SearchProduct>(Name = "search-products", Configuration = typeof(SearchProductConfig))]
+public static partial class DelegationTestMappingContext;
