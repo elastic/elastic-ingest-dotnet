@@ -97,6 +97,10 @@ public class MappingSourceGenerator : IIncrementalGenerator
 
 		var stjConfig = StjContextAnalyzer.Analyze(jsonContextSymbol);
 
+		// Capture Compilation once at transform time — used transiently to follow delegated
+		// ConfigureAnalysis calls across files. Never stored on model records.
+		var compilation = context.SemanticModel.Compilation;
+
 		var registrations = ImmutableArray.CreateBuilder<TypeRegistration>();
 
 		foreach (var attr in contextSymbol.GetAttributes())
@@ -109,11 +113,11 @@ public class MappingSourceGenerator : IIncrementalGenerator
 
 			TypeRegistration? registration = null;
 			if (attrClassName.StartsWith(IndexAttributePrefix, StringComparison.Ordinal))
-				registration = ProcessIndexAttribute(attr, contextSymbol, stjConfig, ct);
+				registration = ProcessIndexAttribute(attr, contextSymbol, stjConfig, compilation, ct);
 			else if (attrClassName.StartsWith(DataStreamAttributePrefix, StringComparison.Ordinal))
-				registration = ProcessDataStreamAttribute(attr, contextSymbol, stjConfig, "DataStream", ct);
+				registration = ProcessDataStreamAttribute(attr, contextSymbol, stjConfig, "DataStream", compilation, ct);
 			else if (attrClassName.StartsWith(WiredStreamAttributePrefix, StringComparison.Ordinal))
-				registration = ProcessDataStreamAttribute(attr, contextSymbol, stjConfig, "WiredStream", ct);
+				registration = ProcessDataStreamAttribute(attr, contextSymbol, stjConfig, "WiredStream", compilation, ct);
 
 			if (registration != null)
 				registrations.Add(registration);
@@ -177,6 +181,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		AttributeData attr,
 		INamedTypeSymbol contextSymbol,
 		StjContextConfig? stjConfig,
+		Compilation compilation,
 		CancellationToken ct)
 	{
 		var typeArg = attr.AttributeClass?.TypeArguments.FirstOrDefault();
@@ -200,7 +205,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		var ingestProperties = AnalyzeIngestProperties(targetType, stjConfig);
 		ExtractConfigAndVariant(attr, out var configClassName, out var configTypeSymbol, out var variant);
 
-		return BuildTypeRegistration(targetType, contextSymbol, stjConfig, indexConfig, null, entityConfig, ingestProperties, configClassName, configTypeSymbol, variant, ct);
+		return BuildTypeRegistration(targetType, contextSymbol, stjConfig, indexConfig, null, entityConfig, ingestProperties, configClassName, configTypeSymbol, variant, compilation, ct);
 	}
 
 	private static TypeRegistration? ProcessDataStreamAttribute(
@@ -208,6 +213,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		INamedTypeSymbol contextSymbol,
 		StjContextConfig? stjConfig,
 		string entityTarget,
+		Compilation compilation,
 		CancellationToken ct)
 	{
 		var typeArg = attr.AttributeClass?.TypeArguments.FirstOrDefault();
@@ -233,7 +239,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		var ingestProperties = AnalyzeIngestProperties(targetType, stjConfig);
 		ExtractConfigAndVariant(attr, out var configClassName, out var configTypeSymbol, out var variant);
 
-		return BuildTypeRegistration(targetType, contextSymbol, stjConfig, null, dataStreamConfig, entityConfig, ingestProperties, configClassName, configTypeSymbol, variant, ct);
+		return BuildTypeRegistration(targetType, contextSymbol, stjConfig, null, dataStreamConfig, entityConfig, ingestProperties, configClassName, configTypeSymbol, variant, compilation, ct);
 	}
 
 	private static void ExtractConfigAndVariant(
@@ -349,6 +355,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		string? configClassName,
 		INamedTypeSymbol? configTypeSymbol,
 		string? variant,
+		Compilation compilation,
 		CancellationToken ct)
 	{
 		var typeModel = TypeAnalyzer.Analyze(targetType, stjConfig, indexConfig, dataStreamConfig, ct);
@@ -420,28 +427,31 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		// Priority: context > config class (interface) > config class (legacy static) > entity (interface) > entity (legacy static)
 		string? configureAnalysisRef = null;
 		AnalysisComponentsModel analysisComponents;
+		// When analysis is discovered via delegation (the ConfigureAnalysis method calls a shared
+		// factory), we record the anchor so emitters can produce a base-type-anchored accessor.
+		bool analysisViaDelegate = false;
 
 		if (contextConfigureAnalysis != null)
 		{
 			configureAnalysisRef = $"global::{contextSymbol.ToDisplayString()}.{contextConfigureAnalysis.Name}";
-			analysisComponents = ConfigureAnalysisParser.ParseFromMethod(contextConfigureAnalysis, ct);
+			analysisComponents = ConfigureAnalysisParser.ParseFromMethod(contextConfigureAnalysis, compilation, ct);
 		}
 		else if (configClassImplementsInterface)
 		{
 			configureAnalysisRef = $"_configureElasticsearch_ConfigureAnalysis";
 			analysisComponents = configTypeSymbol != null
-				? ParseAnalysisFromConfigureMethod(configTypeSymbol, ct)
+				? ParseAnalysisFromConfigureMethod(configTypeSymbol, compilation, ct, out analysisViaDelegate)
 				: AnalysisComponentsModel.Empty;
 		}
 		else if (configClassAnalysis != null)
 		{
 			configureAnalysisRef = $"global::{configTypeSymbol!.ToDisplayString()}.ConfigureAnalysis";
-			analysisComponents = ConfigureAnalysisParser.ParseFromMethod(configClassAnalysis, ct);
+			analysisComponents = ConfigureAnalysisParser.ParseFromMethod(configClassAnalysis, compilation, ct);
 		}
 		else if (entityImplementsInterface)
 		{
 			configureAnalysisRef = $"_configureElasticsearch_ConfigureAnalysis";
-			analysisComponents = ParseAnalysisFromConfigureMethod(targetType, ct);
+			analysisComponents = ParseAnalysisFromConfigureMethod(targetType, compilation, ct, out analysisViaDelegate);
 		}
 		else if (hasConfigureAnalysisOnType)
 		{
@@ -451,6 +461,27 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		else
 		{
 			analysisComponents = AnalysisComponentsModel.Empty;
+		}
+
+		// --- Determine analysis anchor ---
+		// When analysis was found via delegation to a shared factory, anchor the generated keys
+		// to the nearest user-defined base type so generic code can reference them without
+		// knowing the concrete document type. This mirrors the #185 base-type-extension pattern.
+		AnalysisAnchorModel? analysisAnchor = null;
+		if (analysisViaDelegate && analysisComponents.HasAnyComponents)
+		{
+			var baseType = targetType.BaseType;
+			while (baseType != null && baseType.SpecialType != SpecialType.None)
+				baseType = baseType.BaseType;
+
+			if (baseType != null && baseType.SpecialType == SpecialType.None)
+			{
+				analysisAnchor = new AnalysisAnchorModel(
+					baseType.Name,
+					baseType.ContainingNamespace?.ToDisplayString() ?? string.Empty,
+					baseType.ToDisplayString()
+				);
+			}
 		}
 
 		// --- Build ConfigureMappings info ---
@@ -536,7 +567,8 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			analysisComponents,
 			variant,
 			indexSettingsRef,
-			misuseFindings
+			misuseFindings,
+			analysisAnchor
 		);
 	}
 
@@ -605,14 +637,59 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		return allFindings.ToImmutable();
 	}
 
-	private static AnalysisComponentsModel ParseAnalysisFromConfigureMethod(INamedTypeSymbol typeSymbol, CancellationToken ct)
+	private static AnalysisComponentsModel ParseAnalysisFromConfigureMethod(
+		INamedTypeSymbol typeSymbol,
+		Compilation compilation,
+		CancellationToken ct,
+		out bool viaDelegate)
 	{
+		viaDelegate = false;
 		var method = typeSymbol.GetMembers("ConfigureAnalysis")
 			.OfType<IMethodSymbol>()
 			.FirstOrDefault(m => m.Parameters.Length == 1);
-		return method != null
-			? ConfigureAnalysisParser.ParseFromMethod(method, ct)
-			: AnalysisComponentsModel.Empty;
+
+		if (method == null)
+			return AnalysisComponentsModel.Empty;
+
+		// Detect delegation: the method delegates when it has at least one invocation that
+		// resolves to a user-authored method with source (i.e. not just returning the parameter).
+		viaDelegate = MethodDelegatesAnalysis(method, compilation, ct);
+
+		return ConfigureAnalysisParser.ParseFromMethod(method, compilation, ct);
+	}
+
+	/// <summary>
+	/// Returns true when the method contains an invocation that resolves to a user-authored
+	/// method with source code (i.e. it delegates rather than authoring analysis inline).
+	/// A pass-through (<c>=> analysis</c>) or a purely-inline fluent chain has no such calls.
+	/// </summary>
+	private static bool MethodDelegatesAnalysis(IMethodSymbol method, Compilation compilation, CancellationToken ct)
+	{
+		const string analysisBuilderTypeName = "Elastic.Mapping.Analysis.AnalysisBuilder";
+
+		foreach (var syntaxRef in method.DeclaringSyntaxReferences)
+		{
+			ct.ThrowIfCancellationRequested();
+			var methodSyntax = syntaxRef.GetSyntax(ct);
+			var semanticModel = compilation.GetSemanticModel(syntaxRef.SyntaxTree);
+
+			foreach (var invocation in methodSyntax.DescendantNodes().OfType<InvocationExpressionSyntax>())
+			{
+				var invokedSymbolInfo = semanticModel.GetSymbolInfo(invocation, ct);
+				if (invokedSymbolInfo.Symbol is not IMethodSymbol invokedMethod)
+					continue;
+
+				// Skip AnalysisBuilder fluent methods (they are registration calls, not delegation)
+				if (invokedMethod.ContainingType?.ToDisplayString() == analysisBuilderTypeName)
+					continue;
+
+				// Any user method with source = delegation
+				if (invokedMethod.DeclaringSyntaxReferences.Length > 0)
+					return true;
+			}
+		}
+
+		return false;
 	}
 
 	private static readonly DiagnosticDescriptor DuplicateAiEnrichmentDiagnostic = new(
@@ -640,6 +717,42 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		// base type's methods are emitted exactly once regardless of how many concrete
 		// derived types are registered.
 		var emittedBaseExtensionKeys = new HashSet<string>();
+
+		// Accumulate analysis components per anchor across ALL registrations before emitting.
+		// Multiple registrations sharing the same anchor may each contribute different component
+		// names (e.g. one delegates to BuildBaseAnalysis, another to BuildExtendedAnalysis which
+		// adds synonym analyzers). We merge so the single emitted accessor covers the union.
+		// Keyed by "{anchorNamespace}::{anchorFullyQualifiedName}".
+		var anchorComponents = new Dictionary<string, (AnalysisAnchorModel Anchor, AnalysisComponentsModel Components)>();
+		foreach (var model in models)
+		{
+			foreach (var reg in model.TypeRegistrations)
+			{
+				if (reg.AnalysisAnchor == null || !reg.AnalysisComponents.HasAnyComponents)
+					continue;
+
+				var anchorKey = $"{reg.AnalysisAnchor.Namespace}::{reg.AnalysisAnchor.FullyQualifiedName}";
+				if (anchorComponents.TryGetValue(anchorKey, out var existing))
+					anchorComponents[anchorKey] = (existing.Anchor, existing.Components.Merge(reg.AnalysisComponents));
+				else
+					anchorComponents[anchorKey] = (reg.AnalysisAnchor, reg.AnalysisComponents);
+			}
+		}
+
+		// Emit the merged anchor-anchored accessor and extensions once per anchor type.
+		foreach (var kvp in anchorComponents)
+		{
+			var anchor = kvp.Value.Anchor;
+			var mergedComponents = kvp.Value.Components;
+
+			var anchoredAnalysisSource = AnalysisNamesEmitter.EmitBaseAnchored(
+				anchor.Namespace, anchor.Name, mergedComponents);
+			context.AddSource($"{anchor.Name}Analysis.g.cs", anchoredAnalysisSource);
+
+			var anchoredExtSource = MappingsBuilderEmitter.EmitBaseAnchoredAnalysisExtensions(
+				anchor.Namespace, anchor.Name, anchor.FullyQualifiedName, mergedComponents);
+			context.AddSource($"{anchor.Name}AnalysisExtensions.g.cs", anchoredExtSource);
+		}
 
 		// Enforce: only one [AiEnrichment<T>] per document type across all contexts
 		var aiEnrichmentTypes = new Dictionary<string, string>();
@@ -728,9 +841,17 @@ public class MappingSourceGenerator : IIncrementalGenerator
 					}
 				}
 
-				var analysisNamesSource = AnalysisNamesEmitter.EmitForContext(model, reg);
-				if (analysisNamesSource != null)
-					context.AddSource($"{model.ContextTypeName}.{reg.ResolverName}Analysis.g.cs", analysisNamesSource);
+				// Analysis accessor emission:
+				// - When analysis is anchored to a base type (delegation path), the shared accessor
+				//   and generic-constrained extensions are already emitted in the pre-pass above.
+				//   Skip per-context emission so there's no competing {ResolverName}Analysis class.
+				// - When analysis is inline (no anchor), emit the per-context accessor as before.
+				if (reg.AnalysisAnchor == null)
+				{
+					var analysisNamesSource = AnalysisNamesEmitter.EmitForContext(model, reg);
+					if (analysisNamesSource != null)
+						context.AddSource($"{model.ContextTypeName}.{reg.ResolverName}Analysis.g.cs", analysisNamesSource);
+				}
 			}
 
 			if (model.AiEnrichment != null)

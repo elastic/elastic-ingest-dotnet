@@ -385,4 +385,81 @@ internal static class MappingsBuilderEmitter
 		sb.AppendLine("\t\treturn self;");
 		sb.AppendLine("\t}");
 	}
+
+	/// <summary>
+	/// Emits generic-constrained extension methods on <c>MappingsBuilder&lt;TDoc&gt;</c> that expose
+	/// analysis-component accessor instances for code constrained on the base type.
+	/// Emitted into a <c>partial</c> class so it can coexist with the field-extension class
+	/// produced by <see cref="EmitBaseExtensionsClass"/> without CS0101.
+	///
+	/// Example usage from generic code:
+	/// <code>
+	/// static MappingsBuilder&lt;T&gt; Use&lt;T&gt;(MappingsBuilder&lt;T&gt; m) where T : SearchDocumentBase
+	///     => m.Normalizers().KeywordNormalizer  // "keyword_normalizer"
+	/// </code>
+	/// </summary>
+	public static string EmitBaseAnchoredAnalysisExtensions(
+		string emitNamespace,
+		string anchorName,
+		string anchorFullyQualifiedName,
+		AnalysisComponentsModel components)
+	{
+		var sb = new StringBuilder();
+
+		SharedEmitterHelpers.EmitHeader(sb);
+
+		// The analysis extensions class is partial alongside the field-extensions class.
+		// Suppress CS0436 when the base type's project also compiled one.
+		sb.AppendLine("#pragma warning disable CS0436");
+		sb.AppendLine();
+
+		if (!string.IsNullOrEmpty(emitNamespace))
+		{
+			sb.AppendLine($"namespace {emitNamespace};");
+			sb.AppendLine();
+		}
+
+		const string typeParam = "TDoc";
+		var constraintClause = $" where {typeParam} : global::{anchorFullyQualifiedName}";
+		var builderType = $"{MappingsBuilderFqn}<{typeParam}>";
+		var analysisClassName = $"global::{(string.IsNullOrEmpty(emitNamespace) ? "" : emitNamespace + ".")}{anchorName}Analysis";
+
+		var extensionClassName = $"{anchorName}MappingsExtensions";
+
+		sb.AppendLine($"/// <summary>Generic-constrained extension methods that expose analysis-component accessors for <c>{anchorName}</c>-constrained mappings.</summary>");
+		sb.AppendLine($"public static partial class {extensionClassName}");
+		sb.AppendLine("{");
+
+		// Emit one accessor property per component kind, returning the static instance from the
+		// base-anchored {AnchorName}Analysis class so callers get typed, strongly-named keys.
+		EmitAnalysisAccessorExtension(sb, typeParam, constraintClause, builderType, analysisClassName, "Analyzers", components.Analyzers.Length > 0);
+		sb.AppendLine();
+		EmitAnalysisAccessorExtension(sb, typeParam, constraintClause, builderType, analysisClassName, "Tokenizers", components.Tokenizers.Length > 0);
+		sb.AppendLine();
+		EmitAnalysisAccessorExtension(sb, typeParam, constraintClause, builderType, analysisClassName, "TokenFilters", components.TokenFilters.Length > 0);
+		sb.AppendLine();
+		EmitAnalysisAccessorExtension(sb, typeParam, constraintClause, builderType, analysisClassName, "CharFilters", components.CharFilters.Length > 0);
+		sb.AppendLine();
+		EmitAnalysisAccessorExtension(sb, typeParam, constraintClause, builderType, analysisClassName, "Normalizers", components.Normalizers.Length > 0);
+
+		sb.AppendLine("}");
+		sb.AppendLine();
+
+		return sb.ToString();
+	}
+
+	private static void EmitAnalysisAccessorExtension(
+		StringBuilder sb,
+		string typeParam,
+		string constraintClause,
+		string builderType,
+		string analysisClassName,
+		string kind,
+		bool hasCustom)
+	{
+		var returnType = $"{analysisClassName}.{kind}Accessor";
+		sb.AppendLine($"\t/// <summary>Returns the {kind.ToLowerInvariant()} name accessor for {(hasCustom ? "built-in and custom" : "built-in")} {kind.ToLowerInvariant()}.</summary>");
+		sb.AppendLine($"\tpublic static {returnType} {kind}<{typeParam}>(this {builderType} _){constraintClause}");
+		sb.AppendLine($"\t\t=> {analysisClassName}.{kind};");
+	}
 }

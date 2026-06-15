@@ -18,6 +18,17 @@ internal sealed record ContextMappingModel(
 );
 
 /// <summary>
+/// Identifies the base type to which analysis-component keys are anchored.
+/// When analysis is discovered via delegation to a shared factory, the keys are emitted
+/// once under this base type's name so generic code constrained on the base can reference them.
+/// </summary>
+internal sealed record AnalysisAnchorModel(
+	string Name,
+	string Namespace,
+	string FullyQualifiedName
+);
+
+/// <summary>
 /// Represents a single type registration within a context (via [Entity&lt;T&gt;]).
 /// </summary>
 internal sealed record TypeRegistration(
@@ -43,7 +54,14 @@ internal sealed record TypeRegistration(
 	/// Compile-time misuse findings for AddField/AddProperty in ConfigureMappings.
 	/// Reported as EMAP001 / EMAP002 diagnostics.
 	/// </summary>
-	ImmutableArray<MappingMisuseFinding> MisuseFindings = default
+	ImmutableArray<MappingMisuseFinding> MisuseFindings = default,
+	/// <summary>
+	/// When non-null, analysis was discovered via delegation to a shared factory and the keys
+	/// should be emitted once anchored to this base type rather than per concrete context.
+	/// Per-context <c>{ResolverName}Analysis</c> emission is suppressed in favour of the
+	/// shared <c>{AnchorName}Analysis</c> accessor.
+	/// </summary>
+	AnalysisAnchorModel? AnalysisAnchor = null
 )
 {
 	/// <summary>
