@@ -595,6 +595,73 @@ public class GapFixDocument : IConfigureElasticsearch<GapFixDocument>
 public static partial class GapFixMappingContext;
 
 // ============================================================================
+// CLR TYPE INFERENCE CONTEXT: no Elastic.Mapping field attributes, all types inferred
+// ============================================================================
+
+/// <summary>
+/// Covers every CLR → Elasticsearch type mapping from <c>TypeAnalyzer.InferFieldType</c>.
+/// No [Text], [Keyword], [Date], etc. attributes — only plain CLR types.
+/// </summary>
+public class ClrInferenceDocument
+{
+	// string → text
+	public string StringField { get; set; } = string.Empty;
+	public string? NullableStringField { get; set; }
+	public string[] StringArrayField { get; set; } = [];
+	public List<string> StringListField { get; set; } = [];
+
+	// numerics
+	public int IntField { get; set; }
+	public int? NullableIntField { get; set; }
+	public long LongField { get; set; }
+	public long? NullableLongField { get; set; }
+	public short ShortField { get; set; }
+	public short? NullableShortField { get; set; }
+	public byte ByteField { get; set; }
+	public byte? NullableByteField { get; set; }
+	public double DoubleField { get; set; }
+	public double? NullableDoubleField { get; set; }
+	public float FloatField { get; set; }
+	public float? NullableFloatField { get; set; }
+	public decimal DecimalField { get; set; }   // decimal → double
+	public decimal? NullableDecimalField { get; set; }
+
+	// bool → boolean
+	public bool BoolField { get; set; }
+	public bool? NullableBoolField { get; set; }
+
+	// dates → date
+	public DateTime DateTimeField { get; set; }
+	public DateTime? NullableDateTimeField { get; set; }
+	public DateTimeOffset DateTimeOffsetField { get; set; }
+	public DateTimeOffset? NullableDateTimeOffsetField { get; set; }
+
+	// Guid → keyword
+	public Guid GuidField { get; set; }
+	public Guid? NullableGuidField { get; set; }
+
+	// enum → keyword
+	public ClrInferenceStatus StatusField { get; set; }
+	public ClrInferenceStatus? NullableStatusField { get; set; }
+
+	// nested object → object
+	public ClrInferenceAddress? AddressField { get; set; }
+	public List<ClrInferenceAddress> AddressListField { get; set; } = [];
+}
+
+public enum ClrInferenceStatus { Active, Inactive }
+
+public class ClrInferenceAddress
+{
+	public string Street { get; set; } = string.Empty;
+	public string City { get; set; } = string.Empty;
+}
+
+[ElasticsearchMappingContext]
+[Index<ClrInferenceDocument>(Name = "clr-inference-test")]
+public static partial class ClrInferenceMappingContext;
+
+// ============================================================================
 // EXPLICIT CONTAINER TEST MODEL
 // Exercises the new AddField (multi-field) / AddProperty (sub-property) API.
 // ============================================================================
