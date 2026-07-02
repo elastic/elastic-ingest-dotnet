@@ -111,6 +111,7 @@ public sealed class KeywordFieldBuilder
 	private int? _ignoreAbove;
 	private bool? _docValues;
 	private bool? _index;
+	private string? _copyTo;
 	private readonly Dictionary<string, IFieldDefinition> _multiFields = [];
 
 	internal KeywordFieldBuilder(FieldBuilder parent) => _parent = parent;
@@ -143,6 +144,13 @@ public sealed class KeywordFieldBuilder
 		return this;
 	}
 
+	/// <summary>Sets the copy_to target field.</summary>
+	public KeywordFieldBuilder CopyTo(string copyTo)
+	{
+		_copyTo = copyTo;
+		return this;
+	}
+
 	/// <summary>Adds a multi-field. If a multi-field with the same name already exists, it is overwritten.</summary>
 	public KeywordFieldBuilder MultiField(string name, Func<MultiFieldBuilder, MultiFieldBuilder> configure)
 	{
@@ -159,6 +167,7 @@ public sealed class KeywordFieldBuilder
 		_ignoreAbove = null;
 		_docValues = null;
 		_index = null;
+		_copyTo = null;
 		_multiFields.Clear();
 		return this;
 	}
@@ -171,6 +180,7 @@ public sealed class KeywordFieldBuilder
 			builder._ignoreAbove,
 			builder._docValues,
 			builder._index,
+			builder._copyTo,
 			builder._multiFields.Count > 0
 				? new Dictionary<string, IFieldDefinition>(builder._multiFields)
 				: null

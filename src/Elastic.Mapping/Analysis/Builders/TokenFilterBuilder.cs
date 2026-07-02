@@ -20,6 +20,9 @@ public sealed class TokenFilterBuilder
 	/// <summary>Creates a stemmer token filter.</summary>
 	public StemmerFilterBuilder Stemmer() => new(this);
 
+	/// <summary>Creates a stemmer_override token filter.</summary>
+	public StemmerOverrideFilterBuilder StemmerOverride() => new(this);
+
 	/// <summary>Creates a shingle token filter.</summary>
 	public ShingleFilterBuilder Shingle() => new(this);
 
@@ -255,6 +258,37 @@ public sealed class StemmerFilterBuilder
 	public static implicit operator TokenFilterBuilder(StemmerFilterBuilder builder)
 	{
 		builder._parent.SetDefinition(new StemmerFilterDefinition(builder._language));
+		return builder._parent;
+	}
+}
+
+/// <summary>Builder for stemmer_override token filters.</summary>
+public sealed class StemmerOverrideFilterBuilder
+{
+	private readonly TokenFilterBuilder _parent;
+	private List<string>? _rules;
+	private string? _rulesPath;
+
+	internal StemmerOverrideFilterBuilder(TokenFilterBuilder parent) => _parent = parent;
+
+	/// <summary>Sets the override rules inline, e.g. "configuration => config".</summary>
+	public StemmerOverrideFilterBuilder Rules(params string[] rules)
+	{
+		_rules = [.. rules];
+		return this;
+	}
+
+	/// <summary>Sets the path to the rules file.</summary>
+	public StemmerOverrideFilterBuilder RulesPath(string path)
+	{
+		_rulesPath = path;
+		return this;
+	}
+
+	/// <summary>Implicit conversion finalizes the builder and returns the parent.</summary>
+	public static implicit operator TokenFilterBuilder(StemmerOverrideFilterBuilder builder)
+	{
+		builder._parent.SetDefinition(new StemmerOverrideFilterDefinition(builder._rules, builder._rulesPath));
 		return builder._parent;
 	}
 }

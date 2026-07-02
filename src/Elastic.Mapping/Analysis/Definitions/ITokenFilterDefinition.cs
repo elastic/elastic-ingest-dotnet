@@ -290,6 +290,26 @@ public sealed record SynonymGraphFilterDefinition(
 	}
 }
 
+/// <summary>A stemmer_override token filter definition — applies curated stemming exceptions ahead of a stemmer.</summary>
+public sealed record StemmerOverrideFilterDefinition(
+	IReadOnlyList<string>? Rules = null,
+	string? RulesPath = null
+) : ITokenFilterDefinition
+{
+	public JsonObject ToJson()
+	{
+		var obj = new JsonObject { ["type"] = "stemmer_override" };
+
+		if (Rules is { Count: > 0 })
+			obj["rules"] = new JsonArray(Rules.Select(s => JsonValue.Create(s)).ToArray());
+
+		if (RulesPath != null)
+			obj["rules_path"] = RulesPath;
+
+		return obj;
+	}
+}
+
 /// <summary>A lowercase token filter definition.</summary>
 public sealed record LowercaseFilterDefinition(string? Language = null) : ITokenFilterDefinition
 {
