@@ -69,6 +69,7 @@ public sealed record KeywordFieldDefinition(
 	int? IgnoreAbove = null,
 	bool? DocValues = null,
 	bool? Index = null,
+	string? CopyTo = null,
 	IReadOnlyDictionary<string, IFieldDefinition>? MultiFields = null
 ) : IFieldDefinition
 {
@@ -89,6 +90,9 @@ public sealed record KeywordFieldDefinition(
 
 		if (Index.HasValue)
 			obj["index"] = Index.Value;
+
+		if (CopyTo != null)
+			obj["copy_to"] = CopyTo;
 
 		if (MultiFields is { Count: > 0 })
 		{
