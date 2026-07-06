@@ -253,7 +253,7 @@ internal static class MappingsBuilderEmitter
 		sb.AppendLine("\tprivate readonly string _parentPath;");
 		sb.AppendLine($"\tprivate readonly global::System.Collections.Generic.List<(string Path, global::Elastic.Mapping.Mappings.Definitions.IFieldDefinition Definition)> _fields = [];");
 		sb.AppendLine();
-		sb.AppendLine($"\tinternal {nestedBuilderClassName}(string parentPath) => _parentPath = parentPath;");
+		sb.AppendLine($"\tpublic {nestedBuilderClassName}(string parentPath) => _parentPath = parentPath;");
 		sb.AppendLine();
 
 		var nestedProps = nestedType.Properties.Where(p => !p.IsIgnored).ToList();
@@ -267,7 +267,7 @@ internal static class MappingsBuilderEmitter
 		}
 
 		sb.AppendLine();
-		sb.AppendLine($"\tinternal global::System.Collections.Generic.IReadOnlyList<(string Path, global::Elastic.Mapping.Mappings.Definitions.IFieldDefinition Definition)> GetFields() => _fields;");
+		sb.AppendLine($"\tpublic global::System.Collections.Generic.IReadOnlyList<(string Path, global::Elastic.Mapping.Mappings.Definitions.IFieldDefinition Definition)> GetFields() => _fields;");
 		sb.AppendLine("}");
 		sb.AppendLine();
 	}
