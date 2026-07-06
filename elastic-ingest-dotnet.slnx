@@ -52,6 +52,8 @@
     <Project Path="tests/Elastic.Ingest.Elasticsearch.IntegrationTests/Elastic.Ingest.Elasticsearch.IntegrationTests.csproj" />
     <Project Path="tests/Elastic.Ingest.Elasticsearch.Tests/Elastic.Ingest.Elasticsearch.Tests.csproj" />
     <Project Path="tests/Elastic.Mapping.Tests/Elastic.Mapping.Tests.csproj" />
+    <Project Path="tests/Elastic.Mapping.Tests.Contracts/Elastic.Mapping.Tests.Contracts.csproj" />
+    <Project Path="tests/Elastic.Mapping.Tests.CrossAssembly/Elastic.Mapping.Tests.CrossAssembly.csproj" />
   </Folder>
   <Project Path="docs/docs.csproj" />
 </Solution>
