@@ -712,6 +712,28 @@ public class MappingSourceGenerator : IIncrementalGenerator
 		// reference the same nested type (e.g. IndexedProduct).
 		var emittedNestedBuilders = new HashSet<string>();
 
+		// A nested/object-typed property can be analyzed differently by different contexts
+		// (e.g. per-context DefaultIgnoreCondition), even when it's the same CLR type reached
+		// via inheritance or via two unrelated document types. Merge every observation of a
+		// given nested type name into one canonical shape up front, so whichever registration
+		// "wins" the emittedNestedBuilders race always emits the full, complete member surface.
+		var mergedNestedTypes = new Dictionary<string, NestedTypeModel>();
+		foreach (var model in models)
+		{
+			foreach (var reg in model.TypeRegistrations)
+			{
+				foreach (var prop in reg.TypeModel.Properties)
+				{
+					if (prop.IsIgnored || prop.NestedType == null)
+						continue;
+
+					mergedNestedTypes[prop.NestedType.TypeName] = mergedNestedTypes.TryGetValue(prop.NestedType.TypeName, out var existing)
+						? existing.MergeWith(prop.NestedType)
+						: prop.NestedType;
+				}
+			}
+		}
+
 		// Track emitted generic-constrained base-type extension classes globally.
 		// Keyed by "{declaringNamespace}::{declaringTypeFullyQualifiedName}" so each
 		// base type's methods are emitted exactly once regardless of how many concrete
@@ -818,7 +840,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 				var extensionKey = $"{model.Namespace}.{reg.TypeFullyQualifiedName}";
 				if (emittedExtensionKeys.Add(extensionKey))
 				{
-					var mappingsExtensionsSource = MappingsBuilderEmitter.EmitForContext(model, reg, emittedNestedBuilders);
+					var mappingsExtensionsSource = MappingsBuilderEmitter.EmitForContext(model, reg, emittedNestedBuilders, mergedNestedTypes);
 					context.AddSource($"{model.ContextTypeName}.{reg.TypeName}MappingsExtensions.g.cs", mappingsExtensionsSource);
 				}
 
@@ -836,7 +858,7 @@ public class MappingSourceGenerator : IIncrementalGenerator
 					if (emittedBaseExtensionKeys.Add(baseKey))
 					{
 						var baseExtSource = MappingsBuilderEmitter.EmitBaseExtensionsClass(
-							declaringNs, declaringName, declaringFqn, group.ToList(), emittedNestedBuilders);
+							declaringNs, declaringName, declaringFqn, group.ToList(), emittedNestedBuilders, mergedNestedTypes);
 						context.AddSource($"{declaringName}MappingsExtensions.g.cs", baseExtSource);
 					}
 				}
