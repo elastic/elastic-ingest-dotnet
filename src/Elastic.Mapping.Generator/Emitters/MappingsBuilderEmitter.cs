@@ -40,7 +40,17 @@ internal static class MappingsBuilderEmitter
 	/// Tracks nested builder class names already emitted in this namespace to avoid
 	/// duplicate definitions when multiple document types reference the same nested type.
 	/// </param>
-	public static string EmitForContext(ContextMappingModel context, TypeRegistration reg, HashSet<string> emittedNestedBuilders)
+	/// <param name="mergedNestedTypes">
+	/// Canonical, compilation-wide merged shape per nested type name — used instead of this
+	/// registration's own (possibly context-narrowed) analysis when emitting the class body,
+	/// so the winner of the <paramref name="emittedNestedBuilders"/> dedup race always exposes
+	/// the full member surface regardless of which registration got there first.
+	/// </param>
+	public static string EmitForContext(
+		ContextMappingModel context,
+		TypeRegistration reg,
+		HashSet<string> emittedNestedBuilders,
+		IReadOnlyDictionary<string, NestedTypeModel> mergedNestedTypes)
 	{
 		var sb = new StringBuilder();
 
@@ -52,7 +62,7 @@ internal static class MappingsBuilderEmitter
 			sb.AppendLine();
 		}
 
-		EmitExtensionMethodsClass(sb, reg.TypeModel, reg.TypeFullyQualifiedName, reg.TypeName, reg.AnalysisComponents, emittedNestedBuilders);
+		EmitExtensionMethodsClass(sb, reg.TypeModel, reg.TypeFullyQualifiedName, reg.TypeName, reg.AnalysisComponents, emittedNestedBuilders, mergedNestedTypes);
 
 		return sb.ToString();
 	}
@@ -111,7 +121,8 @@ internal static class MappingsBuilderEmitter
 		string typeFqn,
 		string resolverName,
 		AnalysisComponentsModel analysisComponents,
-		HashSet<string> globalEmittedNestedBuilders
+		HashSet<string> globalEmittedNestedBuilders,
+		IReadOnlyDictionary<string, NestedTypeModel> mergedNestedTypes
 	)
 	{
 		var builderType = $"{MappingsBuilderFqn}<global::{typeFqn}>";
@@ -153,7 +164,10 @@ internal static class MappingsBuilderEmitter
 		foreach (var (propertyName, fieldName, nestedType) in nestedBuilders)
 		{
 			if (globalEmittedNestedBuilders.Add(nestedType.TypeName))
-				EmitNestedBuilderClass(sb, resolverName, propertyName, fieldName, nestedType);
+			{
+				var effectiveNestedType = mergedNestedTypes.TryGetValue(nestedType.TypeName, out var merged) ? merged : nestedType;
+				EmitNestedBuilderClass(sb, resolverName, propertyName, fieldName, effectiveNestedType);
+			}
 		}
 	}
 
@@ -302,7 +316,8 @@ internal static class MappingsBuilderEmitter
 		string declaringTypeName,
 		string declaringTypeFullyQualifiedName,
 		IReadOnlyList<PropertyMappingModel> props,
-		HashSet<string> emittedNestedBuilders
+		HashSet<string> emittedNestedBuilders,
+		IReadOnlyDictionary<string, NestedTypeModel> mergedNestedTypes
 	)
 	{
 		var sb = new StringBuilder();
@@ -357,7 +372,10 @@ internal static class MappingsBuilderEmitter
 		foreach (var (propertyName, fieldName, nestedType) in nestedBuilders)
 		{
 			if (emittedNestedBuilders.Add(nestedType.TypeName))
-				EmitNestedBuilderClass(sb, declaringTypeName, propertyName, fieldName, nestedType);
+			{
+				var effectiveNestedType = mergedNestedTypes.TryGetValue(nestedType.TypeName, out var merged) ? merged : nestedType;
+				EmitNestedBuilderClass(sb, declaringTypeName, propertyName, fieldName, effectiveNestedType);
+			}
 		}
 
 		return sb.ToString();

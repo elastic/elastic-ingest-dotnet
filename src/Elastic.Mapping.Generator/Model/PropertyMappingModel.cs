@@ -13,7 +13,30 @@ internal sealed record NestedTypeModel(
 	string TypeName,
 	string FullyQualifiedName,
 	ImmutableArray<PropertyMappingModel> Properties
-);
+)
+{
+	/// <summary>
+	/// Merges this model with another analysis of the same CLR type, unioning properties by name.
+	/// Two contexts can analyze the same nested type differently (e.g. differing per-context
+	/// <c>DefaultIgnoreCondition</c>), so the emitted nested-builder class must expose the union
+	/// of every property ever observed as NOT ignored for this type name — not just whichever
+	/// analysis "won" a global dedup race. When a property is ignored in one analysis but not
+	/// another, the non-ignored version wins so the property still gets a builder method.
+	/// </summary>
+	public NestedTypeModel MergeWith(NestedTypeModel other)
+	{
+		var byName = new Dictionary<string, PropertyMappingModel>(StringComparer.Ordinal);
+		foreach (var prop in Properties)
+			byName[prop.PropertyName] = prop;
+		foreach (var prop in other.Properties)
+		{
+			if (!byName.TryGetValue(prop.PropertyName, out var existing) || (existing.IsIgnored && !prop.IsIgnored))
+				byName[prop.PropertyName] = prop;
+		}
+
+		return this with { Properties = byName.Values.ToImmutableArray() };
+	}
+};
 
 /// <summary>
 /// Represents a property's mapping information extracted from source.

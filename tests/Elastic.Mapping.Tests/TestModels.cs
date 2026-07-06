@@ -910,3 +910,104 @@ public static class SearchMappingHelpers
 [Index<SearchArticle>(Name = "search-articles", Configuration = typeof(SearchArticleConfig))]
 [Index<SearchProduct>(Name = "search-products", Configuration = typeof(SearchProductConfig))]
 public static partial class DelegationTestMappingContext;
+
+// ============================================================================
+// SHARED NESTED TYPE TEST MODELS: regression for nested-builder dedup racing
+// across the base-type extension emission path and the own-property emission
+// path when both reference the same nested record type by name.
+// ============================================================================
+
+/// <summary>
+/// Nested type referenced from both a base-type property and an unrelated top-level property.
+/// <see cref="Value"/> has no explicit [JsonIgnore], so under a context whose JsonContext sets
+/// <c>DefaultIgnoreCondition = Always</c> it is analyzed as ignored — a *different* member shape
+/// for the exact same CLR type than a context with no such default. <see cref="Key"/> pins itself
+/// to always-included via an explicit Condition=Never so both contexts agree on it.
+/// </summary>
+public class SharedNestedMeta
+{
+	[JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+	[Keyword]
+	public string Key { get; set; } = string.Empty;
+
+	[Text]
+	public string Value { get; set; } = string.Empty;
+}
+
+/// <summary>Base type declaring the [Object] property — emitted via EmitBaseExtensionsClass for each derived type.</summary>
+public abstract class SharedNestedBase
+{
+	[JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+	[Id]
+	[Keyword]
+	public string Id { get; set; } = string.Empty;
+
+	[JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+	[Object]
+	public SharedNestedMeta? Meta { get; set; }
+}
+
+/// <summary>
+/// First subclass, registered under a context whose JsonContext narrows the analyzed shape of
+/// <see cref="SharedNestedMeta"/> (DefaultIgnoreCondition = Always drops <c>Value</c>).
+/// </summary>
+public class SharedNestedDocA : SharedNestedBase
+{
+	[JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+	[Text]
+	public string TitleA { get; set; } = string.Empty;
+}
+
+/// <summary>Second subclass, registered under a context with the default (unrestricted) shape.</summary>
+public class SharedNestedDocB : SharedNestedBase
+{
+	[Text]
+	public string TitleB { get; set; } = string.Empty;
+}
+
+[JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.Always)]
+[JsonSerializable(typeof(SharedNestedDocA))]
+public partial class SharedNestedJsonContextA : JsonSerializerContext;
+
+[ElasticsearchMappingContext(JsonContext = typeof(SharedNestedJsonContextA))]
+[Index<SharedNestedDocA>(Name = "shared-nested-a")]
+public static partial class SharedNestedContextA;
+
+[ElasticsearchMappingContext]
+[Index<SharedNestedDocB>(Name = "shared-nested-b")]
+public static partial class SharedNestedContextB;
+
+/// <summary>
+/// Unrelated top-level type that independently declares its own property of the same
+/// nested record type — exercises the EmitForContext (own-property) emission path for
+/// a nested type name that is also emitted via EmitBaseExtensionsClass above.
+/// </summary>
+public class IndependentNestedDoc
+{
+	[Id]
+	public string Id { get; set; } = string.Empty;
+
+	[Object]
+	public SharedNestedMeta? OtherMeta { get; set; }
+}
+
+[ElasticsearchMappingContext]
+[Index<IndependentNestedDoc>(Name = "independent-nested")]
+public static partial class IndependentNestedMappingContext;
+
+/// <summary>
+/// Compile-time reachability test for the generated <c>SharedNestedMetaNestedBuilder</c>.
+/// This compiles ONLY if the winner of the nested-builder dedup race exposes BOTH <c>Key</c>
+/// and <c>Value</c> — regardless of whether that winner was SharedNestedContextA's narrowed
+/// analysis (which alone would drop <c>Value</c>) or another registration's full analysis.
+/// A build failure here (CS1061: 'SharedNestedMetaNestedBuilder' does not contain a definition
+/// for 'Value') means the generator regressed to emitting whichever shape won first.
+/// </summary>
+public static class SharedNestedMappingHelpers
+{
+	public static MappingsBuilder<T> ConfigureSharedMeta<T>(MappingsBuilder<T> m) where T : SharedNestedBase =>
+		m.Meta((SharedNestedMetaNestedBuilder meta) => meta.Key(k => k).Value(v => v));
+
+	public static MappingsBuilder<IndependentNestedDoc> ConfigureOtherMeta(MappingsBuilder<IndependentNestedDoc> m) =>
+		m.OtherMeta((SharedNestedMetaNestedBuilder meta) => meta.Key(k => k).Value(v => v));
+}
