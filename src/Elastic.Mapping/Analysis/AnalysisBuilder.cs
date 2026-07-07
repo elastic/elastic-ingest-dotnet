@@ -89,6 +89,21 @@ public sealed class AnalysisBuilder
 	}
 
 	/// <summary>
+	/// Additively merges analysis components from the given <paramref name="context"/> into this builder.
+	/// Useful when the source resolver uses a <c>NameTemplate</c> and you already have a resolved
+	/// <see cref="ElasticsearchTypeContext"/> from <c>CreateContext(...)</c>, or when you want to
+	/// merge from any context without requiring <see cref="IStaticMappingResolver{T}"/>.
+	/// Same conflict semantics: names already present on this builder are left untouched.
+	/// </summary>
+	public AnalysisBuilder Merge(ElasticsearchTypeContext context)
+	{
+		var other = new AnalysisBuilder();
+		context.ConfigureAnalysis?.Invoke(other);
+		_mergeSources.Add(other.Build());
+		return this;
+	}
+
+	/// <summary>
 	/// Builds the analysis settings into an immutable AnalysisSettings object.
 	/// </summary>
 	public AnalysisSettings Build()

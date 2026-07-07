@@ -144,4 +144,108 @@ public class MergeMappingsTests
 
 		act.Should().NotThrow();
 	}
+
+	// =========================================================================
+	// Templated (NameTemplate-based) merge tests
+	// =========================================================================
+
+	[Test]
+	public void TemplatedResolver_Implements_IStaticMappingResolver()
+	{
+		var resolver = TemplatedMergeTestMappingContext.TemplatedMergeSourceDocument;
+		(resolver is IStaticMappingResolver<TemplatedMergeSourceDocument>).Should().BeTrue();
+		resolver.Context.Should().NotBeNull();
+		resolver.Context.GetMappingsJson().Should().NotBeNullOrEmpty();
+	}
+
+	[Test]
+	public void MappingsBuilder_Merge_TemplatedResolver_ViaInterface_AddsMissingPaths()
+	{
+		var builder = new MappingsBuilder<TemplatedMergeBaseDocument>()
+			.Merge(TemplatedMergeTestMappingContext.TemplatedMergeSourceDocument);
+
+		var overrides = builder.Build();
+		var baseMappings = TemplatedMergeTestMappingContext.TemplatedMergeBaseDocument.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var properties = doc.RootElement.GetProperty("properties");
+		properties.GetProperty("extraField").GetProperty("type").GetString().Should().Be("keyword");
+	}
+
+	[Test]
+	public void MappingsBuilder_Merge_TemplatedResolver_ViaInterface_TargetWins()
+	{
+		var builder = new MappingsBuilder<TemplatedMergeBaseDocument>()
+			.Merge(TemplatedMergeTestMappingContext.TemplatedMergeSourceDocument);
+
+		var overrides = builder.Build();
+		var baseMappings = TemplatedMergeTestMappingContext.TemplatedMergeBaseDocument.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var conflictField = doc.RootElement.GetProperty("properties").GetProperty("conflictField");
+		conflictField.GetProperty("type").GetString().Should().Be("keyword");
+	}
+
+	[Test]
+	public void MappingsBuilder_Merge_TemplatedResolver_ViaContext_AddsMissingPaths()
+	{
+		var context = TemplatedMergeTestMappingContext.TemplatedMergeSourceDocument
+			.CreateContext("articles", "production");
+
+		var builder = new MappingsBuilder<TemplatedMergeBaseDocument>()
+			.Merge(context);
+
+		var overrides = builder.Build();
+		var baseMappings = TemplatedMergeTestMappingContext.TemplatedMergeBaseDocument.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var properties = doc.RootElement.GetProperty("properties");
+		properties.GetProperty("extraField").GetProperty("type").GetString().Should().Be("keyword");
+	}
+
+	[Test]
+	public void MappingsBuilder_Merge_TemplatedResolver_ViaContext_WithConfigure()
+	{
+		var context = TemplatedMergeTestMappingContext.TemplatedMergeSourceDocument
+			.CreateContext("articles", "production");
+
+		var builder = new MappingsBuilder<TemplatedMergeBaseDocument>()
+			.Merge<TemplatedMergeSourceDocument>(context, b => b
+				.AddField("extraConfigured", f => f.Text().Analyzer("standard")));
+
+		var overrides = builder.Build();
+		var baseMappings = TemplatedMergeTestMappingContext.TemplatedMergeBaseDocument.GetMappingJson();
+		var merged = overrides.MergeIntoMappings(baseMappings);
+
+		using var doc = JsonDocument.Parse(merged);
+		var properties = doc.RootElement.GetProperty("properties");
+		properties.GetProperty("extraConfigured").GetProperty("type").GetString().Should().Be("text");
+		properties.GetProperty("extraField").GetProperty("type").GetString().Should().Be("keyword");
+	}
+
+	[Test]
+	public void AnalysisBuilder_Merge_TemplatedResolver_ViaInterface()
+	{
+		var builder = new AnalysisBuilder()
+			.Merge(TemplatedMergeTestMappingContext.TemplatedMergeSourceDocument);
+
+		var settings = builder.Build();
+		settings.Analyzers.Should().ContainKey("templated_source_analyzer");
+	}
+
+	[Test]
+	public void AnalysisBuilder_Merge_TemplatedResolver_ViaContext()
+	{
+		var context = TemplatedMergeTestMappingContext.TemplatedMergeSourceDocument
+			.CreateContext("articles", "production");
+
+		var builder = new AnalysisBuilder()
+			.Merge(context);
+
+		var settings = builder.Build();
+		settings.Analyzers.Should().ContainKey("templated_source_analyzer");
+	}
 }

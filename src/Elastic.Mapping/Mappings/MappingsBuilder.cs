@@ -57,4 +57,29 @@ public sealed class MappingsBuilder<TDocument> : MappingsBuilderBase<MappingsBui
 		var mappingsJson = overrides.MergeIntoMappings(resolver.Context.GetMappingsJson());
 		return base.AddMergeSource(mappingsJson);
 	}
+
+	/// <summary>
+	/// Additively merges mappings from the given <paramref name="context"/> into this builder.
+	/// Useful when the source resolver uses a <c>NameTemplate</c> and you already have a resolved
+	/// <see cref="ElasticsearchTypeContext"/> from <c>CreateContext(...)</c>, or when you want to
+	/// merge from any context without requiring <see cref="IStaticMappingResolver{T}"/>.
+	/// Same conflict semantics: <typeparamref name="TDocument"/> always wins on a path present on both.
+	/// </summary>
+	public MappingsBuilder<TDocument> Merge(ElasticsearchTypeContext context) =>
+		base.AddMergeSource(context.GetMappingsJson());
+
+	/// <summary>
+	/// Additively merges mappings from the given <paramref name="context"/> into this builder,
+	/// as configured by <paramref name="configure"/>. Same conflict semantics:
+	/// <typeparamref name="TDocument"/> always wins on a path present on both.
+	/// </summary>
+	public MappingsBuilder<TDocument> Merge<TOther>(
+		ElasticsearchTypeContext context,
+		Func<MappingsBuilder<TOther>, MappingsBuilder<TOther>> configure)
+		where TOther : class
+	{
+		var overrides = configure(new MappingsBuilder<TOther>()).Build();
+		var mappingsJson = overrides.MergeIntoMappings(context.GetMappingsJson());
+		return base.AddMergeSource(mappingsJson);
+	}
 }

@@ -14,12 +14,14 @@ public class CreateContextTests
 	// ── KnowledgeArticle: template with custom + well-known placeholders ──
 
 	[Test]
-	public void TemplatedResolverDoesNotExposeContextProperty()
+	public void TemplatedResolverImplementsIStaticMappingResolver()
 	{
 		var resolver = TemplatedMappingContext.KnowledgeArticle;
-		var type = resolver.GetType();
-		var contextProp = type.GetProperty("Context");
-		contextProp.Should().BeNull("templated resolvers expose CreateContext() instead of Context");
+
+		(resolver is IStaticMappingResolver<KnowledgeArticle>).Should().BeTrue(
+			"templated resolvers now implement IStaticMappingResolver<T>");
+		resolver.Context.Should().NotBeNull();
+		resolver.Context.GetMappingsJson().Should().NotBeNullOrEmpty();
 	}
 
 	[Test]

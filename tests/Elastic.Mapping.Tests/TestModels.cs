@@ -1062,3 +1062,43 @@ public static partial class MergeTestMappingContext
 			.Tokenizer(BuiltInAnalysis.Tokenizers.Whitespace)
 			.Filters(BuiltInAnalysis.TokenFilters.Lowercase));
 }
+
+// ============================================================================
+// TEMPLATED MERGE TEST TYPES: Merge from NameTemplate-based (env-parameterized) resolvers
+// ============================================================================
+
+/// <summary>Merge target using a fixed Name — merges from a templated source.</summary>
+public class TemplatedMergeBaseDocument
+{
+	[Id]
+	public string Name { get; set; } = string.Empty;
+
+	public long Value { get; set; }
+
+	[Keyword]
+	public string ConflictField { get; set; } = string.Empty;
+}
+
+/// <summary>Merge source using NameTemplate — has extra fields and analysis config.</summary>
+public class TemplatedMergeSourceDocument
+{
+	public long Value { get; set; }
+
+	[Text(Analyzer = "standard")]
+	public string ConflictField { get; set; } = string.Empty;
+
+	[Keyword]
+	public string ExtraField { get; set; } = string.Empty;
+}
+
+[ElasticsearchMappingContext]
+[Index<TemplatedMergeBaseDocument>(Name = "tmb-docs")]
+[Index<TemplatedMergeSourceDocument>(NameTemplate = "tms-{type}-{env}")]
+public static partial class TemplatedMergeTestMappingContext
+{
+	public static AnalysisBuilder ConfigureTemplatedMergeSourceDocumentAnalysis(AnalysisBuilder analysis) => analysis
+		.Analyzer("templated_source_analyzer", a => a
+			.Custom()
+			.Tokenizer(BuiltInAnalysis.Tokenizers.Standard)
+			.Filters(BuiltInAnalysis.TokenFilters.Lowercase));
+}
