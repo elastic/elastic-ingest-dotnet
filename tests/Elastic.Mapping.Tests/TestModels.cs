@@ -1011,3 +1011,54 @@ public static class SharedNestedMappingHelpers
 	public static MappingsBuilder<IndependentNestedDoc> ConfigureOtherMeta(MappingsBuilder<IndependentNestedDoc> m) =>
 		m.OtherMeta((SharedNestedMetaNestedBuilder meta) => meta.Key(k => k).Value(v => v));
 }
+
+// ============================================================================
+// MERGE TEST TYPES: MappingsBuilder<T>.Merge<TOther>() / AnalysisBuilder.Merge<TOther>()
+// ============================================================================
+
+/// <summary>Merge target ("T"): unrelated to <see cref="MergeSourceDocument"/> beyond sharing field names.</summary>
+public class MergeBaseDocument
+{
+	[Id]
+	public string Name { get; set; } = string.Empty;
+
+	// Overlaps MergeSourceDocument.Value with the same type — full-overlap merge should be a no-op.
+	public long Value { get; set; }
+
+	// Overlaps MergeSourceDocument.ConflictField with a DIFFERENT type — merge must keep this (keyword) type.
+	[Keyword]
+	public string ConflictField { get; set; } = string.Empty;
+}
+
+/// <summary>Merge source ("TOther"): has its own extra field plus fields that collide with <see cref="MergeBaseDocument"/>.</summary>
+public class MergeSourceDocument
+{
+	// Same path + type as MergeBaseDocument.Value — verifies full overlap is a no-op.
+	public long Value { get; set; }
+
+	// Same path as MergeBaseDocument.ConflictField but a different type (text vs keyword) —
+	// verifies a genuine conflict leaves the target's definition untouched.
+	[Text(Analyzer = "standard")]
+	public string ConflictField { get; set; } = string.Empty;
+
+	// No counterpart on MergeBaseDocument — verifies merge adds genuinely new paths.
+	[Keyword]
+	public string ExtraField { get; set; } = string.Empty;
+}
+
+[ElasticsearchMappingContext]
+[Index<MergeBaseDocument>(Name = "merge-base-docs")]
+[Index<MergeSourceDocument>(Name = "merge-source-docs")]
+public static partial class MergeTestMappingContext
+{
+	/// <summary>Analysis registered only on the merge source, to verify <c>AnalysisBuilder.Merge</c> pulls it in.</summary>
+	public static AnalysisBuilder ConfigureMergeSourceDocumentAnalysis(AnalysisBuilder analysis) => analysis
+		.Analyzer("source_only_analyzer", a => a
+			.Custom()
+			.Tokenizer(BuiltInAnalysis.Tokenizers.Standard)
+			.Filters(BuiltInAnalysis.TokenFilters.Lowercase))
+		.Analyzer("shared_analyzer", a => a
+			.Custom()
+			.Tokenizer(BuiltInAnalysis.Tokenizers.Whitespace)
+			.Filters(BuiltInAnalysis.TokenFilters.Lowercase));
+}
