@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Transport;
@@ -205,14 +206,26 @@ public sealed class ServerReindex
 		sb.Append('}');
 	}
 
-	internal static ReindexProgress ParseProgress(
-		string taskId, JsonResponse response, ReindexTaskMonitor.ApiShape shape)
+	/// <summary>
+	/// Parses a reindex status <see cref="JsonResponse"/> into a <see cref="ReindexProgress"/> snapshot.
+	/// </summary>
+	/// <param name="taskId">The task identifier.</param>
+	/// <param name="response">The raw JSON response from Elasticsearch.</param>
+	/// <param name="isReindexApi">
+	/// <c>true</c> for the <c>GET /_reindex/{id}</c> shape (9.5.0+);
+	/// <c>false</c> for the legacy <c>GET /_tasks/{id}</c> shape.
+	/// </param>
+	public static ReindexProgress ParseProgress(
+		string taskId, JsonResponse response, bool isReindexApi)
 	{
-		if (shape == ReindexTaskMonitor.ApiShape.ReindexApi)
-			return ParseReindexApiProgress(taskId, response);
-
-		return ParseTaskApiProgress(taskId, response);
+		return isReindexApi
+			? ParseReindexApiProgress(taskId, response)
+			: ParseTaskApiProgress(taskId, response);
 	}
+
+	internal static ReindexProgress ParseProgress(
+		string taskId, JsonResponse response, ReindexTaskMonitor.ApiShape shape) =>
+		ParseProgress(taskId, response, shape == ReindexTaskMonitor.ApiShape.ReindexApi);
 
 	/// <summary>
 	/// Parses the <c>GET /_reindex/{id}</c> response shape (9.5.0+).
@@ -222,13 +235,10 @@ public sealed class ServerReindex
 	{
 		var completed = response.Get<bool>("completed");
 		var error = response.Get<string>("error.reason");
+		var failures = completed ? ParseFailures(response.Body?["response"]?["failures"]) : [];
 
-		if (completed)
-		{
-			var respError = response.Get<string>("response.failures");
-			if (!string.IsNullOrEmpty(respError))
-				error ??= respError;
-		}
+		if (failures.Count > 0)
+			error ??= $"{failures.Count} document(s) failed: {failures[0].CauseReason ?? failures[0].CauseType ?? "unknown"}";
 
 		var id = response.Get<string>("id") ?? taskId;
 		var startMillis = response.Get<long>("start_time_in_millis");
@@ -250,8 +260,32 @@ public sealed class ServerReindex
 			Elapsed = TimeSpan.FromMilliseconds(response.Get<long>("running_time_in_nanos") / 1_000_000.0),
 			Description = response.Get<string>("description"),
 			StartTime = startTime,
-			Error = error
+			Error = error,
+			Failures = failures
 		};
+	}
+
+	private static IReadOnlyList<ReindexFailure> ParseFailures(JsonNode? failuresNode)
+	{
+		if (failuresNode is not JsonArray arr || arr.Count == 0)
+			return [];
+
+		var list = new List<ReindexFailure>(arr.Count);
+		foreach (var item in arr)
+		{
+			if (item is not JsonObject obj)
+				continue;
+
+			var cause = obj["cause"];
+			list.Add(new ReindexFailure(
+				Index: obj["index"]?.GetValue<string>(),
+				Id: obj["id"]?.GetValue<string>(),
+				Status: obj["status"]?.GetValue<int>(),
+				CauseType: cause?["type"]?.GetValue<string>(),
+				CauseReason: cause?["reason"]?.GetValue<string>()
+			));
+		}
+		return list;
 	}
 
 	/// <summary>
@@ -262,13 +296,10 @@ public sealed class ServerReindex
 	{
 		var completed = response.Get<bool>("completed");
 		var error = response.Get<string>("error.reason");
+		var failures = completed ? ParseFailures(response.Body?["response"]?["failures"]) : [];
 
-		if (completed)
-		{
-			var respError = response.Get<string>("response.failures");
-			if (!string.IsNullOrEmpty(respError))
-				error ??= respError;
-		}
+		if (failures.Count > 0)
+			error ??= $"{failures.Count} document(s) failed: {failures[0].CauseReason ?? failures[0].CauseType ?? "unknown"}";
 
 		return new ReindexProgress
 		{
@@ -281,7 +312,8 @@ public sealed class ServerReindex
 			Noops = response.Get<long>("task.status.noops"),
 			VersionConflicts = response.Get<long>("task.status.version_conflicts"),
 			Elapsed = TimeSpan.FromMilliseconds(response.Get<long>("task.running_time_in_nanos") / 1_000_000.0),
-			Error = error
+			Error = error,
+			Failures = failures
 		};
 	}
 }

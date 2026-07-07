@@ -2,8 +2,14 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 using System;
+using System.Collections.Generic;
 
 namespace Elastic.Ingest.Elasticsearch.Helpers;
+
+/// <summary>
+/// Represents a single per-document failure from a <c>_reindex</c> operation.
+/// </summary>
+public sealed record ReindexFailure(string? Index, string? Id, int? Status, string? CauseType, string? CauseReason);
 
 /// <summary>
 /// Progress snapshot for a server-side _reindex operation.
@@ -51,4 +57,7 @@ public class ReindexProgress
 
 	/// <summary> Error description if the task failed. </summary>
 	public string? Error { get; init; }
+
+	/// <summary> Per-document bulk failures reported by the <c>_reindex</c> operation. Empty when there are no failures. </summary>
+	public IReadOnlyList<ReindexFailure> Failures { get; init; } = [];
 }
