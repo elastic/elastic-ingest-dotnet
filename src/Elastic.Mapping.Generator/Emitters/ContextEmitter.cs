@@ -150,10 +150,7 @@ internal static class ContextEmitter
 		var templated = IsTemplated(reg);
 
 		sb.AppendLine($"{indent}/// <summary>Generated Elasticsearch resolver for {reg.ResolverName}.</summary>");
-		if (templated)
-			sb.AppendLine($"{indent}public sealed class {reg.ResolverName}Resolver");
-		else
-			sb.AppendLine($"{indent}public sealed class {reg.ResolverName}Resolver : global::Elastic.Mapping.IStaticMappingResolver<global::{typeFqn}>");
+		sb.AppendLine($"{indent}public sealed class {reg.ResolverName}Resolver : global::Elastic.Mapping.IStaticMappingResolver<global::{typeFqn}>");
 		sb.AppendLine($"{indent}{{");
 
 		// Config override field for DI
@@ -196,10 +193,7 @@ internal static class ContextEmitter
 		EmitRuntimeContext(sb, reg, indent + "\t");
 
 		// Context instance
-		if (templated)
-			sb.AppendLine($"{indent}\t/// <summary>Base context with mappings and settings. Use <see cref=\"CreateContext\"/> to resolve the name template.</summary>");
-		else
-			sb.AppendLine($"{indent}\t/// <summary>Elasticsearch context metadata.</summary>");
+		sb.AppendLine($"{indent}\t/// <summary>{(templated ? "Base context with mappings and settings. Use <see cref=\"CreateContext\"/> to resolve the name template." : "Elasticsearch context metadata.")}</summary>");
 		sb.AppendLine($"{indent}\t{contextVisibility} global::Elastic.Mapping.ElasticsearchTypeContext {contextFieldName} {{ get; }} = new(");
 		sb.AppendLine($"{indent}\t\t_GetSettingsJson,");
 		sb.AppendLine($"{indent}\t\t_GetMappingJson,");
@@ -265,6 +259,17 @@ internal static class ContextEmitter
 
 		sb.AppendLine($"{indent}\t);");
 		sb.AppendLine();
+
+		if (templated)
+		{
+			sb.AppendLine($"{indent}\t/// <summary>");
+			sb.AppendLine($"{indent}\t/// Exposes the base context (without a resolved index name) so this resolver");
+			sb.AppendLine($"{indent}\t/// satisfies <see cref=\"global::Elastic.Mapping.IStaticMappingResolver{{T}}\"/>.");
+			sb.AppendLine($"{indent}\t/// For a fully resolved context with concrete index name, call <see cref=\"CreateContext\"/>.");
+			sb.AppendLine($"{indent}\t/// </summary>");
+			sb.AppendLine($"{indent}\tpublic global::Elastic.Mapping.ElasticsearchTypeContext Context => _baseContext;");
+			sb.AppendLine();
+		}
 
 		// Hash accessors — delegate to runtime-computed values that include all overrides
 		sb.AppendLine($"{indent}\t/// <summary>Combined hash of settings and mappings (includes ConfigureMappings, ConfigureAnalysis, IndexSettings).</summary>");
