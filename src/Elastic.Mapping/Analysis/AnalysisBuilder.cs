@@ -18,6 +18,7 @@ public sealed class AnalysisBuilder
 	private readonly List<(string Name, ITokenFilterDefinition Definition)> _tokenFilters = [];
 	private readonly List<(string Name, INormalizerDefinition Definition)> _normalizers = [];
 	private readonly List<(string Name, ICharFilterDefinition Definition)> _charFilters = [];
+	private readonly List<AnalysisSettings> _mergeSources = [];
 
 	/// <summary>Configures a named analyzer.</summary>
 	public AnalysisBuilder Analyzer(string name, Func<AnalyzerBuilder, AnalyzerBuilder> configure)
@@ -70,16 +71,54 @@ public sealed class AnalysisBuilder
 	}
 
 	/// <summary>
+	/// Additively merges <typeparamref name="TOther"/>'s analysis components into this builder: any
+	/// analyzer/tokenizer/token filter/normalizer/char filter name not already defined on this builder
+	/// is added. A name already present — whether from an explicit call above or an earlier
+	/// <see cref="Merge{TOther}"/> call — is left untouched and never throws, unlike <see cref="Build"/>'s
+	/// normal duplicate-name behavior.
+	/// </summary>
+	/// <param name="resolver">The generated static mapping resolver for <typeparamref name="TOther"/>
+	/// (e.g. <c>SomeContext.SomeOtherDocument</c>).</param>
+	public AnalysisBuilder Merge<TOther>(IStaticMappingResolver<TOther> resolver)
+		where TOther : class
+	{
+		var other = new AnalysisBuilder();
+		resolver.Context.ConfigureAnalysis?.Invoke(other);
+		_mergeSources.Add(other.Build());
+		return this;
+	}
+
+	/// <summary>
 	/// Builds the analysis settings into an immutable AnalysisSettings object.
 	/// </summary>
-	public AnalysisSettings Build() =>
-		new(
-			_analyzers.ToDictionary(x => x.Name, x => x.Definition),
-			_tokenizers.ToDictionary(x => x.Name, x => x.Definition),
-			_tokenFilters.ToDictionary(x => x.Name, x => x.Definition),
-			_normalizers.ToDictionary(x => x.Name, x => x.Definition),
-			_charFilters.ToDictionary(x => x.Name, x => x.Definition)
-		);
+	public AnalysisSettings Build()
+	{
+		var analyzers = _analyzers.ToDictionary(x => x.Name, x => x.Definition);
+		var tokenizers = _tokenizers.ToDictionary(x => x.Name, x => x.Definition);
+		var tokenFilters = _tokenFilters.ToDictionary(x => x.Name, x => x.Definition);
+		var normalizers = _normalizers.ToDictionary(x => x.Name, x => x.Definition);
+		var charFilters = _charFilters.ToDictionary(x => x.Name, x => x.Definition);
+
+		foreach (var source in _mergeSources)
+		{
+			AddMissing(analyzers, source.Analyzers);
+			AddMissing(tokenizers, source.Tokenizers);
+			AddMissing(tokenFilters, source.TokenFilters);
+			AddMissing(normalizers, source.Normalizers);
+			AddMissing(charFilters, source.CharFilters);
+		}
+
+		return new(analyzers, tokenizers, tokenFilters, normalizers, charFilters);
+
+		static void AddMissing<TDefinition>(Dictionary<string, TDefinition> target, IReadOnlyDictionary<string, TDefinition> source)
+		{
+			foreach (var kvp in source)
+			{
+				if (!target.ContainsKey(kvp.Key))
+					target[kvp.Key] = kvp.Value;
+			}
+		}
+	}
 
 	/// <summary>Returns true if any analysis components have been configured.</summary>
 	public bool HasConfiguration =>
@@ -87,5 +126,6 @@ public sealed class AnalysisBuilder
 		_tokenizers.Count > 0 ||
 		_tokenFilters.Count > 0 ||
 		_normalizers.Count > 0 ||
-		_charFilters.Count > 0;
+		_charFilters.Count > 0 ||
+		_mergeSources.Any(s => s.HasConfiguration);
 }

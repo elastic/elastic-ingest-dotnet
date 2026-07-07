@@ -26,23 +26,32 @@ public sealed class MappingOverrides
 	/// <summary>The container intent per field path (internal; not part of the public contract).</summary>
 	internal IReadOnlyDictionary<string, FieldContainer> FieldContainers { get; }
 
+	/// <summary>
+	/// Full mapping JSON documents merged in via <see cref="Mappings.MappingsBuilder{TDocument}.Merge{TOther}(IStaticMappingResolver{TOther})"/>.
+	/// Applied after <see cref="Fields"/> so that paths already present on this builder are never overwritten.
+	/// </summary>
+	internal IReadOnlyList<string> MergeSources { get; }
+
 	internal MappingOverrides(
 		IReadOnlyDictionary<string, IFieldDefinition> fields,
 		IReadOnlyDictionary<string, RuntimeFieldDefinition> runtimeFields,
 		IReadOnlyList<DynamicTemplateDefinition> dynamicTemplates,
-		IReadOnlyDictionary<string, FieldContainer>? fieldContainers = null)
+		IReadOnlyDictionary<string, FieldContainer>? fieldContainers = null,
+		IReadOnlyList<string>? mergeSources = null)
 	{
 		Fields = fields;
 		RuntimeFields = runtimeFields;
 		DynamicTemplates = dynamicTemplates;
 		FieldContainers = fieldContainers ?? new Dictionary<string, FieldContainer>();
+		MergeSources = mergeSources ?? [];
 	}
 
 	/// <summary>Returns true if any mapping overrides are configured.</summary>
 	public bool HasConfiguration =>
 		Fields.Count > 0 ||
 		RuntimeFields.Count > 0 ||
-		DynamicTemplates.Count > 0;
+		DynamicTemplates.Count > 0 ||
+		MergeSources.Count > 0;
 
 	/// <summary>
 	/// Merges these mapping overrides into an existing mappings JSON string.
@@ -106,7 +115,79 @@ public sealed class MappingOverrides
 				templates.Add((JsonNode)template.ToJson());
 		}
 
+		// Merge sources (from Merge<TOther>()) are applied last, additively: any path/key
+		// already present on this mapping (base shape or an explicit override above) wins.
+		foreach (var source in MergeSources)
+		{
+			var sourceNode = JsonNode.Parse(source)?.AsObject();
+			if (sourceNode == null)
+				continue;
+
+			if (sourceNode["properties"]?.AsObject() is { } sourceProperties)
+			{
+				var properties = node["properties"]?.AsObject();
+				if (properties == null)
+				{
+					properties = [];
+					node["properties"] = properties;
+				}
+				MergeFieldsContainer(properties, sourceProperties);
+			}
+
+			if (sourceNode["runtime"]?.AsObject() is { } sourceRuntime)
+			{
+				var runtime = node["runtime"]?.AsObject();
+				if (runtime == null)
+				{
+					runtime = [];
+					node["runtime"] = runtime;
+				}
+				MergeFieldsContainer(runtime, sourceRuntime);
+			}
+		}
+
 		return node.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
+	}
+
+	/// <summary>
+	/// Additively folds a source field-name-to-definition map (e.g. a <c>properties</c> or <c>fields</c>
+	/// container) into the target's: field names absent on the target are deep-cloned in wholesale.
+	/// A field name already present on the target is never reconciled at the definition level — its
+	/// own keys (<c>type</c>, <c>analyzer</c>, etc.) are left completely untouched, target always wins —
+	/// only its nested <c>properties</c>/<c>fields</c> sub-containers are recursed into, so a missing
+	/// child of an existing object/nested field can still be added.
+	/// </summary>
+	private static void MergeFieldsContainer(JsonObject target, JsonObject source)
+	{
+		foreach (var kvp in source)
+		{
+			if (!target.TryGetPropertyValue(kvp.Key, out var existingValue) || existingValue is not JsonObject existingDef)
+			{
+				target[kvp.Key] = kvp.Value?.DeepClone();
+				continue;
+			}
+
+			if (kvp.Value is not JsonObject sourceDef)
+				continue;
+
+			MergeNestedContainer(existingDef, sourceDef, "properties");
+			MergeNestedContainer(existingDef, sourceDef, "fields");
+		}
+	}
+
+	private static void MergeNestedContainer(JsonObject targetDef, JsonObject sourceDef, string containerKey)
+	{
+		if (sourceDef[containerKey]?.AsObject() is not { } sourceContainer)
+			return;
+
+		var targetContainer = targetDef[containerKey]?.AsObject();
+		if (targetContainer == null)
+		{
+			targetDef[containerKey] = sourceContainer.DeepClone();
+			return;
+		}
+
+		MergeFieldsContainer(targetContainer, sourceContainer);
 	}
 
 	private static readonly HashSet<string> ObjectTypes = ["object", "nested"];

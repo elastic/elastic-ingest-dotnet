@@ -18,6 +18,7 @@ public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBa
 	private readonly List<(string Path, Action<FieldBuilder> Action, FieldContainer Container)> _fieldActions = [];
 	private readonly List<(string Name, RuntimeFieldDefinition Definition)> _runtimeFields = [];
 	private readonly List<DynamicTemplateDefinition> _dynamicTemplates = [];
+	private readonly List<string> _mergeSources = [];
 
 	private TSelf AddFieldCore(string path, Func<FieldBuilder, FieldBuilder> configure, FieldContainer container)
 	{
@@ -50,6 +51,17 @@ public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBa
 	{
 		foreach (var (path, def) in fields)
 			_fieldActions.Add((path, fb => fb.SetDefinition(def), FieldContainer.Auto));
+	}
+
+	/// <summary>
+	/// Adds a full mapping JSON document as a merge source. Applied additively after all field
+	/// overrides at <see cref="Build"/>-merge time: paths already present on this builder's own
+	/// shape always win. Called by <see cref="MappingsBuilder{TDocument}.Merge{TOther}(IStaticMappingResolver{TOther})"/>.
+	/// </summary>
+	protected TSelf AddMergeSource(string mappingsJson)
+	{
+		_mergeSources.Add(mappingsJson);
+		return (TSelf)this;
 	}
 
 	/// <summary>
@@ -101,7 +113,8 @@ public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBa
 	public bool HasConfiguration =>
 		_fieldActions.Count > 0 ||
 		_runtimeFields.Count > 0 ||
-		_dynamicTemplates.Count > 0;
+		_dynamicTemplates.Count > 0 ||
+		_mergeSources.Count > 0;
 
 	/// <summary>
 	/// Builds the mapping overrides from all configured fields, runtime fields, and dynamic templates.
@@ -127,6 +140,6 @@ public abstract class MappingsBuilderBase<TSelf> where TSelf : MappingsBuilderBa
 		foreach (var (name, def) in _runtimeFields)
 			runtimeFields[name] = def;
 
-		return new(fields, runtimeFields, [.. _dynamicTemplates], containers);
+		return new(fields, runtimeFields, [.. _dynamicTemplates], containers, [.. _mergeSources]);
 	}
 }
