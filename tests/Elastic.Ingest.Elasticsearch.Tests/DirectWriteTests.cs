@@ -256,4 +256,182 @@ public class DirectWriteTests
 		response.Should().NotBeNull();
 		response.Items.Should().HaveCount(2);
 	}
+
+	// ── AllItemsPersisted ─────────────────────────────────────────────────
+
+	[Test]
+	public async Task AllItemsPersistedReturnsTrueWhenAllSucceed()
+	{
+		var client = TestSetup.CreateClient(v => v
+			.ClientCalls(c => c.BulkResponse(201, 200))
+		);
+
+		using var channel = new IndexChannel<TestDocument>(new IndexChannelOptions<TestDocument>(client)
+		{
+			IndexFormat = "my-index",
+		});
+
+		var response = await channel.DirectWriteAsync(
+			new TestDocument { Timestamp = DateTimeOffset.UtcNow },
+			new TestDocument { Timestamp = DateTimeOffset.UtcNow }
+		);
+
+		response.AllItemsPersisted().Should().BeTrue();
+	}
+
+	[Test]
+	public async Task AllItemsPersistedReturnsFalseWhenAnyItemFails()
+	{
+		var client = TestSetup.CreateClient(v => v
+			.ClientCalls(c => c.BulkResponse(201, 400))
+		);
+
+		using var channel = new IndexChannel<TestDocument>(new IndexChannelOptions<TestDocument>(client)
+		{
+			IndexFormat = "my-index",
+		});
+
+		var response = await channel.DirectWriteAsync(
+			new TestDocument { Timestamp = DateTimeOffset.UtcNow },
+			new TestDocument { Timestamp = DateTimeOffset.UtcNow }
+		);
+
+		response.AllItemsPersisted().Should().BeFalse();
+	}
+
+	[Test]
+	public async Task AllItemsPersistedReturnsFalseForStatus300()
+	{
+		var client = TestSetup.CreateClient(v => v
+			.ClientCalls(c => c.BulkResponse(300))
+		);
+
+		using var channel = new IndexChannel<TestDocument>(new IndexChannelOptions<TestDocument>(client)
+		{
+			IndexFormat = "my-index",
+		});
+
+		var response = await channel.DirectWriteAsync(
+			new TestDocument { Timestamp = DateTimeOffset.UtcNow }
+		);
+
+		response.AllItemsPersisted().Should().BeFalse("status 300 is not a 2xx success");
+	}
+
+	// ── DirectWriteAsync with retries ─────────────────────────────────────
+
+	[Test]
+	public async Task DirectWriteWithRetriesSucceedsOnFirstAttemptWhenAllItemsOk()
+	{
+		var client = TestSetup.CreateClient(v => v
+			.ClientCalls(c => c.BulkResponse(201, 201))
+		);
+
+		using var channel = new IndexChannel<TestDocument>(new IndexChannelOptions<TestDocument>(client)
+		{
+			IndexFormat = "my-index",
+		});
+
+		var response = await channel.DirectWriteAsync(
+			new[] { new TestDocument { Timestamp = DateTimeOffset.UtcNow }, new TestDocument { Timestamp = DateTimeOffset.UtcNow } },
+			retries: 3,
+			backoffPeriod: TimeSpan.FromMilliseconds(1)
+		);
+
+		response.AllItemsPersisted().Should().BeTrue();
+		response.Items.Should().HaveCount(2);
+	}
+
+	[Test]
+	public async Task DirectWriteWithRetriesRetriesRetryableItemsOnly()
+	{
+		// First call: item 1 succeeds (201), item 2 is retryable (429)
+		// Second call (retry of item 2 only): succeeds (201)
+		var client = TestSetup.CreateClient(v => v
+			.ClientCalls(c => c.BulkResponse(201, 429))
+			.ClientCalls(c => c.BulkResponse(201))
+		);
+
+		using var channel = new IndexChannel<TestDocument>(new IndexChannelOptions<TestDocument>(client)
+		{
+			IndexFormat = "my-index",
+		});
+
+		var response = await channel.DirectWriteAsync(
+			new[] { new TestDocument { Timestamp = DateTimeOffset.UtcNow }, new TestDocument { Timestamp = DateTimeOffset.UtcNow } },
+			retries: 3,
+			backoffPeriod: TimeSpan.FromMilliseconds(1)
+		);
+
+		response.AllItemsPersisted().Should().BeTrue("the retried item should succeed on second attempt");
+	}
+
+	[Test]
+	public async Task DirectWriteWithRetriesStopsAfterMaxRetries()
+	{
+		// All attempts return 429 — exhausts retries
+		var client = TestSetup.CreateClient(v => v
+			.ClientCalls(c => c.BulkResponse(429))
+			.ClientCalls(c => c.BulkResponse(429))
+			.ClientCalls(c => c.BulkResponse(429))
+		);
+
+		using var channel = new IndexChannel<TestDocument>(new IndexChannelOptions<TestDocument>(client)
+		{
+			IndexFormat = "my-index",
+		});
+
+		var response = await channel.DirectWriteAsync(
+			new[] { new TestDocument { Timestamp = DateTimeOffset.UtcNow } },
+			retries: 2,
+			backoffPeriod: TimeSpan.FromMilliseconds(1)
+		);
+
+		response.AllItemsPersisted().Should().BeFalse("all retries exhausted with 429");
+		response.Items.First().Status.Should().Be(429);
+	}
+
+	[Test]
+	public async Task DirectWriteWithRetriesDoesNotRetryNonRetryableErrors()
+	{
+		// 400 is not retryable — should return immediately without retrying
+		var client = TestSetup.CreateClient(v => v
+			.ClientCalls(c => c.BulkResponse(400))
+		);
+
+		using var channel = new IndexChannel<TestDocument>(new IndexChannelOptions<TestDocument>(client)
+		{
+			IndexFormat = "my-index",
+		});
+
+		var response = await channel.DirectWriteAsync(
+			new[] { new TestDocument { Timestamp = DateTimeOffset.UtcNow } },
+			retries: 3,
+			backoffPeriod: TimeSpan.FromMilliseconds(1)
+		);
+
+		response.AllItemsPersisted().Should().BeFalse();
+		response.Items.First().Status.Should().Be(400);
+	}
+
+	[Test]
+	public async Task DirectWriteWithRetriesDefaultsBackoffToTwoSeconds()
+	{
+		var client = TestSetup.CreateClient(v => v
+			.ClientCalls(c => c.BulkResponse(201))
+		);
+
+		using var channel = new IndexChannel<TestDocument>(new IndexChannelOptions<TestDocument>(client)
+		{
+			IndexFormat = "my-index",
+		});
+
+		// Should compile and work without specifying backoffPeriod
+		var response = await channel.DirectWriteAsync(
+			new[] { new TestDocument { Timestamp = DateTimeOffset.UtcNow } },
+			retries: 0
+		);
+
+		response.AllItemsPersisted().Should().BeTrue();
+	}
 }
