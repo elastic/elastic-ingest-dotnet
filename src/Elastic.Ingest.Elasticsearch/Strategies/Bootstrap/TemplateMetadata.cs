@@ -80,12 +80,23 @@ public static class TemplateMetadataHelper
 
 	/// <summary>
 	/// Determines whether bootstrap should be skipped based on remote metadata and local state.
-	/// <list type="bullet">
-	/// <item>If <paramref name="localMappingVersion"/> is null: pure hash check (default behavior).</item>
-	/// <item>If both local and remote mapping versions parse as <see cref="Version"/> and remote &gt; local: skip (don't downgrade).</item>
-	/// <item>If hash matches: skip (nothing changed).</item>
-	/// <item>Otherwise: proceed with bootstrap.</item>
+	/// <para>
+	/// Bootstrap is skipped (returns <see langword="true"/>) when <b>either</b> condition is met:
+	/// </para>
+	/// <list type="number">
+	/// <item><b>Version guard</b>: both local and remote have a parseable <c>mapping_version</c>
+	/// and remote is strictly greater than local — the cluster already has a newer deployment's
+	/// templates, so the older pod must not overwrite them.</item>
+	/// <item><b>Hash check</b>: the content hashes match — templates are identical, nothing to do.</item>
 	/// </list>
+	/// <para>
+	/// Bootstrap proceeds (returns <see langword="false"/>) only when the hash differs <b>and</b>
+	/// the remote version is not newer than the local version.
+	/// </para>
+	/// <para>
+	/// When <paramref name="localMappingVersion"/> is <see langword="null"/>, only the hash check
+	/// applies — the original hash-only behavior.
+	/// </para>
 	/// </summary>
 	public static bool ShouldSkipBootstrap(
 		TemplateMetadata remote, string localHash, string? localMappingVersion)

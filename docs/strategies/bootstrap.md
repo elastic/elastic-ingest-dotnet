@@ -145,8 +145,6 @@ This is separate from `_meta.assembly_version`, which always reflects the librar
 
 ### Usage
 
-There are three modes:
-
 **Default — hash-only (no version guard):**
 
 ```csharp
@@ -155,45 +153,45 @@ There are three modes:
 
 No `MappingVersion` is set. Templates are updated whenever the hash changes, regardless of which version is deploying. This is the existing behavior.
 
-**Library or application version:**
+**Hardcoded version (via attribute):**
 
 ```csharp
 [Index<Product>(Name = "products", MappingVersion = "1.0.0")]
-```
 
-Set `MappingVersion` to a [semver](https://semver.org/) string. During bootstrap, if the cluster already has a template with a higher `mapping_version`, the bootstrap is skipped. Bump the version when you release mapping changes.
-
-**Data stream example:**
-
-```csharp
 [DataStream<LogEntry>(Type = "logs", Dataset = "myapp", MappingVersion = "2.1.0")]
 ```
 
-### Decision logic
+Set `MappingVersion` to a version string parseable by `System.Version` (e.g. `"1.0.0"`, `"2.3.1"`). Bump it when you release mapping changes.
 
-When `MappingVersion` is set, bootstrap evaluates in this order:
+:::{note}
+Attribute properties must be compile-time constants. To use a runtime value such as your application's assembly version, use the programmatic approach below instead.
+:::
 
-1. **Version guard**: If the remote template has a `mapping_version` that is **greater** than the local one (compared as `System.Version`), **skip** bootstrap. The remote was deployed by a newer release.
-2. **Hash check**: If the hashes match, **skip**. Nothing changed.
-3. Otherwise, **proceed** with bootstrap.
+**Application assembly version (programmatic):**
 
-When `MappingVersion` is *not* set (null), only step 2 applies — the original hash-only behavior.
-
-### Programmatic usage
-
-When not using attributes, set `MappingVersion` directly on `ElasticsearchTypeContext`:
+Since attributes require compile-time constants, use `ElasticsearchTypeContext.WithMappingVersion()` or set `MappingVersion` on `BootstrapContext` directly to use your application's assembly version at runtime:
 
 ```csharp
+using System.Reflection;
+
+// Get your app's version at runtime
+var appVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
+
+// Option 1: override the type context from your source-generated resolver
+var context = MyMappingContext.Product.Context with { MappingVersion = appVersion };
+var options = new IngestChannelOptions<Product>(transport, context);
+
+// Option 2: set it on ElasticsearchTypeContext directly
 var context = new ElasticsearchTypeContext(
     getSettingsJson, getMappingsJson, getIndexJson,
     hash, settingsHash, mappingsHash,
     indexStrategy, searchStrategy,
     EntityTarget.Index,
-    MappingVersion: "1.2.0"
+    MappingVersion: appVersion
 );
 ```
 
-Or set it on `BootstrapContext` when using custom bootstrap strategies:
+**Custom strategies (BootstrapContext):**
 
 ```csharp
 var bootstrapContext = new BootstrapContext
@@ -205,3 +203,25 @@ var bootstrapContext = new BootstrapContext
     MappingVersion = "1.2.0"
 };
 ```
+
+### Decision logic
+
+When `MappingVersion` is set, bootstrap checks two conditions. **Both** must pass for bootstrap to be skipped — if either indicates a change is needed, bootstrap proceeds:
+
+| Remote version vs local | Hash | Result |
+|------------------------|------|--------|
+| Remote **newer** than local | _any_ | **Skip** — don't downgrade |
+| Equal or local newer | **Matches** | **Skip** — nothing changed |
+| Equal or local newer | **Differs** | **Proceed** — templates changed, upgrade |
+| Remote has no version | **Matches** | **Skip** — hash says nothing changed |
+| Remote has no version | **Differs** | **Proceed** — hash says templates changed |
+
+In other words:
+
+1. **Version guard**: If the remote `mapping_version` is **strictly greater** than the local one (compared as `System.Version`), **skip**. The cluster already has a newer deployment's templates — don't overwrite them.
+2. **Hash check**: If the content hashes match, **skip**. The templates are identical.
+3. Otherwise: **proceed** with bootstrap. The local version is equal or newer and the templates have actually changed.
+
+Bootstrap only proceeds when the hash differs **and** the remote version is not newer. This is the key protection: an older pod sees a different hash (because its mappings are older) but also sees that the remote version is higher, so it backs off.
+
+When `MappingVersion` is *not* set (null), only the hash check applies — the original behavior.
