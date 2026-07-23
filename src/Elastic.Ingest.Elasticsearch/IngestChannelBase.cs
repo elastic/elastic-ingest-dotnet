@@ -179,6 +179,31 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 #endif
 
 	/// <summary>
+	/// Writes documents directly to Elasticsearch using the <c>_bulk</c> API, bypassing all channel
+	/// buffering, batching, and retry mechanics.
+	/// <para>This is useful when the caller needs a synchronous (request/response) write — for example,
+	/// persisting data in an API handler and returning only after the data is stored.</para>
+	/// <para>Always uses <c>_bulk</c>, even for a single document.</para>
+	/// </summary>
+	/// <param name="documents">One or more documents to index.</param>
+	/// <param name="ctx">Optional cancellation token.</param>
+	/// <returns>The <see cref="BulkResponse"/> from Elasticsearch.</returns>
+	public Task<BulkResponse> DirectWriteAsync(IReadOnlyList<TDocument> documents, CancellationToken ctx = default)
+	{
+		var page = new ArraySegment<TDocument>(documents as TDocument[] ?? documents.ToArray());
+		return ExportAsync(Options.Transport, page, ctx);
+	}
+
+	/// <summary>
+	/// Writes documents directly to Elasticsearch using the <c>_bulk</c> API, bypassing all channel
+	/// buffering, batching, and retry mechanics.
+	/// <para>Convenience overload that accepts documents as <c>params</c>.</para>
+	/// </summary>
+	/// <param name="documents">One or more documents to index.</param>
+	public Task<BulkResponse> DirectWriteAsync(params TDocument[] documents) =>
+		DirectWriteAsync(documents, CancellationToken.None);
+
+	/// <summary>
 	/// Asks implementations to create a <see cref="BulkOperationHeader"/> based on the <paramref name="document"/> being exported.
 	/// </summary>
 	protected abstract BulkOperationHeader CreateBulkOperationHeader(TDocument document);
