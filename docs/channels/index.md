@@ -23,6 +23,7 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), ctx);
 ## Topics
 
 - [Channel configuration](composable-channel.md): options, buffer configuration, strategies, callbacks
+- [Direct write](direct-write.md): bypass buffering for synchronous request/response writes
 - [Legacy channels](legacy-channels.md): migration guide for `DataStreamChannel`, `IndexChannel`, `CatalogChannel`, and semantic channels
 
 ## Channel lifecycle
@@ -43,5 +44,9 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), ctx);
 | `WaitToWriteAsync(doc, ctx)` | Async with backpressure. Blocks if buffer is full. |
 | `TryWriteMany(docs)` | Non-blocking batch write. |
 | `WaitToWriteManyAsync(docs, ctx)` | Async batch write with backpressure. |
+| `DirectWriteAsync(docs, ctx)` | Bypasses buffering. Writes directly via `_bulk` and returns the response. |
+| `DirectWriteAsync(docs, retries, backoff, ctx)` | Same as above, with automatic per-item retry for retryable failures. |
 
-See [push model](../architecture/push-model.md) for details on buffering, batching, and concurrent export.
+Use `response.AllItemsPersisted()` to check that every item in a `BulkResponse` succeeded (2xx).
+
+See [push model](../architecture/push-model.md) for details on buffering, batching, and concurrent export. See [direct write](direct-write.md) for the synchronous request/response pattern.

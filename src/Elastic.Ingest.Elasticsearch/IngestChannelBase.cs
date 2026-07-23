@@ -73,7 +73,7 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RejectEvent"/>
 	protected override bool RejectEvent((TDocument, BulkResponseItem) @event) =>
-		@event.Item2.Status < 200 || @event.Item2.Status > 300;
+		@event.Item2.Status < 200 || @event.Item2.Status > 299;
 
 	/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.ExportAsync(Elastic.Transport.ITransport,System.ArraySegment{TEvent},System.Threading.CancellationToken)"/>
 	protected override Task<BulkResponse> ExportAsync(ITransport transport, ArraySegment<TDocument> page, CancellationToken ctx = default)
@@ -177,6 +177,99 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 		return carrier;
 	}
 #endif
+
+	/// <summary>
+	/// Writes documents directly to Elasticsearch using the <c>_bulk</c> API, bypassing all channel
+	/// buffering, batching, and retry mechanics.
+	/// <para>This is useful when the caller needs a synchronous (request/response) write — for example,
+	/// persisting data in an API handler and returning only after the data is stored.</para>
+	/// <para>Always uses <c>_bulk</c>, even for a single document.</para>
+	/// </summary>
+	/// <param name="documents">One or more documents to index.</param>
+	/// <param name="ctx">Optional cancellation token.</param>
+	/// <returns>The <see cref="BulkResponse"/> from Elasticsearch.</returns>
+	public Task<BulkResponse> DirectWriteAsync(IReadOnlyList<TDocument> documents, CancellationToken ctx = default)
+	{
+		var page = new ArraySegment<TDocument>(documents as TDocument[] ?? documents.ToArray());
+		return ExportAsync(Options.Transport, page, ctx);
+	}
+
+	/// <summary>
+	/// Writes documents directly to Elasticsearch using the <c>_bulk</c> API, bypassing all channel
+	/// buffering, batching, and retry mechanics.
+	/// <para>Convenience overload that accepts documents as <c>params</c>.</para>
+	/// </summary>
+	/// <param name="documents">One or more documents to index.</param>
+	public Task<BulkResponse> DirectWriteAsync(params TDocument[] documents) =>
+		DirectWriteAsync(documents, CancellationToken.None);
+
+	/// <summary>
+	/// Writes documents directly to Elasticsearch using the <c>_bulk</c> API, bypassing all channel
+	/// buffering and batching. Automatically retries failed items using the same retry logic as the
+	/// buffered channel (retryable status codes: 429, 502, 503, 504).
+	/// <para>On each retry, only the failed retryable items are re-sent. Items that are permanently
+	/// rejected (non-2xx, non-retryable) are dropped.</para>
+	/// </summary>
+	/// <param name="documents">One or more documents to index.</param>
+	/// <param name="retries">Maximum number of retry attempts for failed items.</param>
+	/// <param name="backoffPeriod">
+	/// Delay between retry attempts. Defaults to 2 seconds when <c>null</c>.
+	/// </param>
+	/// <param name="ctx">Optional cancellation token.</param>
+	/// <returns>The final <see cref="BulkResponse"/> from Elasticsearch. When retries occurred, the
+	/// response items reflect the last attempt for each document.</returns>
+	public async Task<BulkResponse> DirectWriteAsync(
+		IReadOnlyList<TDocument> documents,
+		int retries,
+		TimeSpan? backoffPeriod = null,
+		CancellationToken ctx = default)
+	{
+		backoffPeriod ??= TimeSpan.FromSeconds(2);
+		var currentDocuments = documents as TDocument[] ?? documents.ToArray();
+		BulkResponse response = null!;
+
+		for (var attempt = 0; attempt <= retries; attempt++)
+		{
+			var page = new ArraySegment<TDocument>(currentDocuments);
+			response = await ExportAsync(Options.Transport, page, ctx).ConfigureAwait(false);
+
+			// If the HTTP request itself failed, no items to inspect — stop.
+			if (!response.ApiCallDetails.HasSuccessfulStatusCode)
+				break;
+
+			// 429 at HTTP level: retry all items.
+			if (RetryAllItems(response))
+			{
+				if (attempt < retries)
+				{
+					await Task.Delay(backoffPeriod.Value, ctx).ConfigureAwait(false);
+					continue;
+				}
+				break;
+			}
+
+			// Inspect individual items for retryable failures.
+			if (response.Items == null)
+				break;
+
+			var zipped = Zip(response, page);
+			var retryItems = zipped
+				.Where(t => RetryEvent(t))
+				.Select(t => t.Item1)
+				.ToArray();
+
+			if (retryItems.Length == 0)
+				break;
+
+			if (attempt < retries)
+			{
+				currentDocuments = retryItems;
+				await Task.Delay(backoffPeriod.Value, ctx).ConfigureAwait(false);
+			}
+		}
+
+		return response;
+	}
 
 	/// <summary>
 	/// Asks implementations to create a <see cref="BulkOperationHeader"/> based on the <paramref name="document"/> being exported.
