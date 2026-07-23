@@ -153,7 +153,7 @@ This is separate from `_meta.assembly_version`, which always reflects the librar
 
 No `MappingVersion` is set. Templates are updated whenever the hash changes, regardless of which version is deploying. This is the existing behavior.
 
-**Hardcoded version (via attribute):**
+**Explicit version (via attribute):**
 
 ```csharp
 [Index<Product>(Name = "products", MappingVersion = "1.0.0")]
@@ -163,35 +163,30 @@ No `MappingVersion` is set. Templates are updated whenever the hash changes, reg
 
 Set `MappingVersion` to a version string parseable by `System.Version` (e.g. `"1.0.0"`, `"2.3.1"`). Bump it when you release mapping changes.
 
-:::{note}
-Attribute properties must be compile-time constants. To use a runtime value such as your application's assembly version, use the programmatic approach below instead.
-:::
+**Application assembly version (via attribute):**
 
-**Application assembly version (programmatic):**
-
-Since attributes require compile-time constants, use `ElasticsearchTypeContext.WithMappingVersion()` or set `MappingVersion` on `BootstrapContext` directly to use your application's assembly version at runtime:
+Use `MappingVersionFromAssembly` to automatically resolve the version from your application's assembly at runtime. The source generator emits code that reads `typeof(YourMappingContext).Assembly.GetName().Version` — so the version tracks your project's `<Version>` or `<AssemblyVersion>` MSBuild property:
 
 ```csharp
-using System.Reflection;
+[Index<Product>(Name = "products", MappingVersionFromAssembly = true)]
 
-// Get your app's version at runtime
-var appVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
-
-// Option 1: override the type context from your source-generated resolver
-var context = MyMappingContext.Product.Context with { MappingVersion = appVersion };
-var options = new IngestChannelOptions<Product>(transport, context);
-
-// Option 2: set it on ElasticsearchTypeContext directly
-var context = new ElasticsearchTypeContext(
-    getSettingsJson, getMappingsJson, getIndexJson,
-    hash, settingsHash, mappingsHash,
-    indexStrategy, searchStrategy,
-    EntityTarget.Index,
-    MappingVersion: appVersion
-);
+[DataStream<LogEntry>(Type = "logs", Dataset = "myapp", MappingVersionFromAssembly = true)]
 ```
 
-**Custom strategies (BootstrapContext):**
+When both `MappingVersionFromAssembly` and `MappingVersion` are set, `MappingVersionFromAssembly` takes precedence.
+
+**Programmatic usage:**
+
+When not using attributes, set `MappingVersion` directly on `ElasticsearchTypeContext` or override a source-generated context:
+
+```csharp
+// Override a source-generated context with a runtime version
+var appVersion = typeof(MyMappingContext).Assembly.GetName().Version?.ToString();
+var context = MyMappingContext.Product.Context with { MappingVersion = appVersion };
+var options = new IngestChannelOptions<Product>(transport, context);
+```
+
+Or set it on `BootstrapContext` when using custom bootstrap strategies:
 
 ```csharp
 var bootstrapContext = new BootstrapContext

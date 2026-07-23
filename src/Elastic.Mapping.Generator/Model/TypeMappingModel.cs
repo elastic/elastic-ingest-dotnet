@@ -48,7 +48,8 @@ internal sealed record IndexConfigModel(
 	int Replicas,
 	string? RefreshInterval,
 	bool Dynamic,
-	string? MappingVersion = null
+	string? MappingVersion = null,
+	bool MappingVersionFromAssembly = false
 );
 
 /// <summary>
@@ -58,7 +59,8 @@ internal sealed record DataStreamConfigModel(
 	string Type,
 	string Dataset,
 	string? Namespace,
-	string? MappingVersion = null
+	string? MappingVersion = null,
+	bool MappingVersionFromAssembly = false
 )
 {
 	public string? FullName => Namespace != null ? $"{Type}-{Dataset}-{Namespace}" : null;

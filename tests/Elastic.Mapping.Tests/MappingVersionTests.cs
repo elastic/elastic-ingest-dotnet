@@ -63,4 +63,36 @@ public class MappingVersionTests
 		ctx.IndexStrategy!.Type.Should().Be("logs");
 		ctx.IndexStrategy!.Dataset.Should().Be("versioned");
 	}
+
+	[Test]
+	public void AssemblyVersionIndex_ResolvesFromAssembly()
+	{
+		var ctx = VersionedMappingContext.SimpleDocumentAssemblyVersioned.Context;
+
+		ctx.MappingVersion.Should().NotBeNull(
+			"MappingVersionFromAssembly = true should resolve the assembly version at runtime");
+
+		// The test assembly has a version — verify it parses as a valid System.Version
+		System.Version.TryParse(ctx.MappingVersion, out var parsed).Should().BeTrue(
+			$"'{ctx.MappingVersion}' should be a valid System.Version");
+		parsed.Should().NotBeNull();
+	}
+
+	[Test]
+	public void AssemblyVersionDataStream_ResolvesFromAssembly()
+	{
+		var ctx = VersionedMappingContext.SimpleDocumentAssemblyVersionedDs.Context;
+
+		ctx.MappingVersion.Should().NotBeNull(
+			"MappingVersionFromAssembly = true should resolve the assembly version at runtime");
+	}
+
+	[Test]
+	public void AssemblyVersionMatchesTestAssemblyVersion()
+	{
+		var ctx = VersionedMappingContext.SimpleDocumentAssemblyVersioned.Context;
+
+		var expectedVersion = typeof(VersionedMappingContext).Assembly.GetName().Version?.ToString();
+		ctx.MappingVersion.Should().Be(expectedVersion);
+	}
 }

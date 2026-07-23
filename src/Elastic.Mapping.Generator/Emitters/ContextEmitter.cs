@@ -258,8 +258,13 @@ internal static class ContextEmitter
 			sb.AppendLine($"{indent}\t\tAiEnrichmentProvider: null,");
 
 		// MappingVersion from [Index] or [DataStream] attribute
+		// MappingVersionFromAssembly takes precedence over MappingVersion
+		var useAssemblyVersion = (reg.IndexConfig?.MappingVersionFromAssembly ?? false)
+			|| (reg.DataStreamConfig?.MappingVersionFromAssembly ?? false);
 		var mappingVersion = reg.IndexConfig?.MappingVersion ?? reg.DataStreamConfig?.MappingVersion;
-		if (mappingVersion != null)
+		if (useAssemblyVersion)
+			sb.AppendLine($"{indent}\t\tMappingVersion: typeof({model.ContextTypeName}).Assembly.GetName().Version?.ToString()");
+		else if (mappingVersion != null)
 			sb.AppendLine($"{indent}\t\tMappingVersion: \"{mappingVersion}\"");
 		else
 			sb.AppendLine($"{indent}\t\tMappingVersion: null");

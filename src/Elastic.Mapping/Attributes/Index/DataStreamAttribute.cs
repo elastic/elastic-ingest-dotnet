@@ -84,7 +84,18 @@ public sealed class DataStreamAttribute<T> : Attribute where T : class
 	/// </para>
 	/// <para>
 	/// When omitted (the default), bootstrap uses hash-only comparison.
+	/// Overridden by <see cref="MappingVersionFromAssembly"/> when that is <see langword="true"/>.
 	/// </para>
 	/// </summary>
 	public string? MappingVersion { get; init; }
+
+	/// <summary>
+	/// When <see langword="true"/>, uses the assembly version of the assembly containing the
+	/// mapping context class as the <c>mapping_version</c>. This is resolved at runtime via
+	/// <c>typeof(ContextClass).Assembly.GetName().Version</c>.
+	/// <para>
+	/// Takes precedence over <see cref="MappingVersion"/> when both are set.
+	/// </para>
+	/// </summary>
+	public bool MappingVersionFromAssembly { get; init; }
 }
