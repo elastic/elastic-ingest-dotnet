@@ -4,6 +4,7 @@ cross_links:
 toc:
   - file: index.md
   - toc: getting-started
+  - toc: mapping
   - toc: channels
   - toc: architecture
   - toc: index-management
