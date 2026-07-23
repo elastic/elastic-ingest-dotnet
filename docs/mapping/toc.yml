@@ -1,0 +1,12 @@
+toc:
+  - file: index.md
+  - file: why-mapping-as-code.md
+  - file: how-it-deploys.md
+  - file: field-attributes.md
+  - file: code-driven-mappings.md
+  - file: analysis.md
+  - file: strongly-typed-analysis-names.md
+  - file: dynamic-templates.md
+  - file: runtime-fields.md
+  - file: merge-strategies.md
+  - file: integration-with-ingest.md
