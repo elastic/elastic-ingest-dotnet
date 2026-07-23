@@ -114,18 +114,18 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 		GenerateChannelHash(bootstrapMethod, out _, out _, out _, out _);
 
 		var indexTemplateExists = await IndexTemplateExistsAsync(TemplateName, ctx).ConfigureAwait(false);
-		var indexTemplateMatchesHash = indexTemplateExists && await IndexTemplateMatchesHashAsync(ChannelHash, ctx).ConfigureAwait(false);
+		var shouldSkip = indexTemplateExists && await ShouldSkipBootstrapAsync(ChannelHash, ctx).ConfigureAwait(false);
 
 		var latestAlias = string.Format(InvariantCulture, Options.IndexFormat, "latest");
 		var matchingIndices = string.Format(InvariantCulture, Options.IndexFormat, "*");
 		var currentIndex = await ShouldRemovePreviousAliasAsync(matchingIndices, latestAlias, ctx).ConfigureAwait(false);
 		// ensure we index to the latest index unless we have no previous versions, or the index template has changed
-		if (string.IsNullOrEmpty(currentIndex) || !indexTemplateExists || !indexTemplateMatchesHash)
+		if (string.IsNullOrEmpty(currentIndex) || !indexTemplateExists || !shouldSkip)
 			return await base.BootstrapElasticsearchAsync(bootstrapMethod, ctx).ConfigureAwait(false);
 
 		// When doing scripted hash upsert lookup, we need to override the bulk path and query to use the current index
 		// if the index template has changed, we index to the index name determined in the constructor
-		if (TryReuseIndex && indexTemplateExists && indexTemplateMatchesHash)
+		if (TryReuseIndex && indexTemplateExists && shouldSkip)
 		{
 			IndexName = currentIndex;
 			_ingestStrategy.UpdateIndexName(currentIndex, base.BulkPathAndQuery);
@@ -140,18 +140,18 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 		GenerateChannelHash(bootstrapMethod, out _, out _, out _, out _);
 
 		var indexTemplateExists = IndexTemplateExists(TemplateName);
-		var indexTemplateMatchesHash = indexTemplateExists && IndexTemplateMatchesHash(ChannelHash);
+		var shouldSkip = indexTemplateExists && ShouldSkipBootstrap(ChannelHash);
 
 		var latestAlias = string.Format(InvariantCulture, Options.IndexFormat, "latest");
 		var matchingIndices = string.Format(InvariantCulture, Options.IndexFormat, "*");
 		var currentIndex = ShouldRemovePreviousAlias(matchingIndices, latestAlias);
 		// ensure we index to the latest index unless we have no previous versions, or the index template has changed
-		if (string.IsNullOrEmpty(currentIndex) || !indexTemplateExists || !indexTemplateMatchesHash)
+		if (string.IsNullOrEmpty(currentIndex) || !indexTemplateExists || !shouldSkip)
 			return base.BootstrapElasticsearch(bootstrapMethod);
 
 		// When doing scripted hash upsert lookup, we need to override the bulk path and query to use the current index
 		// if the index template has changed, we index to the index name determined in the constructor
-		if (TryReuseIndex && indexTemplateExists && indexTemplateMatchesHash)
+		if (TryReuseIndex && indexTemplateExists && shouldSkip)
 		{
 			IndexName = currentIndex;
 			_ingestStrategy.UpdateIndexName(currentIndex, base.BulkPathAndQuery);

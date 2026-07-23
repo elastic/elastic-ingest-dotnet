@@ -124,3 +124,84 @@ new DefaultBootstrapStrategy(
 ## Hash-based short-circuit
 
 `IndexTemplateStep` and `DataStreamTemplateStep` check if the existing template's `_meta.hash` matches the current channel hash. If it matches, the template PUT is skipped, avoiding unnecessary API calls.
+
+## Version-aware bootstrap guards
+
+By default, bootstrap uses **hash-only** comparison: if the template hash matches, skip; if it differs, re-bootstrap. This works well for single-version deployments, but can cause problems during rolling upgrades.
+
+### The problem
+
+Consider a pool of pods running behind a load balancer. You deploy version N, which upgrades the index template with new mappings. A pod still on version N-1 restarts, computes a different hash (its mappings are older), and re-bootstraps — **overwriting version N's templates** with version N-1's mappings.
+
+### The solution: `MappingVersion`
+
+Set `MappingVersion` on your index or data stream attribute. When configured, the version is stored in `_meta.mapping_version` on all templates. During bootstrap, if the remote template was deployed by a **newer** version, bootstrap is skipped — the older pod refuses to downgrade.
+
+:::{note}
+`MappingVersion` is **opt-in**. When omitted, behavior is unchanged — pure hash-based comparison.
+
+This is separate from `_meta.assembly_version`, which always reflects the library version and is purely informational.
+:::
+
+### Usage
+
+There are three modes:
+
+**Default — hash-only (no version guard):**
+
+```csharp
+[Index<Product>(Name = "products")]
+```
+
+No `MappingVersion` is set. Templates are updated whenever the hash changes, regardless of which version is deploying. This is the existing behavior.
+
+**Library or application version:**
+
+```csharp
+[Index<Product>(Name = "products", MappingVersion = "1.0.0")]
+```
+
+Set `MappingVersion` to a [semver](https://semver.org/) string. During bootstrap, if the cluster already has a template with a higher `mapping_version`, the bootstrap is skipped. Bump the version when you release mapping changes.
+
+**Data stream example:**
+
+```csharp
+[DataStream<LogEntry>(Type = "logs", Dataset = "myapp", MappingVersion = "2.1.0")]
+```
+
+### Decision logic
+
+When `MappingVersion` is set, bootstrap evaluates in this order:
+
+1. **Version guard**: If the remote template has a `mapping_version` that is **greater** than the local one (compared as `System.Version`), **skip** bootstrap. The remote was deployed by a newer release.
+2. **Hash check**: If the hashes match, **skip**. Nothing changed.
+3. Otherwise, **proceed** with bootstrap.
+
+When `MappingVersion` is *not* set (null), only step 2 applies — the original hash-only behavior.
+
+### Programmatic usage
+
+When not using attributes, set `MappingVersion` directly on `ElasticsearchTypeContext`:
+
+```csharp
+var context = new ElasticsearchTypeContext(
+    getSettingsJson, getMappingsJson, getIndexJson,
+    hash, settingsHash, mappingsHash,
+    indexStrategy, searchStrategy,
+    EntityTarget.Index,
+    MappingVersion: "1.2.0"
+);
+```
+
+Or set it on `BootstrapContext` when using custom bootstrap strategies:
+
+```csharp
+var bootstrapContext = new BootstrapContext
+{
+    Transport = transport,
+    BootstrapMethod = BootstrapMethod.Failure,
+    TemplateName = "my-template",
+    TemplateWildcard = "my-index-*",
+    MappingVersion = "1.2.0"
+};
+```

@@ -192,7 +192,8 @@ public class DeltaSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 					new Dictionary<string, string> { [BatchIndexDateField] = _batchTimestamp.ToString("o") });
 		}
 
-		var primaryServerHash = await _primaryChannel.GetIndexTemplateHashAsync(ctx).ConfigureAwait(false) ?? string.Empty;
+		var primaryMeta = await _primaryChannel.GetIndexTemplateMetaAsync(ctx).ConfigureAwait(false);
+		var primaryServerHash = primaryMeta.Hash ?? string.Empty;
 		await _primaryChannel.BootstrapElasticsearchAsync(method, ctx).ConfigureAwait(false);
 
 		if (reusePrimary != null && primaryServerHash != _primaryChannel.ChannelHash)
@@ -225,7 +226,8 @@ public class DeltaSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 		_secondaryChannel = new IngestChannel<TEvent>(secondaryOpts);
 
 		_secondaryIndexName = _secondaryChannel.IndexName;
-		var secondaryServerHash = await _secondaryChannel.GetIndexTemplateHashAsync(ctx).ConfigureAwait(false) ?? string.Empty;
+		var secondaryMeta = await _secondaryChannel.GetIndexTemplateMetaAsync(ctx).ConfigureAwait(false);
+		var secondaryServerHash = secondaryMeta.Hash ?? string.Empty;
 		await _secondaryChannel.BootstrapElasticsearchAsync(method, ctx).ConfigureAwait(false);
 
 		if (reuseSecondary != null && secondaryServerHash != _secondaryChannel.ChannelHash)
@@ -535,12 +537,9 @@ public class DeltaSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 			return null;
 
 		var templateName = $"{tc.IndexStrategy.WriteTarget}-template";
-		var hashResponse = await _transport.RequestAsync<StringResponse>(
-			HttpMethod.GET,
-			$"/_index_template/{templateName}?filter_path=index_templates.index_template._meta.hash",
-			cancellationToken: ctx).ConfigureAwait(false);
+		var meta = await Strategies.TemplateMetadataHelper.FetchMetaAsync(_transport, templateName, ctx).ConfigureAwait(false);
 
-		if (!hashResponse.ApiCallDetails.HasSuccessfulStatusCode || string.IsNullOrEmpty(hashResponse.Body))
+		if (string.IsNullOrEmpty(meta.Hash))
 			return null;
 
 		return await ResolveExistingIndexAsync(writeAlias, ctx).ConfigureAwait(false);

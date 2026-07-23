@@ -84,13 +84,14 @@ public class ComponentTemplateStep : IBootstrapStep
 		settings.Append('}');
 
 		var settingsName = $"{context.TemplateName}-settings";
+		var mappingVersionFragment = TemplateMetadataHelper.BuildMappingVersionFragment(context.MappingVersion);
 		var settingsBody = $@"{{
               ""template"": {{
                 ""settings"": {settings}
               }},
               ""_meta"": {{
                 ""description"": ""Template installed by .NET ingest libraries (https://github.com/elastic/elastic-ingest-dotnet)"",
-                ""assembly_version"": ""{LibraryVersion.Current}""
+                ""assembly_version"": ""{LibraryVersion.Current}""{mappingVersionFragment}
               }}
             }}";
 		return (settingsName, settingsBody);
@@ -101,6 +102,7 @@ public class ComponentTemplateStep : IBootstrapStep
 		var mappingsName = $"{context.TemplateName}-mappings";
 		var mappings = context.GetMappingsJson?.Invoke() ?? "{}";
 		var settings = context.GetMappingSettings?.Invoke() ?? "{}";
+		var mappingVersionFragment = TemplateMetadataHelper.BuildMappingVersionFragment(context.MappingVersion);
 		var mappingsBody = $@"{{
               ""template"": {{
                 ""settings"": {settings},
@@ -108,7 +110,7 @@ public class ComponentTemplateStep : IBootstrapStep
               }},
               ""_meta"": {{
                 ""description"": ""Template installed by .NET ingest libraries (https://github.com/elastic/elastic-ingest-dotnet)"",
-                ""assembly_version"": ""{LibraryVersion.Current}""
+                ""assembly_version"": ""{LibraryVersion.Current}""{mappingVersionFragment}
               }}
             }}";
 		return (mappingsName, mappingsBody);

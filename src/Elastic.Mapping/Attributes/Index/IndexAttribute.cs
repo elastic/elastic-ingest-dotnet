@@ -125,4 +125,25 @@ public sealed class IndexAttribute<T> : Attribute where T : class
 	/// </para>
 	/// </summary>
 	public string? Variant { get; init; }
+
+	/// <summary>
+	/// Optional mapping version for version-aware bootstrap guards.
+	/// <para>
+	/// When set, the version is stored in <c>_meta.mapping_version</c> on templates. During
+	/// bootstrap, if the remote template has a higher <c>mapping_version</c> than the local one,
+	/// bootstrap is skipped to prevent an older deployment from overwriting a newer one's templates.
+	/// </para>
+	/// <para>
+	/// When omitted (the default), bootstrap uses hash-only comparison.
+	/// </para>
+	/// <example>
+	/// Use the library version:
+	/// <code>[Index&lt;Product&gt;(Name = "products", MappingVersion = "1.0.0")]</code>
+	/// Use your application version:
+	/// <code>[Index&lt;Product&gt;(Name = "products", MappingVersion = "2.3.1")]</code>
+	/// Hash-only (default):
+	/// <code>[Index&lt;Product&gt;(Name = "products")]</code>
+	/// </example>
+	/// </summary>
+	public string? MappingVersion { get; init; }
 }

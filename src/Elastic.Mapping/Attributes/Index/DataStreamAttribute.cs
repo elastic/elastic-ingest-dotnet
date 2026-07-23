@@ -74,4 +74,17 @@ public sealed class DataStreamAttribute<T> : Attribute where T : class
 	/// </para>
 	/// </summary>
 	public string? Variant { get; init; }
+
+	/// <summary>
+	/// Optional mapping version for version-aware bootstrap guards.
+	/// <para>
+	/// When set, the version is stored in <c>_meta.mapping_version</c> on templates. During
+	/// bootstrap, if the remote template has a higher <c>mapping_version</c> than the local one,
+	/// bootstrap is skipped to prevent an older deployment from overwriting a newer one's templates.
+	/// </para>
+	/// <para>
+	/// When omitted (the default), bootstrap uses hash-only comparison.
+	/// </para>
+	/// </summary>
+	public string? MappingVersion { get; init; }
 }

@@ -18,13 +18,14 @@ public class HashBasedReuseProvisioning : IIndexProvisioningStrategy
 	/// <inheritdoc />
 	public async Task<ProvisioningDecision> DecideAsync(BootstrapContext context, CancellationToken ctx = default)
 	{
-		// Check if template exists and matches hash - if so, we might reuse
 		var templateExists = await TemplateExistsAsync(context.Transport, context.TemplateName, ctx).ConfigureAwait(false);
 		if (!templateExists)
 			return ProvisioningDecision.CreateNew;
 
-		var matches = await TemplateMatchesHashAsync(context.Transport, context.TemplateName, context.ChannelHash, ctx).ConfigureAwait(false);
-		return matches ? ProvisioningDecision.ReuseExisting : ProvisioningDecision.CreateNew;
+		var meta = await TemplateMetadataHelper.FetchMetaAsync(context.Transport, context.TemplateName, ctx).ConfigureAwait(false);
+		return TemplateMetadataHelper.ShouldSkipBootstrap(meta, context.ChannelHash, context.MappingVersion)
+			? ProvisioningDecision.ReuseExisting
+			: ProvisioningDecision.CreateNew;
 	}
 
 	/// <inheritdoc />
@@ -34,8 +35,10 @@ public class HashBasedReuseProvisioning : IIndexProvisioningStrategy
 		if (!templateExists)
 			return ProvisioningDecision.CreateNew;
 
-		var matches = TemplateMatchesHash(context.Transport, context.TemplateName, context.ChannelHash);
-		return matches ? ProvisioningDecision.ReuseExisting : ProvisioningDecision.CreateNew;
+		var meta = TemplateMetadataHelper.FetchMeta(context.Transport, context.TemplateName);
+		return TemplateMetadataHelper.ShouldSkipBootstrap(meta, context.ChannelHash, context.MappingVersion)
+			? ProvisioningDecision.ReuseExisting
+			: ProvisioningDecision.CreateNew;
 	}
 
 	/// <inheritdoc />
@@ -82,29 +85,4 @@ public class HashBasedReuseProvisioning : IIndexProvisioningStrategy
 		return response.ApiCallDetails.HttpStatusCode is 200;
 	}
 
-	private static async Task<bool> TemplateMatchesHashAsync(ITransport transport, string name, string hash, CancellationToken ctx)
-	{
-		var response = await transport.RequestAsync<StringResponse>(
-			HttpMethod.GET, $"/_index_template/{name}?filter_path=index_templates.index_template._meta.hash", ctx
-		).ConfigureAwait(false);
-		if (!response.ApiCallDetails.HasSuccessfulStatusCode)
-			return false;
-		var metaHash = response.Body
-			.Replace("""{"index_templates":[{"index_template":{"_meta":{"hash":""", "")
-			.Trim('"').Split('"')[0];
-		return metaHash == hash;
-	}
-
-	private static bool TemplateMatchesHash(ITransport transport, string name, string hash)
-	{
-		var response = transport.Request<StringResponse>(
-			HttpMethod.GET, $"/_index_template/{name}?filter_path=index_templates.index_template._meta.hash"
-		);
-		if (!response.ApiCallDetails.HasSuccessfulStatusCode)
-			return false;
-		var metaHash = response.Body
-			.Replace("""{"index_templates":[{"index_template":{"_meta":{"hash":""", "")
-			.Trim('"').Split('"')[0];
-		return metaHash == hash;
-	}
 }

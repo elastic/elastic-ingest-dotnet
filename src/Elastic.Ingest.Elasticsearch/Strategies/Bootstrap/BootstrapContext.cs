@@ -61,4 +61,17 @@ public class BootstrapContext
 	/// Set by <c>DataStreamLifecycleStep</c> for <c>DataStreamTemplateStep</c> to embed.
 	/// </summary>
 	public string? DataStreamLifecycleRetention { get; internal set; }
+
+	/// <summary>
+	/// Optional mapping version for version-aware bootstrap guards.
+	/// <para>
+	/// When set, the version is stored in <c>_meta.mapping_version</c> on templates. During bootstrap,
+	/// if the remote template has a higher <c>mapping_version</c> than the local one, bootstrap is
+	/// skipped to prevent an older deployment from overwriting a newer one's templates.
+	/// </para>
+	/// <para>
+	/// When <see langword="null"/> (the default), bootstrap uses hash-only comparison — the existing behavior.
+	/// </para>
+	/// </summary>
+	public string? MappingVersion { get; init; }
 }
