@@ -3,6 +3,7 @@ cross_links:
   - elasticsearch
 toc:
   - file: index.md
+  - file: ai-enrichment.md
   - toc: getting-started
   - toc: mapping
   - toc: channels

@@ -1,3 +1,4 @@
 toc:
   - file: index.md
   - file: mapping-context.md
+  - file: templated-index-names.md

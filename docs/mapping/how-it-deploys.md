@@ -63,7 +63,7 @@ For date-rolling indices with aliases, this means zero-downtime schema evolution
 
 Because the mapping is derived from your C# class, every change shows up in your version control history:
 
-```diff
+```csharp
  public class Product
  {
      [Id]
@@ -73,9 +73,9 @@ Because the mapping is derived from your C# class, every change shows up in your
      [Text(Analyzer = "product_name_analyzer")]
      public string Name { get; set; }
 
-+    [Text(Analyzer = "product_name_analyzer")]
-+    public string Description { get; set; }
-+
+     [Text(Analyzer = "product_name_analyzer")]  // new field
+     public string Description { get; set; }
+
      [Keyword(Normalizer = "lowercase")]
      public string Category { get; set; }
  }
