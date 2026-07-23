@@ -163,6 +163,7 @@ public class IngestChannel<TEvent> : IngestChannelBase<TEvent, IngestChannelOpti
 		string name, string match, string mappingsName, string settingsName, string hash)
 	{
 		// Not used in strategy-based bootstrap flow, but required by abstract base
+		var mappingVersionFragment = Strategies.TemplateMetadataHelper.BuildMappingVersionFragment(Options.TypeContext?.MappingVersion);
 		var indexTemplateBody = @$"{{
                 ""index_patterns"": [""{match}""],
                 ""composed_of"": [ ""{mappingsName}"", ""{settingsName}"" ],
@@ -170,7 +171,7 @@ public class IngestChannel<TEvent> : IngestChannelBase<TEvent, IngestChannelOpti
                 ""_meta"": {{
                     ""description"": ""Template installed by .NET ingest libraries (https://github.com/elastic/elastic-ingest-dotnet)"",
                     ""assembly_version"": ""{LibraryVersion.Current}"",
-                    ""hash"": ""{hash}""
+                    ""hash"": ""{hash}""{mappingVersionFragment}
                 }}
             }}";
 		return (name, indexTemplateBody);
@@ -186,6 +187,7 @@ public class IngestChannel<TEvent> : IngestChannelBase<TEvent, IngestChannelOpti
 			GetMappingsJson = _strategy.GetMappingsJson,
 			GetMappingSettings = _strategy.GetMappingSettings,
 			DataStreamType = _strategy.DataStreamType,
-			IndexSettings = Options.TypeContext?.IndexSettings
+			IndexSettings = Options.TypeContext?.IndexSettings,
+			MappingVersion = Options.TypeContext?.MappingVersion
 		};
 }

@@ -253,9 +253,21 @@ internal static class ContextEmitter
 		if (model.AiEnrichment != null
 			&& model.AiEnrichment.DocumentTypeFullyQualifiedName == reg.TypeFullyQualifiedName
 			&& (model.AiEnrichment.IndexVariant == null || model.AiEnrichment.IndexVariant == reg.Variant))
-			sb.AppendLine($"{indent}\t\tAiEnrichmentProvider: new {model.AiEnrichment.DocumentTypeName}AiEnrichmentProvider()");
+			sb.AppendLine($"{indent}\t\tAiEnrichmentProvider: new {model.AiEnrichment.DocumentTypeName}AiEnrichmentProvider(),");
 		else
-			sb.AppendLine($"{indent}\t\tAiEnrichmentProvider: null");
+			sb.AppendLine($"{indent}\t\tAiEnrichmentProvider: null,");
+
+		// MappingVersion from [Index] or [DataStream] attribute
+		// MappingVersionFromAssembly takes precedence over MappingVersion
+		var useAssemblyVersion = (reg.IndexConfig?.MappingVersionFromAssembly ?? false)
+			|| (reg.DataStreamConfig?.MappingVersionFromAssembly ?? false);
+		var mappingVersion = reg.IndexConfig?.MappingVersion ?? reg.DataStreamConfig?.MappingVersion;
+		if (useAssemblyVersion)
+			sb.AppendLine($"{indent}\t\tMappingVersion: typeof({model.ContextTypeName}).Assembly.GetName().Version?.ToString()");
+		else if (mappingVersion != null)
+			sb.AppendLine($"{indent}\t\tMappingVersion: \"{mappingVersion}\"");
+		else
+			sb.AppendLine($"{indent}\t\tMappingVersion: null");
 
 		sb.AppendLine($"{indent}\t);");
 		sb.AppendLine();

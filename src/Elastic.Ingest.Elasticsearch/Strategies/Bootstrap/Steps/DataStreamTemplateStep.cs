@@ -27,6 +27,7 @@ public class DataStreamTemplateStep : IndexTemplateStep
 		var additionalComponentsJson = string.Join(", ", additionalComponents.Select(a => $"\"{a}\""));
 
 		var lifecycleBlock = GetLifecycleBlock(context);
+		var mappingVersionFragment = TemplateMetadataHelper.BuildMappingVersionFragment(context.MappingVersion);
 
 		return @$"{{
                 ""index_patterns"": [""{context.TemplateWildcard}""],
@@ -36,7 +37,7 @@ public class DataStreamTemplateStep : IndexTemplateStep
                 ""_meta"": {{
                     ""description"": ""Template installed by .NET ingest libraries (https://github.com/elastic/elastic-ingest-dotnet)"",
                     ""assembly_version"": ""{LibraryVersion.Current}"",
-                    ""hash"": ""{context.ChannelHash}""
+                    ""hash"": ""{context.ChannelHash}""{mappingVersionFragment}
                 }}
             }}";
 	}

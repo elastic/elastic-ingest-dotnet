@@ -3,7 +3,6 @@
 // See the LICENSE file in the project root for more information
 
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Ingest.Transport;
@@ -13,7 +12,8 @@ namespace Elastic.Ingest.Elasticsearch.Strategies.BootstrapSteps;
 
 /// <summary>
 /// Bootstrap step that creates an index template (without data_stream).
-/// Includes hash-based short-circuit: if the template already exists with matching hash, skip.
+/// Includes hash-based (and optional version-based) short-circuit: if the template
+/// already exists with matching hash, or was deployed by a newer mapping version, skip.
 /// </summary>
 public class IndexTemplateStep : IBootstrapStep
 {
@@ -26,8 +26,8 @@ public class IndexTemplateStep : IBootstrapStep
 		var templateExists = await IndexTemplateExistsAsync(context.Transport, context.TemplateName, ctx).ConfigureAwait(false);
 		if (templateExists)
 		{
-			var matches = await IndexTemplateMatchesHashAsync(context.Transport, context.TemplateName, context.ChannelHash, ctx).ConfigureAwait(false);
-			if (matches)
+			var meta = await TemplateMetadataHelper.FetchMetaAsync(context.Transport, context.TemplateName, ctx).ConfigureAwait(false);
+			if (TemplateMetadataHelper.ShouldSkipBootstrap(meta, context.ChannelHash, context.MappingVersion))
 				return true;
 		}
 
@@ -41,8 +41,8 @@ public class IndexTemplateStep : IBootstrapStep
 		var templateExists = IndexTemplateExists(context.Transport, context.TemplateName);
 		if (templateExists)
 		{
-			var matches = IndexTemplateMatchesHash(context.Transport, context.TemplateName, context.ChannelHash);
-			if (matches)
+			var meta = TemplateMetadataHelper.FetchMeta(context.Transport, context.TemplateName);
+			if (TemplateMetadataHelper.ShouldSkipBootstrap(meta, context.ChannelHash, context.MappingVersion))
 				return true;
 		}
 
@@ -57,6 +57,7 @@ public class IndexTemplateStep : IBootstrapStep
 	{
 		var settingsName = $"{context.TemplateName}-settings";
 		var mappingsName = $"{context.TemplateName}-mappings";
+		var mappingVersionFragment = TemplateMetadataHelper.BuildMappingVersionFragment(context.MappingVersion);
 
 		return @$"{{
                 ""index_patterns"": [""{context.TemplateWildcard}""],
@@ -65,7 +66,7 @@ public class IndexTemplateStep : IBootstrapStep
                 ""_meta"": {{
                     ""description"": ""Template installed by .NET ingest libraries (https://github.com/elastic/elastic-ingest-dotnet)"",
                     ""assembly_version"": ""{LibraryVersion.Current}"",
-                    ""hash"": ""{context.ChannelHash}""
+                    ""hash"": ""{context.ChannelHash}""{mappingVersionFragment}
                 }}
             }}";
 	}
@@ -81,33 +82,6 @@ public class IndexTemplateStep : IBootstrapStep
 		var response = transport.Request<StringResponse>(HttpMethod.HEAD, $"_index_template/{name}");
 		return response.ApiCallDetails.HttpStatusCode is 200;
 	}
-
-	private static async Task<bool> IndexTemplateMatchesHashAsync(ITransport transport, string name, string hash, CancellationToken ctx)
-	{
-		var response = await transport.RequestAsync<StringResponse>(
-			HttpMethod.GET, $"/_index_template/{name}?filter_path=index_templates.index_template._meta.hash", ctx
-		).ConfigureAwait(false);
-		if (!response.ApiCallDetails.HasSuccessfulStatusCode)
-			return false;
-		return ReadMetaHash(response) == hash;
-	}
-
-	private static bool IndexTemplateMatchesHash(ITransport transport, string name, string hash)
-	{
-		var response = transport.Request<StringResponse>(
-			HttpMethod.GET, $"/_index_template/{name}?filter_path=index_templates.index_template._meta.hash"
-		);
-		if (!response.ApiCallDetails.HasSuccessfulStatusCode)
-			return false;
-		return ReadMetaHash(response) == hash;
-	}
-
-	private static string? ReadMetaHash(StringResponse template) =>
-		template.Body
-			.Replace("""{"index_templates":[{"index_template":{"_meta":{"hash":""", "")
-			.Trim('"')
-			.Split('"')
-			.FirstOrDefault();
 
 	private static async Task<bool> PutIndexTemplateAsync(BootstrapContext context, string name, string body, CancellationToken ctx)
 	{

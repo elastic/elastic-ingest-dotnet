@@ -65,7 +65,8 @@ public record ElasticsearchTypeContext(
 	Action<object, DateTimeOffset>? SetLastUpdated = null,
 	string? BatchIndexDateFieldName = null,
 	string? LastUpdatedFieldName = null,
-	IAiEnrichmentProvider? AiEnrichmentProvider = null
+	IAiEnrichmentProvider? AiEnrichmentProvider = null,
+	string? MappingVersion = null
 )
 {
 	// ── Resolve methods ──────────────────────────────────────────────────

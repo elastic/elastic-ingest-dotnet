@@ -125,4 +125,38 @@ public sealed class IndexAttribute<T> : Attribute where T : class
 	/// </para>
 	/// </summary>
 	public string? Variant { get; init; }
+
+	/// <summary>
+	/// Optional mapping version for version-aware bootstrap guards.
+	/// <para>
+	/// When set, the version is stored in <c>_meta.mapping_version</c> on templates. During
+	/// bootstrap, if the remote template has a higher <c>mapping_version</c> than the local one,
+	/// bootstrap is skipped to prevent an older deployment from overwriting a newer one's templates.
+	/// </para>
+	/// <para>
+	/// When omitted (the default), bootstrap uses hash-only comparison.
+	/// Overridden by <see cref="MappingVersionFromAssembly"/> when that is <see langword="true"/>.
+	/// </para>
+	/// <example>
+	/// Explicit version:
+	/// <code>[Index&lt;Product&gt;(Name = "products", MappingVersion = "1.0.0")]</code>
+	/// Hash-only (default):
+	/// <code>[Index&lt;Product&gt;(Name = "products")]</code>
+	/// </example>
+	/// </summary>
+	public string? MappingVersion { get; init; }
+
+	/// <summary>
+	/// When <see langword="true"/>, uses the assembly version of the assembly containing the
+	/// mapping context class as the <c>mapping_version</c>. This is resolved at runtime via
+	/// <c>typeof(ContextClass).Assembly.GetName().Version</c>.
+	/// <para>
+	/// Takes precedence over <see cref="MappingVersion"/> when both are set.
+	/// </para>
+	/// <example>
+	/// Use your application's assembly version:
+	/// <code>[Index&lt;Product&gt;(Name = "products", MappingVersionFromAssembly = true)]</code>
+	/// </example>
+	/// </summary>
+	public bool MappingVersionFromAssembly { get; init; }
 }

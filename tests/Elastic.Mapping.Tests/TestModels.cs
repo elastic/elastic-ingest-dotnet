@@ -1102,3 +1102,17 @@ public static partial class TemplatedMergeTestMappingContext
 			.Tokenizer(BuiltInAnalysis.Tokenizers.Standard)
 			.Filters(BuiltInAnalysis.TokenFilters.Lowercase));
 }
+
+// ============================================================================
+// VERSIONED MAPPING CONTEXT: tests MappingVersion attribute on Index and DataStream
+// ============================================================================
+
+[ElasticsearchMappingContext]
+[Index<SimpleDocument>(Name = "versioned-index", MappingVersion = "3.2.1")]
+[DataStream<SimpleDocument>(Type = "logs", Dataset = "versioned", Namespace = "test",
+	MappingVersion = "1.0.0", Variant = "Versioned")]
+[Index<SimpleDocument>(Name = "unversioned-index", Variant = "Unversioned")]
+[Index<SimpleDocument>(Name = "asm-versioned-index", MappingVersionFromAssembly = true, Variant = "AssemblyVersioned")]
+[DataStream<SimpleDocument>(Type = "logs", Dataset = "asm-versioned", Namespace = "test",
+	MappingVersionFromAssembly = true, Variant = "AssemblyVersionedDs")]
+public static partial class VersionedMappingContext;

@@ -66,6 +66,28 @@ public class StrategyFactoryTests
 			MappedType: typeof(TestDocument)
 		);
 
+	private static ElasticsearchTypeContext CreateIndexContextWithMappingVersion(string version) =>
+		new(
+			() => "{}", () => "{}", () => "{}",
+			"hash", "sh", "mh",
+			new IndexStrategy { WriteTarget = "versioned-docs" },
+			new SearchStrategy(),
+			EntityTarget.Index,
+			MappedType: typeof(TestDocument),
+			MappingVersion: version
+		);
+
+	private static ElasticsearchTypeContext CreateDataStreamContextWithMappingVersion(string version) =>
+		new(
+			() => "{}", () => "{}", () => "{}",
+			"hash", "sh", "mh",
+			new IndexStrategy { Type = "logs", Dataset = "myapp", Namespace = "default", DataStreamName = "logs-myapp-default" },
+			new SearchStrategy(),
+			EntityTarget.DataStream,
+			MappedType: typeof(TestDocument),
+			MappingVersion: version
+		);
+
 	// --- IngestStrategies.ForContext ---
 
 	[Test]
@@ -316,5 +338,42 @@ public class StrategyFactoryTests
 		);
 
 		strategy.Steps.Should().HaveCount(4);
+	}
+
+	// --- MappingVersion propagation ---
+
+	[Test]
+	public void MappingVersionFlowsThroughIndexContext()
+	{
+		var tc = CreateIndexContextWithMappingVersion("2.1.0");
+
+		tc.MappingVersion.Should().Be("2.1.0");
+	}
+
+	[Test]
+	public void MappingVersionFlowsThroughDataStreamContext()
+	{
+		var tc = CreateDataStreamContextWithMappingVersion("1.0.0");
+
+		tc.MappingVersion.Should().Be("1.0.0");
+	}
+
+	[Test]
+	public void MappingVersionDefaultsToNull()
+	{
+		var tc = CreateIndexContext();
+
+		tc.MappingVersion.Should().BeNull(
+			"MappingVersion is not set, so default hash-only behavior applies");
+	}
+
+	[Test]
+	public void MappingVersionPreservedThroughWithNamespace()
+	{
+		var tc = CreateDataStreamContextWithMappingVersion("1.5.0");
+		var withNs = tc.WithNamespace("production");
+
+		withNs.MappingVersion.Should().Be("1.5.0",
+			"WithNamespace should preserve MappingVersion from the original context");
 	}
 }
