@@ -88,13 +88,14 @@ public static class IngestStrategies
 
 	/// <summary>
 	/// Creates a wired stream ingest strategy (bootstrap managed by Elasticsearch).
+	/// Uses <see cref="ElasticsearchTypeContext.WiredStreamIngestEndpoint"/> for the bulk path prefix.
 	/// </summary>
 	public static IIngestStrategy<TEvent> WiredStream<TEvent>(
 		ElasticsearchTypeContext tc) where TEvent : class
 	{
 		return new IngestStrategy<TEvent>(tc,
 			BootstrapStrategies.None(),
-			new WiredStreamIngestStrategy<TEvent>(DefaultBulkPathAndQuery),
+			new WiredStreamIngestStrategy<TEvent>(DefaultBulkPathAndQuery, tc.WiredStreamIngestEndpoint),
 			new AlwaysCreateProvisioning(),
 			new NoAliasStrategy());
 	}

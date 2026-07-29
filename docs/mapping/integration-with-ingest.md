@@ -79,6 +79,10 @@ flowchart TD
 | `[DataStream<T>]` | `DataStream` | `create` (append-only) | Component + data stream templates |
 | `[WiredStream<T>]` | `WiredStream` | `create` (append-only) | No-op (managed by Elasticsearch) |
 
+:::{note}
+**Wired streams and mappings.** Attribute-generated field mappings are not installed for `[WiredStream<T>]` — bootstrap is a no-op. Field naming is governed by the wired ingest endpoint (`logs`, `logs.ecs`, or `logs.otel`). Prefer ECS/OTel document shapes and set `IngestEndpoint` accordingly. See [Wired streams](../index-management/wired-streams.md) and [ECS and OTel endpoints](../index-management/ecs-and-otel-endpoints.md).
+:::
+
 ### Field attributes
 
 | Attribute | Generated delegate | Effect |

@@ -3,5 +3,9 @@ toc:
   - file: single-index.md
   - toc: rollover
   - file: data-streams.md
+  - file: streams.md
+  - file: wired-streams.md
+  - file: ecs-and-otel-endpoints.md
+  - file: streams-downstream-features.md
   - file: tsdb.md
   - file: logsdb.md

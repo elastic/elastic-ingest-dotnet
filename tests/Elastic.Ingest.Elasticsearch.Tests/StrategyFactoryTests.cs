@@ -34,13 +34,15 @@ public class StrategyFactoryTests
 			MappedType: typeof(TestDocument)
 		);
 
-	private static ElasticsearchTypeContext CreateWiredStreamContext() =>
+	private static ElasticsearchTypeContext CreateWiredStreamContext(
+		WiredStreamIngestEndpoint endpoint = WiredStreamIngestEndpoint.Logs) =>
 		new(
 			() => "{}", () => "{}", () => "{}",
 			"hash", "sh", "mh",
-			new IndexStrategy(),
+			new IndexStrategy { Type = "logs", Dataset = "myapp", Namespace = "default" },
 			new SearchStrategy(),
 			EntityTarget.WiredStream,
+			WiredStreamIngestEndpoint: endpoint,
 			MappedType: typeof(TestDocument)
 		);
 
@@ -215,6 +217,31 @@ public class StrategyFactoryTests
 
 		var bootstrap = strategy.Bootstrap.Should().BeOfType<DefaultBootstrapStrategy>().Subject;
 		bootstrap.Steps.Should().ContainSingle().Which.Should().BeOfType<NoopBootstrapStep>();
+	}
+
+	[Test]
+	[Arguments(WiredStreamIngestEndpoint.Logs, "logs")]
+	[Arguments(WiredStreamIngestEndpoint.LogsEcs, "logs.ecs")]
+	[Arguments(WiredStreamIngestEndpoint.LogsOtel, "logs.otel")]
+	public void WiredStreamUsesEndpointBulkPathPrefix(WiredStreamIngestEndpoint endpoint, string prefix)
+	{
+		var tc = CreateWiredStreamContext(endpoint);
+		var strategy = IngestStrategies.WiredStream<TestDocument>(tc);
+
+		var ingest = strategy.DocumentIngest.Should().BeOfType<WiredStreamIngestStrategy<TestDocument>>().Subject;
+		ingest.RefreshTargets.Should().Be(prefix);
+		ingest.GetBulkUrl("ignored").Should().StartWith($"{prefix}/_bulk");
+	}
+
+	[Test]
+	public void WiredStreamContextResolvesBulkPathPrefix()
+	{
+		CreateWiredStreamContext(WiredStreamIngestEndpoint.LogsEcs)
+			.ResolveWiredStreamBulkPathPrefix().Should().Be("logs.ecs");
+		CreateWiredStreamContext(WiredStreamIngestEndpoint.LogsOtel)
+			.ResolveWiredStreamBulkPathPrefix().Should().Be("logs.otel");
+		CreateWiredStreamContext()
+			.ResolveWiredStreamBulkPathPrefix().Should().Be("logs");
 	}
 
 	// --- BootstrapStrategies ---
