@@ -59,15 +59,21 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(10), ctx);
 
 ## Mappings and wired streams
 
-Attribute-generated mappings on a `[WiredStream<T>]` document type are **not deployed**. There is no component template step. Field mappings are governed by the wired stream endpoint and Streams-managed schema.
+Wired streams **do support field mappings** — they are managed by [Kibana Streams](https://www.elastic.co/docs/solutions/observability/streams/map-fields) (Schema / Processing tabs), not by this library’s bootstrap.
 
-Use mapping attributes for:
+What “bootstrap is a no-op” means here:
 
-- Compile-time documentation of expected fields
-- Serialization helpers (`[Timestamp]`, `[JsonPropertyName]`)
-- Consistency with classic `[DataStream]` types you may also register
+| Who | What happens for `[WiredStream<T>]` |
+|-----|--------------------------------------|
+| This library | Does **not** PUT component/index templates from your `[Text]` / `[Keyword]` attributes |
+| Elasticsearch / Streams | Owns templates and lifecycle; you map fields in the Streams UI (or Streams API). Wired children can **inherit** parent mappings |
+| Ingest endpoint | `logs.ecs` / `logs.otel` controls field-name normalization at ingest ([field naming](https://www.elastic.co/docs/solutions/observability/streams/wired-streams-field-naming)) |
 
-Do **not** expect `[Text]` / `[Keyword]` on a wired target to change cluster mappings.
+Unmapped fields can still be queried (e.g. ES|QL `SET unmapped_fields = 'LOAD'`). Prefer ECS/OTel document shapes so Streams schema and processors line up.
+
+Use mapping attributes on wired document types for serialization and shared type definitions with classic `[DataStream]` targets — not as a way to install cluster templates via `BootstrapElasticsearchAsync`.
+
+For local template ownership (including LogsDB), use `[DataStream<T>]` instead.
 
 ## Related
 
