@@ -49,4 +49,4 @@ Writes `index` operations with explicit document IDs for upsert patterns:
 
 ### WiredStreamIngestStrategy
 
-Writes to wired streams (Elasticsearch serverless managed streams). Uses `create` operations without explicit index targeting.
+Writes to wired streams (managed Elasticsearch Streams ingest). Uses `create` operations against `logs/_bulk`, `logs.ecs/_bulk`, or `logs.otel/_bulk` depending on `WiredStreamIngestEndpoint` on the mapping context.

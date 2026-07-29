@@ -140,22 +140,26 @@ Data stream name: `{type}-{dataset}-{namespace}` (e.g. `logs-myapp-production`)
 
 ## Wired stream parameters
 
-`[WiredStream<T>]` is similar to `[DataStream<T>]` but bootstrap is fully managed by Elasticsearch:
+`[WiredStream<T>]` is similar to `[DataStream<T>]` but bootstrap is fully managed by Elasticsearch. Documents are sent to a managed bulk endpoint:
 
 ```csharp
 [WiredStream<LogEntry>(
     Type = "logs",
-    Dataset = "myapp"
+    Dataset = "myapp",
+    IngestEndpoint = WiredStreamIngestEndpoint.LogsEcs
 )]
 ```
 
 | Parameter | Default | Effect |
 |-----------|---------|--------|
-| `Type` | Required | Data category |
+| `Type` | Required | Data category (naming / search patterns) |
 | `Dataset` | Required | Source identifier |
 | `Namespace` | Environment variable | Resolved from environment when omitted |
+| `IngestEndpoint` | `Logs` | Bulk path: `logs`, `logs.ecs`, or `logs.otel` |
 | `Configuration` | None | Static class with configuration methods |
 | `Variant` | None | Registers multiple configurations for the same type |
+
+See [Wired streams](../index-management/wired-streams.md) and [ECS and OTel endpoints](../index-management/ecs-and-otel-endpoints.md).
 
 ## Variants
 

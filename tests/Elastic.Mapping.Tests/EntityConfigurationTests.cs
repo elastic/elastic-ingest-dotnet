@@ -109,5 +109,33 @@ public class EntityConfigurationTests
 	{
 		TestMappingContext.LogEntry.Context.EntityTarget.Should().Be(EntityTarget.Index);
 		TestMappingContext.NginxAccessLog.Context.EntityTarget.Should().Be(EntityTarget.DataStream);
+		TestMappingContext.WiredLogEntry.Context.EntityTarget.Should().Be(EntityTarget.WiredStream);
+	}
+
+	[Test]
+	public void WiredStream_DefaultsToLogsEndpoint()
+	{
+		TestMappingContext.WiredLogEntry.Context.WiredStreamIngestEndpoint
+			.Should().Be(WiredStreamIngestEndpoint.Logs);
+		TestMappingContext.WiredLogEntry.Context.ResolveWiredStreamBulkPathPrefix()
+			.Should().Be("logs");
+	}
+
+	[Test]
+	public void WiredStream_LogsEcsEndpointFlowsToContext()
+	{
+		TestMappingContext.WiredLogEntryEcs.Context.WiredStreamIngestEndpoint
+			.Should().Be(WiredStreamIngestEndpoint.LogsEcs);
+		TestMappingContext.WiredLogEntryEcs.Context.ResolveWiredStreamBulkPathPrefix()
+			.Should().Be("logs.ecs");
+	}
+
+	[Test]
+	public void WiredStream_LogsOtelEndpointFlowsToContext()
+	{
+		TestMappingContext.WiredLogEntryOtel.Context.WiredStreamIngestEndpoint
+			.Should().Be(WiredStreamIngestEndpoint.LogsOtel);
+		TestMappingContext.WiredLogEntryOtel.Context.ResolveWiredStreamBulkPathPrefix()
+			.Should().Be("logs.otel");
 	}
 }

@@ -64,5 +64,6 @@ Data streams support two lifecycle approaches:
 ## Related
 
 - [Time-series](../use-cases/time-series.md): end-to-end guide for time-series data
+- [Streams](streams.md): classic vs wired Streams terminology
 - [TSDB](tsdb.md): time-series database mode for metrics
 - [LogsDB](logsdb.md): LogsDB mode for log ingestion
