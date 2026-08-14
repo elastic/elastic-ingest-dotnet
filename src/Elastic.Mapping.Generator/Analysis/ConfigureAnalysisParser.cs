@@ -175,6 +175,12 @@ internal static class ConfigureAnalysisParser
 		{
 			ct.ThrowIfCancellationRequested();
 
+			// The IDE may hand generators a partial/frozen compilation (e.g. while a solution is
+			// still loading) that doesn't contain every syntax tree a symbol's declaring references
+			// point to. Guard against that instead of letting GetSemanticModel throw.
+			if (!compilation.ContainsSyntaxTree(syntaxRef.SyntaxTree))
+				continue;
+
 			var methodSyntax = syntaxRef.GetSyntax(ct);
 
 			// Obtain the semantic model for the specific syntax tree this method lives in.
