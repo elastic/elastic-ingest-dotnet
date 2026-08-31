@@ -8,8 +8,9 @@ namespace Elastic.Mapping;
 /// Registers <typeparamref name="T"/> as an Elasticsearch wired stream within an
 /// <see cref="ElasticsearchMappingContextAttribute"/> context.
 /// <para>
-/// Wired streams send data to the Elasticsearch <c>/logs</c> endpoint. Bootstrap is fully
-/// managed by Elasticsearch — no index templates or component templates are created.
+/// Wired streams send data to a managed Elasticsearch bulk endpoint
+/// (<c>logs</c>, <c>logs.ecs</c>, or <c>logs.otel</c> — see <see cref="IngestEndpoint"/>).
+/// Bootstrap is fully managed by Elasticsearch — no index templates or component templates are created.
 /// </para>
 /// <para>
 /// Like data streams, names follow the <c>{type}-{dataset}-{namespace}</c> convention.
@@ -58,4 +59,16 @@ public sealed class WiredStreamAttribute<T> : Attribute where T : class
 	/// with different configurations.
 	/// </summary>
 	public string? Variant { get; init; }
+
+	/// <summary>
+	/// Wired stream bulk ingest endpoint. Defaults to <see cref="WiredStreamIngestEndpoint.Logs"/>
+	/// for backward compatibility.
+	/// </summary>
+	/// <remarks>
+	/// Use <see cref="WiredStreamIngestEndpoint.LogsEcs"/> when sending Elastic Common Schema
+	/// documents (e.g. from <c>Elastic.CommonSchema</c> / ecs-dotnet). Use
+	/// <see cref="WiredStreamIngestEndpoint.LogsOtel"/> for OpenTelemetry semantic conventions.
+	/// See <see href="https://www.elastic.co/docs/solutions/observability/streams/wired-streams-field-naming"/>.
+	/// </remarks>
+	public WiredStreamIngestEndpoint IngestEndpoint { get; init; } = WiredStreamIngestEndpoint.Logs;
 }

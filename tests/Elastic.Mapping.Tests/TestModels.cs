@@ -23,6 +23,25 @@ namespace Elastic.Mapping.Tests;
 	Dataset = "nginx.access",
 	Namespace = "production"
 )]
+[WiredStream<WiredLogEntry>(
+	Type = "logs",
+	Dataset = "wired.default",
+	Namespace = "test"
+)]
+[WiredStream<WiredLogEntry>(
+	Type = "logs",
+	Dataset = "wired.ecs",
+	Namespace = "test",
+	IngestEndpoint = WiredStreamIngestEndpoint.LogsEcs,
+	Variant = "Ecs"
+)]
+[WiredStream<WiredLogEntry>(
+	Type = "logs",
+	Dataset = "wired.otel",
+	Namespace = "test",
+	IngestEndpoint = WiredStreamIngestEndpoint.LogsOtel,
+	Variant = "Otel"
+)]
 [Index<SimpleDocument>(Name = "simple-docs")]
 [Index<AdvancedDocument>(Name = "advanced-docs")]
 public static partial class TestMappingContext
@@ -88,6 +107,23 @@ public class NginxAccessLog
 
 	[Ip]
 	public string? ClientIp { get; set; }
+}
+
+/// <summary>
+/// Test model for wired stream configuration (registered via context).
+/// </summary>
+public class WiredLogEntry
+{
+	[JsonPropertyName("@timestamp")]
+	[Date]
+	[Timestamp]
+	public DateTimeOffset Timestamp { get; set; }
+
+	[Text]
+	public string Message { get; set; } = string.Empty;
+
+	[Keyword]
+	public string Level { get; set; } = string.Empty;
 }
 
 /// <summary>

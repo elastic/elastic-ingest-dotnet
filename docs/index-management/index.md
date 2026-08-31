@@ -16,8 +16,11 @@ Elastic.Ingest.Elasticsearch supports several index management strategies. The r
 | Automatic lifecycle | ILM managed | No | [ILM managed](rollover/ilm-managed.md) |
 | Simplified lifecycle | Data stream lifecycle | Yes | [Data stream lifecycle](rollover/data-stream-lifecycle.md) |
 | Append-only time-series | Data streams | Yes | [Data streams](data-streams.md) |
+| Kibana classic stream | Data streams | Yes | [Streams](streams.md) |
+| Kibana wired stream | Wired Streams | Yes | [Wired streams](wired-streams.md) |
+| ECS / OTel wired ingest | Wired Streams (`logs.ecs` / `logs.otel`) | Yes | [ECS and OTel endpoints](ecs-and-otel-endpoints.md) |
 | TSDB metrics | TSDB mode | Yes | [TSDB](tsdb.md) |
-| Log ingestion | LogsDB / Wired Streams | Yes | [LogsDB](logsdb.md) |
+| Log storage optimization | LogsDB | Yes | [LogsDB](logsdb.md) |
 
 ## EntityTarget
 
@@ -26,8 +29,8 @@ The target-specific attribute on your mapping context (`[Index<T>]`, `[DataStrea
 | EntityTarget | Description | Bootstrap |
 |---|---|---|
 | `Index` | Traditional Elasticsearch index. Supports updates, upserts, aliases. | Component + index templates |
-| `DataStream` | Append-only data stream. Automatic rollover and lifecycle. | Component + data stream templates |
-| `WiredStream` | Serverless managed stream. No local bootstrap needed. | No-op |
+| `DataStream` | Append-only data stream. Automatic rollover and lifecycle. Maps to Kibana **classic** streams. | Component + data stream templates |
+| `WiredStream` | Managed wired ingest (`logs` / `logs.ecs` / `logs.otel`). No local bootstrap. | No-op |
 
 ## How bootstrap works
 

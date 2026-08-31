@@ -27,6 +27,7 @@ namespace Elastic.Mapping;
 /// <param name="SearchStrategy">Search target configuration (pattern, read alias).</param>
 /// <param name="EntityTarget">The Elasticsearch target type (Index, DataStream, WiredStream).</param>
 /// <param name="DataStreamMode">Data stream mode for specialized types (Default, LogsDb, Tsdb).</param>
+/// <param name="WiredStreamIngestEndpoint">Bulk path prefix for wired streams (<c>logs</c>, <c>logs.ecs</c>, <c>logs.otel</c>).</param>
 /// <param name="GetId">Generated accessor delegate for the [Id] property. Returns document _id.</param>
 /// <param name="GetContentHash">Generated accessor delegate for the [ContentHash] property. Returns content hash for upserts.</param>
 /// <param name="ContentHashFieldName">The JSON field name of the [ContentHash] property (resolved from [JsonPropertyName] or naming policy).</param>
@@ -53,6 +54,7 @@ public record ElasticsearchTypeContext(
 	SearchStrategy? SearchStrategy,
 	EntityTarget EntityTarget,
 	DataStreamMode DataStreamMode = DataStreamMode.Default,
+	WiredStreamIngestEndpoint WiredStreamIngestEndpoint = WiredStreamIngestEndpoint.Logs,
 	Func<object, string?>? GetId = null,
 	Func<object, string?>? GetContentHash = null,
 	string? ContentHashFieldName = null,
@@ -209,6 +211,12 @@ public record ElasticsearchTypeContext(
 			_ => MappedType?.Name.ToLowerInvariant() + "-template"
 				?? throw new InvalidOperationException("Cannot resolve template name from context.")
 		}).ToLowerInvariant();
+
+	/// <summary>
+	/// Resolves the wired stream bulk URL path prefix (<c>logs</c>, <c>logs.ecs</c>, or <c>logs.otel</c>).
+	/// </summary>
+	public string ResolveWiredStreamBulkPathPrefix() =>
+		WiredStreamIngestEndpoint.ToBulkPathPrefix();
 
 	// ── With* methods ────────────────────────────────────────────────────
 

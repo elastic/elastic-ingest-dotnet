@@ -210,6 +210,7 @@ internal static class ContextEmitter
 
 		sb.AppendLine($"{indent}\t\tglobal::Elastic.Mapping.EntityTarget.{reg.EntityConfig.EntityTarget},");
 		sb.AppendLine($"{indent}\t\tDataStreamMode: global::Elastic.Mapping.DataStreamMode.{reg.EntityConfig.DataStreamMode},");
+		sb.AppendLine($"{indent}\t\tWiredStreamIngestEndpoint: global::Elastic.Mapping.WiredStreamIngestEndpoint.{reg.EntityConfig.WiredStreamIngestEndpoint},");
 
 		EmitAccessorDelegate(sb, reg.IngestProperties.IdPropertyName, typeFqn, "GetId", false, indent + "\t\t");
 		EmitAccessorDelegate(sb, reg.IngestProperties.ContentHashPropertyName, typeFqn, "GetContentHash", false, indent + "\t\t");

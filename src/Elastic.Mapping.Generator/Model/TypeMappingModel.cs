@@ -72,7 +72,8 @@ internal sealed record DataStreamConfigModel(
 /// </summary>
 internal sealed record EntityConfigModel(
 	string EntityTarget,
-	string DataStreamMode
+	string DataStreamMode,
+	string WiredStreamIngestEndpoint = "Logs"
 );
 
 /// <summary>
