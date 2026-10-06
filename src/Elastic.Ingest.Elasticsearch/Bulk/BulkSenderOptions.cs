@@ -29,6 +29,19 @@ public sealed class BulkSenderOptions<TItem, TBody>
 	public string? Target { get; init; }
 
 	/// <summary>
+	/// Sets the <c>refresh</c> parameter of every <c>_bulk</c> request, so documents are searchable when the call returns.
+	/// Defaults to <c>null</c>: the parameter is not sent and Elasticsearch refreshes on the index's own interval.
+	/// </summary>
+	public BulkRefresh? Refresh { get; init; }
+
+	/// <summary>
+	/// The client side timeout of every <c>_bulk</c> request (<see cref="IRequestConfiguration.RequestTimeout"/>), layered on top of the transport's own configuration.
+	/// Defaults to <c>null</c>: the transport's request timeout applies.
+	/// <para>This is not Elasticsearch's server side <c>timeout</c> parameter, which limits how long the cluster waits for active shards or mapping updates.</para>
+	/// </summary>
+	public TimeSpan? RequestTimeout { get; init; }
+
+	/// <summary>
 	/// When <c>true</c> (the default) documents are serialized with the same <see cref="System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault"/>
 	/// default that channels use, so output is identical to a channel. This overrides a <c>DefaultIgnoreCondition</c> set on the
 	/// serializer context (per property <c>[JsonIgnore(Condition = ...)]</c> attributes still apply).

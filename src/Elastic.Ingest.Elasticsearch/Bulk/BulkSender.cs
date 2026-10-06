@@ -35,6 +35,7 @@ public sealed partial class BulkSender<TItem, TBody>
 	private readonly JsonTypeInfo<TBody> _typeInfo;
 	private readonly BulkRetryPolicy _retry;
 	private readonly string _url;
+	private readonly IRequestConfiguration? _requestConfiguration;
 	private readonly ArrayPool<byte> _bytePool;
 	private readonly ArrayPool<int> _intPool;
 	private readonly ArrayPool<TItem> _itemPool;
@@ -55,9 +56,33 @@ public sealed partial class BulkSender<TItem, TBody>
 		_body = options.Body;
 		_typeInfo = options.ApplyLibrarySerializerDefaults ? WithLibraryDefaults(options.BodyTypeInfo) : options.BodyTypeInfo;
 		_retry = options.Retry;
-		_url = string.IsNullOrWhiteSpace(options.Target)
-			? DefaultBulkPathAndQuery
-			: options.Target!.Trim('/') + "/" + DefaultBulkPathAndQuery;
+		_url = BuildUrl(options.Target, options.Refresh);
+
+		if (options.RequestTimeout is { } timeout)
+		{
+			if (timeout <= TimeSpan.Zero && timeout != System.Threading.Timeout.InfiniteTimeSpan)
+				throw new ArgumentOutOfRangeException(nameof(options), timeout, "RequestTimeout must be positive or Timeout.InfiniteTimeSpan.");
+			_requestConfiguration = new RequestConfiguration { RequestTimeout = timeout };
+		}
+	}
+
+	// Done once per sender: the target prefix and the refresh parameter are static for its lifetime.
+	// The built in filter_path stays untouched, there is no free form query string that could collide with it.
+	private static string BuildUrl(string? target, BulkRefresh? refresh)
+	{
+		const string bulkPrefix = "_bulk?";
+		var query = DefaultBulkPathAndQuery.Substring(bulkPrefix.Length);
+		if (refresh is { } r)
+			query = "refresh=" + r switch
+			{
+				BulkRefresh.False => "false",
+				BulkRefresh.True => "true",
+				BulkRefresh.WaitFor => "wait_for",
+				_ => throw new ArgumentOutOfRangeException(nameof(refresh), r, "Unknown BulkRefresh value.")
+			} + "&" + query;
+
+		var path = bulkPrefix + query;
+		return string.IsNullOrWhiteSpace(target) ? path : target!.Trim('/') + "/" + path;
 	}
 
 	// Copies the options of the supplied type info (keeping its resolver and converters) with the library default applied.
@@ -135,14 +160,18 @@ public sealed partial class BulkSender<TItem, TBody>
 		buffer.CompleteOperation();
 	}
 
-	private Task<BulkResponse> RequestAsync(BulkRequestBuffer buffer, CancellationToken ct) =>
-		_transport.RequestAsync<BulkResponse>(HttpMethod.POST, _url,
+	private Task<BulkResponse> RequestAsync(BulkRequestBuffer buffer, CancellationToken ct)
+	{
 #if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
-			PostData.ReadOnlyMemory(buffer.Body.WrittenMemory),
+		var body = PostData.ReadOnlyMemory(buffer.Body.WrittenMemory);
 #else
-			PostData.Bytes(buffer.Body.WrittenSpan.ToArray()),
+		var body = PostData.Bytes(buffer.Body.WrittenSpan.ToArray());
 #endif
-			ct);
+		// without a configured timeout the request is exactly what it was before
+		return _requestConfiguration is { } configuration
+			? _transport.RequestAsync<BulkResponse>(HttpMethod.POST, _url, body, configuration, ct)
+			: _transport.RequestAsync<BulkResponse>(HttpMethod.POST, _url, body, ct);
+	}
 
 	private async Task<BulkResponse> SendBufferedAsync(BulkRequestBuffer buffer, BulkRetryPolicy retry, CancellationToken ct)
 	{
@@ -263,7 +292,9 @@ public static partial class BulkSender
 		JsonTypeInfo<T> typeInfo,
 		Func<T, BulkAction> action,
 		string? target = null,
-		BulkRetryPolicy? retry = null) =>
+		BulkRetryPolicy? retry = null,
+		BulkRefresh? refresh = null,
+		TimeSpan? requestTimeout = null) =>
 		new(new BulkSenderOptions<T, T>
 		{
 			Transport = transport,
@@ -271,6 +302,8 @@ public static partial class BulkSender
 			Action = action,
 			Body = static item => item,
 			Target = target,
-			Retry = retry ?? BulkRetryPolicy.None
+			Retry = retry ?? BulkRetryPolicy.None,
+			Refresh = refresh,
+			RequestTimeout = requestTimeout
 		});
 }

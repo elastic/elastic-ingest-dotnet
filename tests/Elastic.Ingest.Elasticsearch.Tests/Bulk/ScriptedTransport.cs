@@ -26,8 +26,14 @@ public record ScriptedResponse(int HttpStatus, int[] ItemStatuses = null, Except
 }
 
 /// <summary>A captured request.</summary>
-public record CapturedRequest(string PathAndQuery, byte[] Body, int Attempt)
+public record CapturedRequest(string PathAndQuery, byte[] Body, int Attempt, TimeSpan RequestTimeout = default)
 {
+	/// <summary>The query string parameters of the request, in order.</summary>
+	public string[] Query => PathAndQuery.Contains('?') ? PathAndQuery[(PathAndQuery.IndexOf('?') + 1)..].Split('&') : System.Array.Empty<string>();
+
+	/// <summary>The path without the query string.</summary>
+	public string Path => PathAndQuery.Contains('?') ? PathAndQuery[..PathAndQuery.IndexOf('?')] : PathAndQuery;
+
 	public string BodyText => Encoding.UTF8.GetString(Body);
 	public string[] Lines => BodyText.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 }
@@ -108,7 +114,7 @@ public sealed class ScriptedTransport
 				lock (owner._requests)
 				{
 					attempt = owner._requests.Count;
-					captured = new CapturedRequest(endpoint.PathAndQuery, ms.ToArray(), attempt);
+					captured = new CapturedRequest(endpoint.PathAndQuery, ms.ToArray(), attempt, boundConfiguration.RequestTimeout);
 					owner._requests.Add(captured);
 				}
 
