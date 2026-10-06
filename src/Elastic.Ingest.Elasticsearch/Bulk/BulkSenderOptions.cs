@@ -41,6 +41,26 @@ public sealed class BulkSenderOptions<TItem, TBody>
 	/// </summary>
 	public TimeSpan? RequestTimeout { get; init; }
 
+	private Track _returnItemIdentity;
+
+	/// <summary>
+	/// The identity fields every response reports for each item, for example <c>Track.Id | Track.Index</c>. Defaults to <see cref="Track.None"/>: none.
+	/// <para><see cref="Track.Id"/> is the only way to learn an id Elasticsearch generated (an <c>index</c> or <c>create</c> action without an id),
+	/// <see cref="Track.Index"/> the only way to learn the concrete index behind an alias (<see cref="BulkAction.WithRequireAlias"/>) or a data stream.</para>
+	/// <para>Applies to every request the sender issues. Each field costs: an item that carries an id is its own object plus the id string, and the response
+	/// gets larger. Request only what you use. An index name is reused across the items of a response, so <see cref="Track.Index"/> is the cheaper one.</para>
+	/// </summary>
+	/// <exception cref="ArgumentOutOfRangeException">The value contains flags other than <see cref="Track.Id"/> and <see cref="Track.Index"/>.</exception>
+	public Track ReturnItemIdentity
+	{
+		get => _returnItemIdentity;
+		init
+		{
+			if ((value & ~(Track.Id | Track.Index)) != 0) throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown Track flags.");
+			_returnItemIdentity = value;
+		}
+	}
+
 	/// <summary>
 	/// When <c>true</c> (the default) documents are serialized with the same <see cref="System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault"/>
 	/// default that channels use, so output is identical to a channel. This overrides a <c>DefaultIgnoreCondition</c> set on the

@@ -56,7 +56,7 @@ public sealed partial class BulkSender<TItem, TBody>
 		_body = options.Body;
 		_typeInfo = options.ApplyLibrarySerializerDefaults ? WithLibraryDefaults(options.BodyTypeInfo) : options.BodyTypeInfo;
 		_retry = options.Retry;
-		_url = BuildUrl(options.Target, options.Refresh);
+		_url = BuildUrl(options.Target, options.Refresh, options.ReturnItemIdentity);
 
 		if (options.RequestTimeout is { } timeout)
 		{
@@ -68,10 +68,10 @@ public sealed partial class BulkSender<TItem, TBody>
 
 	// Done once per sender: the target prefix and the refresh parameter are static for its lifetime.
 	// The built in filter_path stays untouched, there is no free form query string that could collide with it.
-	private static string BuildUrl(string? target, BulkRefresh? refresh)
+	private static string BuildUrl(string? target, BulkRefresh? refresh, Track track)
 	{
 		const string bulkPrefix = "_bulk?";
-		var query = DefaultBulkPathAndQuery.Substring(bulkPrefix.Length);
+		var query = WithItemIdentity(DefaultBulkPathAndQuery, track).Substring(bulkPrefix.Length);
 		if (refresh is { } r)
 			query = "refresh=" + r switch
 			{
@@ -294,7 +294,8 @@ public static partial class BulkSender
 		string? target = null,
 		BulkRetryPolicy? retry = null,
 		BulkRefresh? refresh = null,
-		TimeSpan? requestTimeout = null) =>
+		TimeSpan? requestTimeout = null,
+		Track itemIdentity = Track.None) =>
 		new(new BulkSenderOptions<T, T>
 		{
 			Transport = transport,
@@ -304,6 +305,7 @@ public static partial class BulkSender
 			Target = target,
 			Retry = retry ?? BulkRetryPolicy.None,
 			Refresh = refresh,
-			RequestTimeout = requestTimeout
+			RequestTimeout = requestTimeout,
+			ReturnItemIdentity = itemIdentity
 		});
 }

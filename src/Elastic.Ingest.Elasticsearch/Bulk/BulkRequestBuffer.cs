@@ -32,6 +32,7 @@ internal sealed class BulkRequestBuffer : IDisposable
 
 	public int Count { get; private set; }
 
+
 	/// <summary>Takes the thread's cached writer and points it at the body. Always pair with <see cref="ReleaseWriter"/>.</summary>
 	public Utf8JsonWriter RentWriter()
 	{

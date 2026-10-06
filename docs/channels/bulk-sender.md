@@ -97,6 +97,34 @@ var sender = BulkSender.Create(transport, MyContext.Default.Order,
 
 Both are fixed for the lifetime of a sender. To vary them per call, keep one sender per setting. A sender is cheap, immutable and thread safe. There is deliberately no free form query string, so these options cannot collide with the built in `filter_path`.
 
+### Generated ids and resolved indices
+
+`BulkResponseItem.Id` and `BulkResponseItem.Index` report the `_id` and `_index` Elasticsearch used for each item. They are the only way to learn an id the server generated (`BulkAction.Index()` or `Create()` without an id) or the concrete index behind an alias (`WithRequireAlias()`) or a data stream. Neither is reported by default; ask for the fields you use with `ReturnItemIdentity`:
+
+```csharp
+var sender = new BulkSender<Event, Event>(new BulkSenderOptions<Event, Event>
+{
+    /* transport, action, body ... */
+    ReturnItemIdentity = Track.Id                         // or Track.Index, or Track.Id | Track.Index
+});
+
+BulkResponse response = await sender.SendAsync(events, ct);
+var generatedId = response.Items.First().Id;              // "AXx9kQ3pTzGm..." assigned by Elasticsearch
+```
+
+`BulkSender.Create(..., itemIdentity: Track.Id | Track.Index)` takes the same flags, and the channel options have the same `ReturnItemIdentity` property.
+
+| Flag | Reports | Use it for |
+|------|---------|-----------|
+| `Track.Id` | `Id`: the generated id, or the explicit id echoed back | learning ids Elasticsearch assigned |
+| `Track.Index` | `Index`: the concrete index that received the item | learning the backing index behind an alias or data stream |
+
+Each field costs something, so request only what you use. A response item that only carries an action and a status is a shared, immutable instance and allocates nothing. An item that carries an `_id` is its own object (about 56 bytes) plus the id string (about 64 bytes), and the response is larger because every item repeats the field. The index string is reused across the items of a response, so `Track.Index` costs about half of `Track.Id`. Measured for 1,000 items: 18 KB without either field, 74 KB with `Track.Index`, 138 KB with `Track.Id` or both. Many workloads, for example logs written to a data stream, need neither and pay nothing.
+
+The flags apply to every request the sender issues, retries and the batches of `IngestAllAsync` included. `response.Items[i]` still belongs to `items[i]`, carrying the identity from the attempt that settled it, and `IngestAllAsync` failures expose the same properties. A request that failed as a whole has no items, so the failures made up for it have `Id` and `Index` set to `null`.
+
+Channels work the same way: set `ReturnItemIdentity = Track.Id | Track.Index` on the channel options to have `DirectWriteAsync`, the response callbacks and `IngestAllAsync` see `Id` and `Index` for every item.
+
 ### Serialization settings
 
 By default a sender serializes documents the same way channels do: with `DefaultIgnoreCondition = WhenWritingDefault` (members holding their default value, such as `int N = 0` or a `null` string, are omitted). Output from `BulkSender` and from a channel is therefore identical for the same document.

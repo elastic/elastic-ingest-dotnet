@@ -52,9 +52,10 @@ internal sealed class ResponseItemsConverter : JsonConverter<IReadOnlyCollection
 
 		var list = new List<BulkResponseItem>();
 		var depth = reader.CurrentDepth;
+		string? lastIndex = null;
 		while (reader.Read() && reader.CurrentDepth > depth)
 		{
-			var item = JsonSerializer.Deserialize<BulkResponseItem>(ref reader, IngestSerializationContext.Default.BulkResponseItem);
+			var item = ItemConverter.ReadItem(ref reader, ref lastIndex);
 			if (item != null)
 				list.Add(item);
 		}

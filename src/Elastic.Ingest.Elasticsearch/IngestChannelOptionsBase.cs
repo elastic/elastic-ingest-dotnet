@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Elastic.Ingest.Elasticsearch.Bulk;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
 using Elastic.Transport;
@@ -40,6 +41,25 @@ public abstract class IngestChannelOptionsBase<TEvent> : TransportChannelOptions
 	#endif
 	[Obsolete("Temporary exposed expert option, used to evaluate two different approaches to serialization")]
 	public bool UseReadOnlyMemory { get; set; }
+
+	private Track _returnItemIdentity;
+
+	/// <summary>
+	/// The identity fields the <c>_bulk</c> responses report for each item, for example <c>Track.Id | Track.Index</c>, so generated ids and the
+	/// concrete index behind an alias or data stream reach <c>DirectWriteAsync</c>, the response callbacks and <c>IngestAllAsync</c>.
+	/// <para>Defaults to <see cref="Track.None"/>: nothing is reported. Every field makes responses larger and costs an allocation per item,
+	/// and many workloads, for example logs written to a data stream, do not need them.</para>
+	/// </summary>
+	/// <exception cref="ArgumentOutOfRangeException">The value contains flags other than <see cref="Track.Id"/> and <see cref="Track.Index"/>.</exception>
+	public Track ReturnItemIdentity
+	{
+		get => _returnItemIdentity;
+		set
+		{
+			if ((value & ~(Track.Id | Track.Index)) != 0) throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown Track flags.");
+			_returnItemIdentity = value;
+		}
+	}
 
 	private IJsonTypeInfoResolver? _serializerContext;
 
