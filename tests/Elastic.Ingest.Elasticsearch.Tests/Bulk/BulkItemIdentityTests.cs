@@ -18,7 +18,7 @@ using TUnit.Core;
 namespace Elastic.Ingest.Elasticsearch.Tests.Bulk;
 
 /// <summary>
-/// <c>_id</c> and <c>_index</c> of every response item (#216), requested per field with <c>ReturnItemIdentity(Track.Id | Track.Index)</c>.
+/// <c>_id</c> and <c>_index</c> of every response item (#216), requested per field with <c>ReturnItemIdentity = Track.Id | Track.Index</c>.
 /// The scripted transport answers like the server does and reports only the fields the request asked for, see <see cref="ScriptedTransport"/>.
 /// </summary>
 public class BulkItemIdentityTests
@@ -26,7 +26,7 @@ public class BulkItemIdentityTests
 	private const string BaseQuery = "filter_path=errors,error,items.*.status,items.*.error,items.*.result,items.*._version";
 	private static readonly BulkRetryPolicy NoDelay = BulkRetryPolicy.Default with { Backoff = static _ => TimeSpan.Zero };
 
-	private static BulkSenderOptions<(BulkAction, Doc), Doc> Options(ScriptedTransport t, string target = null, BulkRetryPolicy retry = null) =>
+	private static BulkSenderOptions<(BulkAction, Doc), Doc> Options(ScriptedTransport t, Track track = Track.None, string target = null, BulkRetryPolicy retry = null, BulkRefresh? refresh = null) =>
 		new()
 		{
 			Transport = t.Transport,
@@ -34,11 +34,13 @@ public class BulkItemIdentityTests
 			Action = static x => x.Item1,
 			Body = static x => x.Item2,
 			Target = target,
-			Retry = retry ?? BulkRetryPolicy.None
+			Refresh = refresh,
+			Retry = retry ?? BulkRetryPolicy.None,
+			ReturnItemIdentity = track
 		};
 
 	private static BulkSender<(BulkAction, Doc), Doc> SenderFor(ScriptedTransport t, Track track = Track.None, string target = null, BulkRetryPolicy retry = null) =>
-		new(Options(t, target, retry).ReturnItemIdentity(track));
+		new(Options(t, track, target, retry));
 
 	private static (BulkAction, Doc)[] With(int n, Func<int, BulkAction> action) =>
 		Enumerable.Range(0, n).Select(i => (action(i), new Doc($"id{i}", "n", i))).ToArray();
@@ -106,28 +108,22 @@ public class BulkItemIdentityTests
 	}
 
 	[Test]
-	public void ReturnItemIdentityAddsUpAndReturnsTheSameOptions()
+	public void ReturnItemIdentityIsAPlainOptionThatDefaultsToNothing()
 	{
-		var options = Options(ScriptedTransport.AlwaysSucceeds());
-		options.ItemIdentity.Should().Be(Track.None);
-
-		options.ReturnItemIdentity(Track.Id).Should().BeSameAs(options);
-		options.ItemIdentity.Should().Be(Track.Id);
-		options.ReturnItemIdentity(Track.None).ItemIdentity.Should().Be(Track.Id, "None never removes anything");
-		options.ReturnItemIdentity(Track.Index).ItemIdentity.Should().Be(Track.Id | Track.Index);
-		options.ReturnItemIdentity(Track.Id).ItemIdentity.Should().Be(Track.Id | Track.Index, "asking twice is harmless");
+		var t = ScriptedTransport.AlwaysSucceeds();
+		Options(t).ReturnItemIdentity.Should().Be(Track.None);
+		Options(t, Track.Id).ReturnItemIdentity.Should().Be(Track.Id);
+		Options(t, Track.Id | Track.Index).ReturnItemIdentity.Should().Be(Track.Id | Track.Index);
 	}
 
 	[Test]
-	public void UnknownFlagsAreRejectedAndLeaveTheOptionsUntouched()
+	public void UnknownFlagsAreRejectedWhenTheyAreAssigned()
 	{
-		var options = Options(ScriptedTransport.AlwaysSucceeds()).ReturnItemIdentity(Track.Id);
-
-		Action act = () => options.ReturnItemIdentity((Track)8);
-		act.Should().Throw<ArgumentOutOfRangeException>();
-		Action mixed = () => options.ReturnItemIdentity(Track.Index | (Track)4);
+		var t = ScriptedTransport.AlwaysSucceeds();
+		Action unknown = () => Options(t, (Track)8);
+		unknown.Should().Throw<ArgumentOutOfRangeException>();
+		Action mixed = () => Options(t, Track.Index | (Track)4);
 		mixed.Should().Throw<ArgumentOutOfRangeException>();
-		options.ItemIdentity.Should().Be(Track.Id);
 	}
 
 	[Test]
@@ -146,16 +142,7 @@ public class BulkItemIdentityTests
 	public async Task TrackingComposesWithRefreshAndTarget()
 	{
 		var t = ScriptedTransport.AlwaysSucceeds();
-		var options = new BulkSenderOptions<Doc, Doc>
-		{
-			Transport = t.Transport,
-			BodyTypeInfo = BulkTestContext.Default.Doc,
-			Action = static _ => BulkAction.Index(),
-			Body = static d => d,
-			Target = "p",
-			Refresh = BulkRefresh.WaitFor
-		}.ReturnItemIdentity(Track.Id);
-		await new BulkSender<Doc, Doc>(options).SendAsync(new[] { new Doc("a", "n", 1) });
+		await new BulkSender<(BulkAction, Doc), Doc>(Options(t, Track.Id, "p", refresh: BulkRefresh.WaitFor)).SendAsync(With(1, _ => BulkAction.Index()));
 
 		t.Requests.Single().PathAndQuery.Should().Be("p/_bulk?refresh=wait_for&" + BaseQuery + ",items.*._id");
 	}
@@ -206,9 +193,9 @@ public class BulkItemIdentityTests
 		var options = new IndexChannelOptions<TestDocument>(t.Transport)
 		{
 			IndexFormat = "my-index",
+			ReturnItemIdentity = track,
 			BufferOptions = new Elastic.Channels.BufferOptions { OutboundBufferMaxBytes = maxBytes, OutboundBufferMaxSize = 100 }
 		};
-		options.ReturnItemIdentity(track);
 #pragma warning disable CS0618
 		options.UseReadOnlyMemory = readOnlyMemory;
 #pragma warning restore CS0618
@@ -229,16 +216,20 @@ public class BulkItemIdentityTests
 	}
 
 	[Test]
-	public void ChannelOptionsAddUpAndRejectUnknownFlags()
+	public void ChannelOptionsDefaultToNothingAndRejectUnknownFlags()
 	{
 		var options = new IndexChannelOptions<TestDocument>(ScriptedTransport.AlwaysSucceeds().Transport);
-		options.ReturnItemIdentity(Track.Id).Should().BeSameAs(options);
-		options.ReturnItemIdentity(Track.Index);
-		options.ItemIdentity.Should().Be(Track.Id | Track.Index);
+		options.ReturnItemIdentity.Should().Be(Track.None);
 
-		Action act = () => options.ReturnItemIdentity((Track)16);
+		options.ReturnItemIdentity = Track.Id | Track.Index;
+		options.ReturnItemIdentity.Should().Be(Track.Id | Track.Index);
+
+		Action act = () => options.ReturnItemIdentity = (Track)16;
 		act.Should().Throw<ArgumentOutOfRangeException>();
-		options.ItemIdentity.Should().Be(Track.Id | Track.Index);
+		options.ReturnItemIdentity.Should().Be(Track.Id | Track.Index, "a rejected value leaves the option as it was");
+
+		options.ReturnItemIdentity = Track.None;
+		options.ReturnItemIdentity.Should().Be(Track.None, "unlike a method, assigning the property can switch it off again");
 	}
 
 	[Test]
@@ -269,10 +260,10 @@ public class BulkItemIdentityTests
 		var options = new IndexChannelOptions<TestDocument>(t.Transport)
 		{
 			IndexFormat = "my-index",
+			ReturnItemIdentity = Track.Id | Track.Index,
 			BufferOptions = new Elastic.Channels.BufferOptions { OutboundBufferMaxSize = 3, WaitHandle = done },
 			ExportResponseCallback = (r, _) => seen = r
 		};
-		options.ReturnItemIdentity(Track.Id | Track.Index);
 		using var channel = new IndexChannel<TestDocument>(options);
 		foreach (var d in Documents(3)) channel.TryWrite(d);
 		done.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();
@@ -289,9 +280,9 @@ public class BulkItemIdentityTests
 		{
 			IndexFormat = "my-index",
 			BufferOptions = new Elastic.Channels.BufferOptions { OutboundBufferMaxSize = 4, ExportMaxConcurrency = 1 },
+			ReturnItemIdentity = Track.Id,
 			ExportResponseCallback = (r, _) => { foreach (var i in r.Items) ids.Add(i.Id); }
 		};
-		options.ReturnItemIdentity(Track.Id);
 		using var channel = new IndexChannel<TestDocument>(options);
 		await channel.IngestAllAsync(Documents(10));
 
@@ -445,11 +436,7 @@ public class BulkItemIdentityTests
 		{
 			var (track, target, refresh) = x;
 			var t = ScriptedTransport.AlwaysSucceeds();
-			var options = Options(t, target).ReturnItemIdentity(track);
-			var sender = new BulkSender<(BulkAction, Doc), Doc>(refresh is null ? options : new BulkSenderOptions<(BulkAction, Doc), Doc>
-			{
-				Transport = t.Transport, BodyTypeInfo = BulkTestContext.Default.Doc, Action = static y => y.Item1, Body = static y => y.Item2, Target = target, Refresh = refresh
-			}.ReturnItemIdentity(track));
+			var sender = new BulkSender<(BulkAction, Doc), Doc>(Options(t, track, target, refresh: refresh));
 			await sender.SendAsync(With(1, _ => BulkAction.Index()));
 
 			var request = t.Requests.Single();

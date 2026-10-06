@@ -22,7 +22,7 @@ public class BulkResponseItem
 	/// <summary>
 	/// The <c>_id</c> of the document, which is the only way to learn an id Elasticsearch generated.
 	/// <c>null</c> when the response did not include it: it is only reported when requested with <see cref="Bulk.Track.Id"/>,
-	/// see <c>ReturnItemIdentity</c> on the sender and channel options, and it is not known for requests that failed as a whole.
+	/// see the <c>ReturnItemIdentity</c> option of the sender and the channels, and it is not known for requests that failed as a whole.
 	/// </summary>
 	public string? Id { get; internal set; }
 

@@ -163,8 +163,7 @@ public class BulkSenderIntegrationTests(IngestionCluster cluster) : IntegrationT
 		var index = $"{Prefix}-channel-identity";
 		await CleanupPrefixAsync(index);
 
-		var options = new IndexChannelOptions<BulkItDocClass>(Transport) { IndexFormat = index };
-		options.ReturnItemIdentity(Track.Id | Track.Index);
+		var options = new IndexChannelOptions<BulkItDocClass>(Transport) { IndexFormat = index, ReturnItemIdentity = Track.Id | Track.Index };
 		using var channel = new IndexChannel<BulkItDocClass>(options);
 		var response = await channel.DirectWriteAsync(new BulkItDocClass { Id = "x", Name = "n1" }, new BulkItDocClass { Id = "y", Name = "n2" });
 

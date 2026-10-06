@@ -56,7 +56,7 @@ public sealed partial class BulkSender<TItem, TBody>
 		_body = options.Body;
 		_typeInfo = options.ApplyLibrarySerializerDefaults ? WithLibraryDefaults(options.BodyTypeInfo) : options.BodyTypeInfo;
 		_retry = options.Retry;
-		_url = BuildUrl(options.Target, options.Refresh, options.ItemIdentity);
+		_url = BuildUrl(options.Target, options.Refresh, options.ReturnItemIdentity);
 
 		if (options.RequestTimeout is { } timeout)
 		{
@@ -305,6 +305,7 @@ public static partial class BulkSender
 			Target = target,
 			Retry = retry ?? BulkRetryPolicy.None,
 			Refresh = refresh,
-			RequestTimeout = requestTimeout
-		}.ReturnItemIdentity(itemIdentity));
+			RequestTimeout = requestTimeout,
+			ReturnItemIdentity = itemIdentity
+		});
 }

@@ -42,22 +42,23 @@ public abstract class IngestChannelOptionsBase<TEvent> : TransportChannelOptions
 	[Obsolete("Temporary exposed expert option, used to evaluate two different approaches to serialization")]
 	public bool UseReadOnlyMemory { get; set; }
 
-	/// <summary>The identity fields the <c>_bulk</c> responses report for each item. <see cref="Track.None"/> (the default) reports none, see <see cref="ReturnItemIdentity"/>.</summary>
-	public Track ItemIdentity { get; private set; }
+	private Track _returnItemIdentity;
 
 	/// <summary>
-	/// Makes the <c>_bulk</c> responses report the given identity fields for every item, so generated ids and the concrete index behind an
-	/// alias or data stream reach <c>DirectWriteAsync</c>, the response callbacks and <c>IngestAllAsync</c>.
-	/// <c>options.ReturnItemIdentity(Track.Id | Track.Index)</c> requests both. Calls add up and cannot be undone.
-	/// <para>Nothing is reported by default: every field makes responses larger and costs an allocation per item.
-	/// Many workloads, for example logs written to a data stream, do not need them.</para>
+	/// The identity fields the <c>_bulk</c> responses report for each item, for example <c>Track.Id | Track.Index</c>, so generated ids and the
+	/// concrete index behind an alias or data stream reach <c>DirectWriteAsync</c>, the response callbacks and <c>IngestAllAsync</c>.
+	/// <para>Defaults to <see cref="Track.None"/>: nothing is reported. Every field makes responses larger and costs an allocation per item,
+	/// and many workloads, for example logs written to a data stream, do not need them.</para>
 	/// </summary>
-	/// <returns>These options, for chaining.</returns>
-	public IngestChannelOptionsBase<TEvent> ReturnItemIdentity(Track track)
+	/// <exception cref="ArgumentOutOfRangeException">The value contains flags other than <see cref="Track.Id"/> and <see cref="Track.Index"/>.</exception>
+	public Track ReturnItemIdentity
 	{
-		if ((track & ~(Track.Id | Track.Index)) != 0) throw new ArgumentOutOfRangeException(nameof(track), track, "Unknown Track flags.");
-		ItemIdentity |= track;
-		return this;
+		get => _returnItemIdentity;
+		set
+		{
+			if ((value & ~(Track.Id | Track.Index)) != 0) throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown Track flags.");
+			_returnItemIdentity = value;
+		}
 	}
 
 	private IJsonTypeInfoResolver? _serializerContext;
