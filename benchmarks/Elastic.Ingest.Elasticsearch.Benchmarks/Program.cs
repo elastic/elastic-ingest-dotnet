@@ -39,5 +39,12 @@ var config = ManualConfig.Create(DefaultConfig.Instance);
 config.SummaryStyle = new SummaryStyle(CultureInfo.CurrentCulture, true, SizeUnit.B, null!, ratioStyle: BenchmarkDotNet.Columns.RatioStyle.Percentage);
 config.AddDiagnoser(MemoryDiagnoser.Default);
 
-BenchmarkRunner.Run<BulkRequestCreationWithTemplatedIndexNameBenchmarks>(config);
+if (args.Contains("--bulk-sender"))
+{
+	// quick comparison run: dotnet run -c Release -- --bulk-sender [--short]
+	if (args.Contains("--short")) config.AddJob(BenchmarkDotNet.Jobs.Job.ShortRun);
+	BenchmarkRunner.Run<BulkSenderBenchmarks>(config);
+}
+else
+	BenchmarkRunner.Run<BulkRequestCreationWithTemplatedIndexNameBenchmarks>(config);
 #endif

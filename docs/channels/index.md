@@ -24,6 +24,7 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), ctx);
 
 - [Channel configuration](composable-channel.md): options, buffer configuration, strategies, callbacks
 - [Direct write](direct-write.md): bypass buffering for synchronous request/response writes
+- [Bulk sender and pull ingestion](bulk-sender.md): send a batch or a finite sequence without a channel, or pull a sequence through one
 - [Legacy channels](legacy-channels.md): migration guide for `DataStreamChannel`, `IndexChannel`, `CatalogChannel`, and semantic channels
 
 ## Channel lifecycle
@@ -46,6 +47,7 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), ctx);
 | `WaitToWriteManyAsync(docs, ctx)` | Async batch write with backpressure. |
 | `DirectWriteAsync(docs, ctx)` | Bypasses buffering. Writes directly via `_bulk` and returns the response. |
 | `DirectWriteAsync(docs, retries, backoff, ctx)` | Same as above, with automatic per-item retry for retryable failures. |
+| `IngestAllAsync(source, maxConcurrency, ctx)` | Pulls a finite `IEnumerable` or `IAsyncEnumerable`, batches and exports it, and completes when every batch settled. |
 
 Use `response.AllItemsPersisted()` to check that every item in a `BulkResponse` succeeded (2xx).
 

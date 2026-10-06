@@ -101,13 +101,17 @@ All overloads return `Task<BulkResponse>`.
 `DirectWriteAsync` reuses the same internal export path as the buffered channel:
 
 - Same `_bulk` URL (including any index/data stream prefix)
-- Same `BulkOperationHeader` per document (create, index, update, etc.)
+- Same `BulkAction` per document (create, index, update, etc.)
 - Same NDJSON serialization via `BulkRequestDataFactory`
 - Same `BulkResponse` deserialization
 
 The only difference is that it calls the transport directly instead of writing to the inbound buffer. There is no batching and no backpressure -- the caller owns the full request lifecycle.
 
 The retry overload uses the same retryable status codes (429, 502, 503, 504) as the buffered channel. On each retry, only the documents whose items had retryable statuses are re-sent. Non-retryable failures (e.g. 400) are dropped immediately.
+
+`response.Items` always lines up position by position with the documents you passed in, also after retries: each position holds the last result for that document. A top level HTTP 429 re-sends the whole request.
+
+If you do not need a channel at all, see [bulk sender and pull ingestion](bulk-sender.md).
 
 ## Mixing buffered and direct writes
 

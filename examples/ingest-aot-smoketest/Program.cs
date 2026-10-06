@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System.Text.Json.Serialization;
+using Elastic.Ingest.Elasticsearch.Bulk;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Transport;
 
@@ -33,6 +34,21 @@ await PushToChannel(channel);
 await channel.WaitForDrainAsync();
 Console.WriteLine();
 Console.WriteLine(channel);
+
+// channel-free: one _bulk request per call, then the one-off "store this list" helper
+var sender = BulkSender.Create(transport, ExampleJsonSerializerContext.Default.MyDocument,
+	static _ => BulkAction.Create(), target: "logs-smoketest-default");
+var sent = await sender.SendAsync(new[] { new MyDocument { Message = "sent" }, new MyDocument { Message = "again" } });
+Console.WriteLine($"BulkSender status: {sent.ApiCallDetails.HttpStatusCode}");
+
+var all = await BulkSender.IngestAllAsync(transport, ExampleJsonSerializerContext.Default.MyDocument,
+	Enumerable.Range(0, 250).Select(i => new MyDocument { Message = $"doc {i}" }), "logs-smoketest-default",
+	options: new IngestAllOptions { BatchSize = 100, MaxConcurrency = 1, Retry = BulkRetryPolicy.None });
+Console.WriteLine($"IngestAllAsync read {all.Read} in {all.Batches} batches");
+
+// pull a finite sequence through the channel
+var pulled = await channel.IngestAllAsync(Enumerable.Range(0, 250).Select(i => new MyDocument { Message = $"pull {i}" }));
+Console.WriteLine($"channel.IngestAllAsync read {pulled.Read} in {pulled.Batches} batches");
 
 
 

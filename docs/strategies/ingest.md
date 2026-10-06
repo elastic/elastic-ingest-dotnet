@@ -11,11 +11,13 @@ Ingest strategies control how documents are written to Elasticsearch via the bul
 ```csharp
 public interface IDocumentIngestStrategy<in TDocument>
 {
-    BulkOperationHeader CreateBulkOperationHeader(TDocument document, string channelHash);
+    BulkAction CreateBulkOperationHeader(TDocument document, string channelHash);
     string GetBulkUrl(string defaultPath);
     string RefreshTargets { get; }
 }
 ```
+
+`BulkAction` is a small struct (`Index`, `Create`, `Update`, `Delete`, `ScriptedHashUpsert`, plus `WithRequireAlias` and `WithDynamicTemplates`), so returning one per document does not allocate. The `BulkOperationHeader` classes still work: they convert implicitly to `BulkAction`.
 
 ## Built-in strategies
 
