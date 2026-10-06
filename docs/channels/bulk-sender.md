@@ -76,6 +76,27 @@ Retry = BulkRetryPolicy.Default with
 
 Only the failed items are re-sent, without serializing them again. **`response.Items` always lines up position by position with the items you passed in**, also after retries: each position holds the last result for that item, so `response.Items[i]` belongs to `items[i]`. A top level HTTP 429 re-sends the whole request (`RetryAllOnHttp429`).
 
+### Refresh and timeout
+
+Two options apply to every request a sender sends, including retries and the batches of `IngestAllAsync`:
+
+```csharp
+var sender = BulkSender.Create(transport, MyContext.Default.Order,
+    action: static o => BulkAction.Index(id: o.Id),
+    target: "orders",
+    refresh: BulkRefresh.WaitFor,                       // POST orders/_bulk?refresh=wait_for&filter_path=...
+    requestTimeout: TimeSpan.FromSeconds(30));
+```
+
+| Option | Effect |
+|--------|--------|
+| `Refresh` | Sets the `refresh` parameter: `BulkRefresh.WaitFor` returns once the documents are visible to search without forcing a refresh, `True` refreshes the affected shards before returning, `False` sends `refresh=false`. `null` (the default) sends nothing and Elasticsearch refreshes on the index's own interval. |
+| `RequestTimeout` | The client side timeout of each `_bulk` request, layered on top of the transport's own configuration. `null` (the default) leaves the transport's timeout in place. It must be positive or `Timeout.InfiniteTimeSpan`. |
+
+`RequestTimeout` is the client's wait for the HTTP response. It is not Elasticsearch's server side `timeout` parameter, which limits how long the cluster waits for active shards or mapping updates.
+
+Both are fixed for the lifetime of a sender. To vary them per call, keep one sender per setting. A sender is cheap, immutable and thread safe. There is deliberately no free form query string, so these options cannot collide with the built in `filter_path`.
+
 ### Serialization settings
 
 By default a sender serializes documents the same way channels do: with `DefaultIgnoreCondition = WhenWritingDefault` (members holding their default value, such as `int N = 0` or a `null` string, are omitted). Output from `BulkSender` and from a channel is therefore identical for the same document.

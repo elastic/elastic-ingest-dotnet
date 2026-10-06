@@ -84,6 +84,32 @@ public class BulkSenderIntegrationTests(IngestionCluster cluster) : IntegrationT
 		await CleanupPrefixAsync(index);
 	}
 
+	private async Task<long> CountWithoutRefreshAsync(string index)
+	{
+		// deliberately no _refresh call: visibility must come from the refresh parameter of the _bulk request itself
+		var count = await Transport.RequestAsync<StringResponse>(Elastic.Transport.HttpMethod.GET, $"/{index}/_count");
+		count.ApiCallDetails.HttpStatusCode.Should().Be(200);
+		return System.Text.Json.JsonDocument.Parse(count.Body).RootElement.GetProperty("count").GetInt64();
+	}
+
+	[Test]
+	[Arguments(BulkRefresh.WaitFor)]
+	[Arguments(BulkRefresh.True)]
+	public async Task DocumentsAreSearchableWhenTheCallReturnsIfRefreshIsSet(BulkRefresh refresh)
+	{
+		var index = $"{Prefix}-refresh-{refresh.ToString().ToLowerInvariant()}";
+		await CleanupPrefixAsync(index);
+
+		var sender = BulkSender.Create(Transport, BulkItContext.Default.BulkItDoc, static d => BulkAction.Index(d.Id), target: index,
+			refresh: refresh, requestTimeout: TimeSpan.FromSeconds(30));
+		var response = await sender.SendAsync(Docs(50));
+
+		response.AllItemsPersisted().Should().BeTrue();
+		(await CountWithoutRefreshAsync(index)).Should().Be(50);
+
+		await CleanupPrefixAsync(index);
+	}
+
 	[Test]
 	public async Task StaticHelperStoresAList()
 	{
