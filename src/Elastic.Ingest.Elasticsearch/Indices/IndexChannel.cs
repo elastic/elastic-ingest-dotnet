@@ -4,6 +4,7 @@
 using System.Collections.Generic;
 using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.DataStreams;
+using Elastic.Ingest.Elasticsearch.Bulk;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Elasticsearch.Strategies;
 using Elastic.Ingest.Transport;
@@ -50,7 +51,7 @@ public class IndexChannel<TEvent, TChannelOptions> : IngestChannelBase<TEvent, T
 	protected override string BulkPathAndQuery => _ingestStrategy.GetBulkUrl(base.BulkPathAndQuery);
 
 	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
-	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent document) =>
+	protected override BulkAction CreateBulkOperationHeader(TEvent document) =>
 		_ingestStrategy.CreateBulkOperationHeader(document, ChannelHash);
 
 	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.TemplateName"/>

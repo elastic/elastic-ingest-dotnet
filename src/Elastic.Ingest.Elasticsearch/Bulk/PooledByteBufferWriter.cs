@@ -25,6 +25,9 @@ internal sealed class PooledByteBufferWriter : IBufferWriter<byte>, IDisposable
 
 	public int Capacity => _buffer.Length;
 
+	/// <summary>The backing array, valid up to <see cref="WrittenCount"/>. Only valid until the next write.</summary>
+	public byte[] RawArray => _buffer;
+
 	public ReadOnlyMemory<byte> WrittenMemory => new(_buffer, 0, _written);
 
 	public Span<byte> WrittenSpan => new(_buffer, 0, _written);

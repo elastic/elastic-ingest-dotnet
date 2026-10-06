@@ -10,10 +10,11 @@ using System.Collections.Generic;
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
+using Elastic.Ingest.Elasticsearch.Bulk;
 using Elastic.Ingest.Elasticsearch.Indices;
 using static System.Globalization.CultureInfo;
 using static Elastic.Ingest.Elasticsearch.IngestChannelStatics;
@@ -29,7 +30,7 @@ public static class BulkRequestDataFactory
 	/// <summary>
 	/// Get the NDJSON request body bytes for a list of items with a header factory and body selector.
 	/// This is the lightweight overload that does not require <see cref="IngestChannelOptionsBase{TEvent}"/>.
-	/// Only supports <see cref="UpdateOperation"/> (doc_as_upsert) and simple index/create headers.
+	/// Supports every <see cref="BulkAction"/>, delete operations are written without a body line.
 	/// </summary>
 	/// <typeparam name="TItem">The item type that drives both the header and body.</typeparam>
 	/// <typeparam name="TBody">The type serialized as the document body for each bulk line.</typeparam>
@@ -45,33 +46,16 @@ public static class BulkRequestDataFactory
 		Func<TItem, BulkOperationHeader> headerFactory,
 		Func<TItem, TBody> bodySelector)
 	{
+		var typeInfo = (JsonTypeInfo<TBody>)serializerOptions.GetTypeInfo(typeof(TBody));
 		var bufferWriter = new ArrayBufferWriter<byte>();
 		using var writer = new Utf8JsonWriter(bufferWriter, WriterOptions);
 		foreach (var item in items)
 		{
-			var header = headerFactory(item);
-			JsonSerializer.Serialize(writer, header, header.GetType(), serializerOptions);
-			bufferWriter.Write(LineFeed);
-			writer.Reset();
-
-			if (header is UpdateOperation)
-			{
-				bufferWriter.Write(DocUpdateHeaderStart);
-				writer.Reset();
-			}
-
-			var body = bodySelector(item);
-			JsonSerializer.Serialize(writer, body, serializerOptions);
-			writer.Reset();
-
-			if (header is UpdateOperation)
-			{
-				bufferWriter.Write(DocUpdateHeaderEnd);
-				writer.Reset();
-			}
-
-			bufferWriter.Write(LineFeed);
-			writer.Reset();
+			var action = BulkAction.From(headerFactory(item));
+			if (action.HasBody)
+				BulkNdjsonWriter.Write(bufferWriter, writer, in action, bodySelector(item), typeInfo);
+			else
+				BulkNdjsonWriter.WritePrefix(bufferWriter, writer, in action);
 		}
 		return bufferWriter.WrittenMemory;
 	}
@@ -84,91 +68,42 @@ public static class BulkRequestDataFactory
 	/// <param name="options">The <see cref="IngestChannelOptionsBase{TEvent}"/> for the channel where the request will be written.</param>
 	/// <param name="createHeaderFactory">A function which takes an instance of <typeparamref name="TEvent"/> and produces the operation header containing the action and optional meta data.</param>
 	/// <returns>A <see cref="ReadOnlyMemory{T}"/> of <see cref="byte"/> representing the entire request body in NDJSON format.</returns>
+	public static ReadOnlyMemory<byte> GetBytes<TEvent>(ArraySegment<TEvent> page,
+		IngestChannelOptionsBase<TEvent> options, Func<TEvent, BulkOperationHeader> createHeaderFactory) =>
+		GetBytes(page, options, e => BulkAction.From(createHeaderFactory(e)));
+
+	/// <summary>
+	/// Get the NDJSON request body bytes for a page of <typeparamref name="TEvent"/> events.
+	/// </summary>
+	/// <typeparam name="TEvent">The type for the event being ingested.</typeparam>
+	/// <param name="page">A page of <typeparamref name="TEvent"/> events.</param>
+	/// <param name="options">The <see cref="IngestChannelOptionsBase{TEvent}"/> for the channel where the request will be written.</param>
+	/// <param name="createActionFactory">A function which takes an instance of <typeparamref name="TEvent"/> and produces its <see cref="BulkAction"/>.</param>
+	/// <returns>A <see cref="ReadOnlyMemory{T}"/> of <see cref="byte"/> representing the entire request body in NDJSON format.</returns>
 	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "We always provide a static JsonTypeInfoResolver")]
 	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "We always provide a static JsonTypeInfoResolver")]
 	public static ReadOnlyMemory<byte> GetBytes<TEvent>(ArraySegment<TEvent> page,
-		IngestChannelOptionsBase<TEvent> options, Func<TEvent, BulkOperationHeader> createHeaderFactory)
+		IngestChannelOptionsBase<TEvent> options, Func<TEvent, BulkAction> createActionFactory)
 	{
 		// ArrayBufferWriter inserts comma's when serializing multiple times
-		// Hence the multiple writer.Resets() as advised on this feature request
+		// Hence the Reset() after every writer segment in BulkNdjsonWriter as advised on this feature request
 		// https://github.com/dotnet/runtime/issues/82314
 		var bufferWriter = new ArrayBufferWriter<byte>();
 		using var writer = new Utf8JsonWriter(bufferWriter, WriterOptions);
 		foreach (var @event in page.AsSpan())
 		{
-			var indexHeader = createHeaderFactory(@event);
-			JsonSerializer.Serialize(writer, indexHeader, indexHeader.GetType(), options.SerializerOptions);
-			bufferWriter.Write(LineFeed);
-			writer.Reset();
-
-			if (indexHeader is UpdateOperation)
-			{
-				bufferWriter.Write(DocUpdateHeaderStart);
-				writer.Reset();
-			}
-			if (indexHeader is ScriptedHashUpdateOperation hashUpdate)
-			{
-				bufferWriter.Write(ScriptedHashUpsertStart);
-				writer.Reset();
-				var field = Encoding.UTF8.GetBytes(hashUpdate.UpdateInformation.Field);
-				bufferWriter.Write(field);
-				writer.Reset();
-				bufferWriter.Write(ScriptedHashUpsertAfterIfCheck);
-				writer.Reset();
-
-				if (hashUpdate.UpdateInformation.UpdateScript is not null)
-				{
-					bufferWriter.Write(Encoding.UTF8.GetBytes(hashUpdate.UpdateInformation.UpdateScript));
-					writer.Reset();
-				}
-				else
-				{
-					bufferWriter.Write(ScriptedHashUpdateScript);
-					writer.Reset();
-				}
-				bufferWriter.Write(ScriptedHashElseBranchStart);
-				writer.Reset();
-				bufferWriter.Write(field);
-				writer.Reset();
-				bufferWriter.Write(ScriptedHashElseBranchEnd);
-				writer.Reset();
-				var hash = hashUpdate.UpdateInformation.Hash;
-				JsonSerializer.Serialize(writer, hash, options.SerializerOptions);
-
-				if (hashUpdate.UpdateInformation.Parameters is not null)
-					foreach (var (key, value) in hashUpdate.UpdateInformation.Parameters)
-					{
-						bufferWriter.Write(ScriptedHashParamComma);
-						writer.Reset();
-						JsonSerializer.Serialize(writer, key, options.SerializerOptions);
-						bufferWriter.Write(ScriptedHashKeySeparator);
-						writer.Reset();
-						JsonSerializer.Serialize(writer, value, options.SerializerOptions);
-					}
-
-				bufferWriter.Write(ScriptHashDocAsParameter);
-				writer.Reset();
-			}
+			var action = createActionFactory(@event);
+			if (!BulkNdjsonWriter.WritePrefix(bufferWriter, writer, in action)) continue;
 
 			if (options.EventWriter?.WriteToArrayBuffer != null)
 				options.EventWriter.WriteToArrayBuffer(bufferWriter, @event);
 			else
+			{
 				JsonSerializer.Serialize(writer, @event, options.SerializerOptions);
-			writer.Reset();
-
-			if (indexHeader is UpdateOperation)
-			{
-				bufferWriter.Write(DocUpdateHeaderEnd);
+				writer.Flush();
 				writer.Reset();
 			}
-			if (indexHeader is ScriptedHashUpdateOperation)
-			{
-				bufferWriter.Write(ScriptedHashUpsertEnd);
-				writer.Reset();
-			}
-
-			bufferWriter.Write(LineFeed);
-			writer.Reset();
+			BulkNdjsonWriter.WriteSuffix(bufferWriter, in action);
 		}
 		return bufferWriter.WrittenMemory;
 	}
@@ -184,18 +119,32 @@ public static class BulkRequestDataFactory
 	/// <param name="createHeaderFactory">A function which takes an instance of <typeparamref name="TEvent"/> and produces the operation header containing the action and optional meta data.</param>
 	/// <param name="ctx">The cancellation token to cancel operation.</param>
 	/// <returns></returns>
-	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "We always provide a static JsonTypeInfoResolver")]
-	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "We always provide a static JsonTypeInfoResolver")]
-	public static async Task WriteBufferToStreamAsync<TEvent>(ArraySegment<TEvent> page, Stream stream,
+	public static Task WriteBufferToStreamAsync<TEvent>(ArraySegment<TEvent> page, Stream stream,
 		IngestChannelOptionsBase<TEvent> options, Func<TEvent, BulkOperationHeader> createHeaderFactory,
+		CancellationToken ctx = default) =>
+		WriteBufferToStreamAsync(page, stream, options, e => BulkAction.From(createHeaderFactory(e)), ctx);
+
+	/// <summary>
+	/// Asynchronously write the NDJSON request body for a page of <typeparamref name="TEvent"/> events to <see cref="Stream"/>.
+	/// </summary>
+	/// <typeparam name="TEvent">The type for the event being ingested.</typeparam>
+	/// <param name="page">A page of <typeparamref name="TEvent"/> events.</param>
+	/// <param name="stream">The target <see cref="Stream"/> for the request.</param>
+	/// <param name="options">The <see cref="IngestChannelOptionsBase{TEvent}"/> for the channel where the request will be written.</param>
+	/// <param name="createActionFactory">A function which takes an instance of <typeparamref name="TEvent"/> and produces its <see cref="BulkAction"/>.</param>
+	/// <param name="ctx">The cancellation token to cancel operation.</param>
+	/// <returns></returns>
+	public static async Task WriteBufferToStreamAsync<TEvent>(ArraySegment<TEvent> page, Stream stream,
+		IngestChannelOptionsBase<TEvent> options, Func<TEvent, BulkAction> createActionFactory,
 		CancellationToken ctx = default)
 	{
 #if NETSTANDARD2_1_OR_GREATER || NET8_0_OR_GREATER
 		var items = page;
 #else
-			// needs cast prior to netstandard2.0
-			IReadOnlyList<TEvent> items = page;
+		// needs cast prior to netstandard2.0
+		IReadOnlyList<TEvent> items = page;
 #endif
+		using var actionWriter = new StreamActionWriter();
 		// for is okay on ArraySegment, foreach performs bad:
 		// https://antao-almada.medium.com/how-to-use-span-t-and-memory-t-c0b126aae652
 		// ReSharper disable once ForCanBeConvertedToForeach
@@ -203,8 +152,7 @@ public static class BulkRequestDataFactory
 		{
 			var @event = items[i];
 			if (@event == null) continue;
-			var indexHeader = createHeaderFactory(@event);
-			await WriteEventToStreamAsync(stream, @event, indexHeader, options, ctx).ConfigureAwait(false);
+			await WriteEventToStreamAsync(stream, @event, createActionFactory(@event), options, actionWriter, ctx).ConfigureAwait(false);
 		}
 	}
 
@@ -216,63 +164,48 @@ public static class BulkRequestDataFactory
 	[UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode", Justification = "We always provide a static JsonTypeInfoResolver")]
 	[UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "We always provide a static JsonTypeInfoResolver")]
 	internal static async Task WriteEventToStreamAsync<TEvent>(Stream stream, TEvent @event,
-		BulkOperationHeader indexHeader, IngestChannelOptionsBase<TEvent> options, CancellationToken ctx)
+		BulkAction action, IngestChannelOptionsBase<TEvent> options, StreamActionWriter actionWriter, CancellationToken ctx)
 	{
-#pragma warning disable CA1835
-		await JsonSerializer.SerializeAsync(stream, indexHeader, indexHeader.GetType(), options.SerializerOptions, ctx)
-			.ConfigureAwait(false);
-		await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
-
-		if (indexHeader is UpdateOperation)
-			await stream.WriteAsync(DocUpdateHeaderStart, 0, DocUpdateHeaderStart.Length, ctx).ConfigureAwait(false);
-
-		if (indexHeader is ScriptedHashUpdateOperation hashUpdate)
-		{
-			await stream.WriteAsync(ScriptedHashUpsertStart, 0, ScriptedHashUpsertStart.Length, ctx).ConfigureAwait(false);
-			var field = Encoding.UTF8.GetBytes(hashUpdate.UpdateInformation.Field);
-			await stream.WriteAsync(field, 0, field.Length, ctx).ConfigureAwait(false);
-			await stream.WriteAsync(ScriptedHashUpsertAfterIfCheck, 0, ScriptedHashUpsertAfterIfCheck.Length, ctx).ConfigureAwait(false);
-
-			if (hashUpdate.UpdateInformation.UpdateScript is { } script && !string.IsNullOrWhiteSpace(script))
-			{
-				var bytes = Encoding.UTF8.GetBytes(script);
-				await stream.WriteAsync(bytes, 0, bytes.Length, ctx).ConfigureAwait(false);
-			}
-			else
-				await stream.WriteAsync(ScriptedHashUpdateScript, 0, ScriptedHashUpdateScript.Length, ctx).ConfigureAwait(false);
-
-			await stream.WriteAsync(ScriptedHashElseBranchStart, 0, ScriptedHashElseBranchStart.Length, ctx).ConfigureAwait(false);
-			await stream.WriteAsync(field, 0, field.Length, ctx).ConfigureAwait(false);
-			await stream.WriteAsync(ScriptedHashElseBranchEnd, 0, ScriptedHashElseBranchEnd.Length, ctx).ConfigureAwait(false);
-
-			var hash = hashUpdate.UpdateInformation.Hash;
-			await JsonSerializer.SerializeAsync(stream, hash, options.SerializerOptions, ctx).ConfigureAwait(false);
-
-			if (hashUpdate.UpdateInformation.Parameters is { } parameters)
-				foreach (var kv in parameters)
-				{
-					await stream.WriteAsync(ScriptedHashParamComma, 0, ScriptedHashParamComma.Length, ctx).ConfigureAwait(false);
-					await JsonSerializer.SerializeAsync(stream, kv.Key, options.SerializerOptions, ctx).ConfigureAwait(false);
-					await stream.WriteAsync(ScriptedHashKeySeparator, 0, ScriptedHashKeySeparator.Length, ctx).ConfigureAwait(false);
-					await JsonSerializer.SerializeAsync(stream, kv.Value, options.SerializerOptions, ctx).ConfigureAwait(false);
-				}
-
-			await stream.WriteAsync(ScriptHashDocAsParameter, 0, ScriptHashDocAsParameter.Length, ctx).ConfigureAwait(false);
-		}
+		if (!await actionWriter.WritePrefixAsync(stream, action, ctx).ConfigureAwait(false)) return;
 
 		if (options.EventWriter?.WriteToStreamAsync != null)
 			await options.EventWriter.WriteToStreamAsync(stream, @event, ctx).ConfigureAwait(false);
 		else
 			await JsonSerializer.SerializeAsync(stream, @event, options.SerializerOptions, ctx).ConfigureAwait(false);
 
-		if (indexHeader is UpdateOperation)
-			await stream.WriteAsync(DocUpdateHeaderEnd, 0, DocUpdateHeaderEnd.Length, ctx).ConfigureAwait(false);
+		await actionWriter.WriteSuffixAsync(stream, action, ctx).ConfigureAwait(false);
+	}
 
-		if (indexHeader is ScriptedHashUpdateOperation)
-			await stream.WriteAsync(ScriptedHashUpsertEnd, 0, ScriptedHashUpsertEnd.Length, ctx).ConfigureAwait(false);
+	/// <summary>
+	/// Create the bulk action with the appropriate operation and meta data for a bulk request targeting an index.
+	/// </summary>
+	/// <typeparam name="TEvent">The type for the event being ingested.</typeparam>
+	/// <param name="event">The <typeparamref name="TEvent"/> for which the action will be produced.</param>
+	/// <param name="channelHash">Hash of channel for scripted hash updates</param>
+	/// <param name="options">The <see cref="IndexChannelOptions{TEvent}"/> for the channel.</param>
+	/// <param name="skipIndexName">Control whether the index name is included in the meta data for the operation.</param>
+	public static BulkAction CreateBulkActionForIndex<TEvent>(TEvent @event, string channelHash, IndexChannelOptions<TEvent> options, bool skipIndexName = false)
+	{
+		var indexTime = options.TimestampLookup?.Invoke(@event) ?? DateTimeOffset.Now;
+		if (options.IndexOffset.HasValue) indexTime = indexTime.ToOffset(options.IndexOffset.Value);
 
-		await stream.WriteAsync(LineFeed, 0, 1, ctx).ConfigureAwait(false);
-#pragma warning restore CA1835
+		var index = skipIndexName ? null : string.Format(InvariantCulture, options.IndexFormat, indexTime);
+		var id = options.BulkOperationIdLookup?.Invoke(@event);
+		var hasId = !string.IsNullOrWhiteSpace(id);
+
+		if (options.OperationMode == OperationMode.Index)
+			return BulkAction.Index(hasId ? id : null, index);
+
+		if (options.OperationMode == OperationMode.Create)
+			return BulkAction.Create(hasId ? id : null, index);
+
+		if (hasId && id != null && (options.BulkUpsertLookup?.Invoke(@event, id) ?? false))
+			return BulkAction.Update(id, index);
+
+		if (!string.IsNullOrWhiteSpace(channelHash) && id != null && options.ScriptedHashBulkUpsertLookup is not null)
+			return BulkAction.ScriptedHashUpsert(id, options.ScriptedHashBulkUpsertLookup.Invoke(@event, channelHash), index);
+
+		return hasId ? BulkAction.Index(id, index) : BulkAction.Create(null, index);
 	}
 
 	/// <summary>

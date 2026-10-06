@@ -5,6 +5,10 @@
 using System;
 using System.Collections.Generic;
 using Elastic.Ingest.Elasticsearch.Indices;
+using Elastic.Ingest.Elasticsearch.Serialization;
+
+// ThrowIfNull is not available on netstandard
+#pragma warning disable CA1510
 
 namespace Elastic.Ingest.Elasticsearch.Bulk;
 
@@ -87,4 +91,26 @@ public readonly struct BulkAction
 	/// <summary>Returns a copy with <paramref name="templates"/> as dynamic templates (index/create only).</summary>
 	public BulkAction WithDynamicTemplates(IReadOnlyDictionary<string, string> templates) =>
 		new(Kind, Id, IndexName, RequireAlias, templates);
+
+	/// <summary>Converts a <see cref="BulkOperationHeader"/> into the equivalent <see cref="BulkAction"/>.</summary>
+	public static BulkAction From(BulkOperationHeader header)
+	{
+		if (header is null) throw new ArgumentNullException(nameof(header));
+		var action = header switch
+		{
+			CreateOperation c => Create(c.Id, c.Index).WithTemplatesIfAny(c.DynamicTemplates),
+			IndexOperation i => Index(i.Id, i.Index).WithTemplatesIfAny(i.DynamicTemplates),
+			DeleteOperation => Delete(header.Id!, header.Index),
+			UpdateOperation => Update(header.Id!, header.Index),
+			ScriptedHashUpdateOperation s => ScriptedHashUpsert(s.Id!, s.UpdateInformation, s.Index),
+			_ => throw new ArgumentOutOfRangeException(nameof(header), header, null)
+		};
+		return header.RequireAlias == true ? action.WithRequireAlias() : action;
+	}
+
+	private BulkAction WithTemplatesIfAny(IReadOnlyDictionary<string, string>? templates) =>
+		templates is null ? this : WithDynamicTemplates(templates);
+
+	/// <summary>Converts a <see cref="BulkOperationHeader"/> into the equivalent <see cref="BulkAction"/>.</summary>
+	public static implicit operator BulkAction(BulkOperationHeader header) => From(header);
 }

@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Indices;
+using Elastic.Ingest.Elasticsearch.Bulk;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Elasticsearch.Strategies;
 using Elastic.Transport;
@@ -90,7 +91,7 @@ public abstract class CatalogIndexChannel<TDocument, TChannelOptions> : IndexCha
 	public string IndexName { get; private set; }
 
 	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
-	protected override BulkOperationHeader CreateBulkOperationHeader(TDocument document) =>
+	protected override BulkAction CreateBulkOperationHeader(TDocument document) =>
 		_ingestStrategy.CreateBulkOperationHeader(document, ChannelHash);
 
 	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.RefreshTargets"/>

@@ -5,6 +5,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Elastic.Channels.Diagnostics;
+using Elastic.Ingest.Elasticsearch.Bulk;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Elasticsearch.Strategies;
 using Elastic.Ingest.Transport;
@@ -30,7 +31,7 @@ public class DataStreamChannel<TEvent> : IngestChannelBase<TEvent, DataStreamCha
 	protected override string RefreshTargets => _ingestStrategy.RefreshTargets;
 
 	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.CreateBulkOperationHeader"/>
-	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent document) =>
+	protected override BulkAction CreateBulkOperationHeader(TEvent document) =>
 		_ingestStrategy.CreateBulkOperationHeader(document, ChannelHash);
 
 	/// <inheritdoc cref="IngestChannelBase{TEvent,TChannelOptions}.TemplateName"/>

@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Channels.Diagnostics;
+using Elastic.Ingest.Elasticsearch.Bulk;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Elasticsearch.Strategies;
 using Elastic.Ingest.Transport;
@@ -50,7 +51,7 @@ public class IngestChannel<TEvent> : IngestChannelBase<TEvent, IngestChannelOpti
 	protected override string BulkPathAndQuery => _bulkUrl;
 
 	/// <inheritdoc />
-	protected override BulkOperationHeader CreateBulkOperationHeader(TEvent document) =>
+	protected override BulkAction CreateBulkOperationHeader(TEvent document) =>
 		_strategy.DocumentIngest.CreateBulkOperationHeader(document, ChannelHash);
 
 	/// <inheritdoc />

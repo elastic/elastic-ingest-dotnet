@@ -27,9 +27,9 @@ public class BulkSenderPropertyTests
 	private static readonly Gen<string> Text = Gen.OneOfConst(Pieces).Array[0, 8].Select(p => string.Concat(p));
 	private static readonly Gen<string> NonBlank = Text.Select(s => "k" + s);
 	private static readonly Gen<string> MaybeNull = Gen.Frequency((1, Gen.Const((string)null)), (4, NonBlank));
-	private static readonly Gen<Doc> Docs = Gen.Select(NonBlank, Text, Gen.Int, (id, name, n) => new Doc(id, name, n));
+	internal static readonly Gen<Doc> Docs = Gen.Select(NonBlank, Text, Gen.Int, (id, name, n) => new Doc(id, name, n));
 
-	private static readonly Gen<BulkAction> Actions =
+	internal static readonly Gen<BulkAction> Actions =
 		Gen.Select(Gen.Int[0, 5], MaybeNull, MaybeNull, NonBlank, Gen.Bool, Gen.Bool, (kind, id, index, nonNullId, alias, templates) =>
 		{
 			BulkAction a = kind switch

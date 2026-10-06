@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using Elastic.Ingest.Elasticsearch.Bulk;
 using Elastic.Ingest.Elasticsearch.Indices;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Mapping;
@@ -62,7 +63,7 @@ public class TypeContextIndexIngestStrategy<TDocument> : IDocumentIngestStrategy
 	}
 
 	/// <inheritdoc />
-	public BulkOperationHeader CreateBulkOperationHeader(TDocument document, string channelHash)
+	public BulkAction CreateBulkOperationHeader(TDocument document, string channelHash)
 	{
 		var indexTime = _typeContext.GetTimestamp != null
 			? _typeContext.GetTimestamp(document!) ?? DateTimeOffset.Now
@@ -88,22 +89,16 @@ public class TypeContextIndexIngestStrategy<TDocument> : IDocumentIngestStrategy
 					? _hashInfoFactory(document!, _typeContext.ContentHashFieldName ?? "content_hash", combinedHash)
 					: new HashedBulkUpdate(
 						_typeContext.ContentHashFieldName ?? "content_hash", combinedHash);
-				return _skipIndexNameOnOperations
-					? new ScriptedHashUpdateOperation { Id = id, UpdateInformation = hashInfo }
-					: new ScriptedHashUpdateOperation { Id = id, Index = index, UpdateInformation = hashInfo };
+				return BulkAction.ScriptedHashUpsert(id, hashInfo, _skipIndexNameOnOperations ? null : index);
 			}
 		}
 
 		// Has ID → IndexOperation
 		if (!string.IsNullOrWhiteSpace(id))
-			return _skipIndexNameOnOperations
-				? new IndexOperation { Id = id }
-				: new IndexOperation { Index = index, Id = id };
+			return BulkAction.Index(id, _skipIndexNameOnOperations ? null : index);
 
 		// No ID → CreateOperation
-		return _skipIndexNameOnOperations
-			? new CreateOperation()
-			: new CreateOperation { Index = index };
+		return BulkAction.Create(null, _skipIndexNameOnOperations ? null : index);
 	}
 
 	/// <inheritdoc />
