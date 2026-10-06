@@ -4,6 +4,7 @@
 
 using System;
 using System.Buffers;
+using System.Runtime.CompilerServices;
 
 namespace Elastic.Channels.Buffers;
 
@@ -35,5 +36,15 @@ internal class OutboundBuffer<TEvent>(InboundBuffer<TEvent> buffer) : IOutboundB
 
 	public ArraySegment<TEvent> GetArraySegment() => new(ArrayItems, 0, Count);
 
-	public void Dispose() => ArrayPool<TEvent>.Shared.Return(ArrayItems);
+	public void Dispose()
+	{
+		// The pool is shared and static, so a returned array that still references the exported events keeps them
+		// (and their payloads) alive until the pool happens to reuse or trim it.
+		// Only the populated part is cleared, so the cost stays proportional to the batch.
+#if NETSTANDARD2_1_OR_GREATER
+		if (RuntimeHelpers.IsReferenceOrContainsReferences<TEvent>())
+#endif
+			Array.Clear(ArrayItems, 0, Count);
+		ArrayPool<TEvent>.Shared.Return(ArrayItems);
+	}
 }
