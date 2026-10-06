@@ -173,8 +173,8 @@ public class MappingGeneratorTests
 	public void Context_AllProperty_ContainsAllRegistrations()
 	{
 		var all = TestMappingContext.All;
-		// 4 registrations but LogEntry, NginxAccessLog, SimpleDocument, AdvancedDocument = 4 unique types
-		all.Should().HaveCount(4);
+		// LogEntry, NginxAccessLog, SimpleDocument, AdvancedDocument and WiredLogEntry (registered once per wired endpoint) = 5 unique types
+		all.Should().HaveCount(5);
 	}
 
 	[Test]
@@ -206,7 +206,7 @@ public class MappingGeneratorTests
 	[Test]
 	public void Context_MixedStrategies_AllCompile()
 	{
-		TestMappingContext.All.Should().HaveCount(4);
+		TestMappingContext.All.Should().HaveCount(5);
 		foreach (var (_, metadata) in TestMappingContext.All)
 			metadata.PropertyToField.Should().NotBeEmpty();
 	}
