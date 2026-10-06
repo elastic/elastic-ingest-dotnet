@@ -1,0 +1,130 @@
+// Licensed to Elasticsearch B.V under one or more agreements.
+// Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
+// See the LICENSE file in the project root for more information
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using Elastic.Transport;
+
+namespace Elastic.Ingest.Elasticsearch.Tests.Bulk;
+
+/// <summary>What the scripted transport answers for one request.</summary>
+/// <param name="HttpStatus">The HTTP status of the response</param>
+/// <param name="ItemStatuses">Status per item, null returns an empty body</param>
+/// <param name="Throw">Throw this from the transport instead</param>
+public record ScriptedResponse(int HttpStatus, int[] ItemStatuses = null, Exception Throw = null)
+{
+	public static ScriptedResponse Items(params int[] statuses) => new(200, statuses);
+	public static ScriptedResponse Http(int status) => new(status);
+}
+
+/// <summary>A captured request.</summary>
+public record CapturedRequest(string PathAndQuery, byte[] Body, int Attempt)
+{
+	public string BodyText => Encoding.UTF8.GetString(Body);
+	public string[] Lines => BodyText.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+}
+
+/// <summary>
+/// An in memory transport that records every request body and answers using a script,
+/// the script receives the attempt number and the number of operations in the request.
+/// </summary>
+public sealed class ScriptedTransport
+{
+	private readonly List<CapturedRequest> _requests = new();
+	private int _inflight;
+	private int _maxInflight;
+
+	public ScriptedTransport(Func<int, CapturedRequest, ScriptedResponse> script)
+	{
+		var invoker = new ScriptedInvoker(this, script);
+		Transport = new DistributedTransport<TransportConfiguration>(
+			new TransportConfiguration(new SingleNodePool(new Uri("http://localhost:9200")), invoker)
+			{ DisablePings = true, DebugMode = true });
+	}
+
+	/// <summary>Every item succeeds with 201.</summary>
+	public static ScriptedTransport AlwaysSucceeds() =>
+		new((_, r) => ScriptedResponse.Items(Enumerable.Repeat(201, CountOperations(r)).ToArray()));
+
+	public ITransport Transport { get; }
+
+	public IReadOnlyList<CapturedRequest> Requests { get { lock (_requests) return _requests.ToArray(); } }
+
+	public int MaxInflight => _maxInflight;
+
+	/// <summary>Number of bulk operations: action lines are the ones starting with an operation name.</summary>
+	public static int CountOperations(CapturedRequest request) =>
+		request.Lines.Count(l => l.StartsWith("{\"index\":", StringComparison.Ordinal)
+			|| l.StartsWith("{\"create\":", StringComparison.Ordinal)
+			|| l.StartsWith("{\"update\":", StringComparison.Ordinal)
+			|| l.StartsWith("{\"delete\":", StringComparison.Ordinal));
+
+	private sealed class ScriptedInvoker(ScriptedTransport owner, Func<int, CapturedRequest, ScriptedResponse> script) : IRequestInvoker
+	{
+		private readonly InMemoryRequestInvoker _inner = new();
+
+		public ResponseFactory ResponseFactory => _inner.ResponseFactory;
+
+		public void Dispose() { }
+
+		public TResponse Request<TResponse>(Endpoint endpoint, BoundConfiguration boundConfiguration, PostData postData)
+			where TResponse : TransportResponse, new() =>
+			throw new NotSupportedException();
+
+		public async Task<TResponse> RequestAsync<TResponse>(Endpoint endpoint, BoundConfiguration boundConfiguration, PostData postData, CancellationToken cancellationToken)
+			where TResponse : TransportResponse, new()
+		{
+			var inflight = Interlocked.Increment(ref owner._inflight);
+			try
+			{
+				int max;
+				while (inflight > (max = owner._maxInflight))
+					if (Interlocked.CompareExchange(ref owner._maxInflight, inflight, max) == max) break;
+
+				using var ms = new MemoryStream();
+				if (postData is not null)
+					await postData.WriteAsync(ms, boundConfiguration.ConnectionSettings, false, cancellationToken).ConfigureAwait(false);
+
+				CapturedRequest captured;
+				int attempt;
+				lock (owner._requests)
+				{
+					attempt = owner._requests.Count;
+					captured = new CapturedRequest(endpoint.PathAndQuery, ms.ToArray(), attempt);
+					owner._requests.Add(captured);
+				}
+
+				var response = script(attempt, captured);
+				if (response.Throw is not null) throw response.Throw;
+
+				// give concurrent requests a chance to overlap
+				await Task.Yield();
+
+				var body = response.ItemStatuses is null ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(BuildBody(response.ItemStatuses));
+				return await _inner.BuildResponseAsync<TResponse>(endpoint, boundConfiguration, postData, cancellationToken, body, response.HttpStatus, "application/json").ConfigureAwait(false);
+			}
+			finally { Interlocked.Decrement(ref owner._inflight); }
+		}
+
+		private static string BuildBody(int[] statuses)
+		{
+			var sb = new StringBuilder("{\"errors\":").Append(statuses.Any(s => s is < 200 or > 299) ? "true" : "false").Append(",\"items\":[");
+			for (var i = 0; i < statuses.Length; i++)
+			{
+				if (i > 0) sb.Append(',');
+				var s = statuses[i];
+				sb.Append("{\"index\":{\"status\":").Append(s);
+				if (s is < 200 or > 299)
+					sb.Append(",\"error\":{\"type\":\"t").Append(s).Append("\",\"reason\":\"r").Append(s).Append("\"}");
+				sb.Append("}}");
+			}
+			return sb.Append("]}").ToString();
+		}
+	}
+}

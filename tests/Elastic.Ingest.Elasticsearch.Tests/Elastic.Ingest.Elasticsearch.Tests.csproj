@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CsCheck" Version="4.9.1" />
     <PackageReference Include="Elastic.Transport.VirtualizedCluster" Version="0.15.1" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.3.0" />
   </ItemGroup>

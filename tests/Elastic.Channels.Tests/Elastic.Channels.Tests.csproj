@@ -11,4 +11,8 @@
     <ProjectReference Include="..\..\src\Elastic.Channels\Elastic.Channels.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="CsCheck" Version="4.9.1" />
+  </ItemGroup>
+
 </Project>
