@@ -12,6 +12,7 @@ using Elastic.Channels;
 using Elastic.Channels.Diagnostics;
 using Elastic.Ingest.Elasticsearch.DataStreams;
 using Elastic.Ingest.Elasticsearch.Indices;
+using Elastic.Ingest.Elasticsearch.Bulk;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Ingest.Transport;
 using Elastic.Transport;
@@ -55,7 +56,7 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 	/// <summary>
 	/// The URL for the bulk request.
 	/// </summary>
-	protected virtual string BulkPathAndQuery => "_bulk?filter_path=error,items.*.status,items.*.error,items.*.result,items.*._version";
+	protected virtual string BulkPathAndQuery => "_bulk?filter_path=errors,error,items.*.status,items.*.error,items.*.result,items.*._version";
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryAllItems"/>
 	protected override bool RetryAllItems(BulkResponse response) => response.ApiCallDetails.HttpStatusCode == 429;
@@ -114,6 +115,7 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 		// subBatchStream: accumulates one sub-batch body — bounded by maxBytes.
 		using var eventStream = new MemoryStream();
 		using var subBatchStream = new MemoryStream();
+		using var actionWriter = new StreamActionWriter();
 
 		for (var i = 0; i < page.Count; i++)
 		{
@@ -122,7 +124,7 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 
 			// Serialize this event exactly once into the event temp buffer.
 			eventStream.SetLength(0);
-			await BulkRequestDataFactory.WriteEventToStreamAsync(eventStream, @event, header, Options, ctx)
+			await BulkRequestDataFactory.WriteEventToStreamAsync(eventStream, @event, header, Options, actionWriter, ctx)
 				.ConfigureAwait(false);
 			var eventBytes = eventStream.Length;
 
@@ -217,7 +219,8 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 	/// </param>
 	/// <param name="ctx">Optional cancellation token.</param>
 	/// <returns>The final <see cref="BulkResponse"/> from Elasticsearch. When retries occurred, the
-	/// response items reflect the last attempt for each document.</returns>
+	/// <see cref="BulkResponse.Items"/> always lines up position by position with <paramref name="documents"/>,
+	/// holding the last result for each document.</returns>
 	public async Task<BulkResponse> DirectWriteAsync(
 		IReadOnlyList<TDocument> documents,
 		int retries,
@@ -225,17 +228,16 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 		CancellationToken ctx = default)
 	{
 		backoffPeriod ??= TimeSpan.FromSeconds(2);
-		var currentDocuments = documents as TDocument[] ?? documents.ToArray();
+		var all = documents as TDocument[] ?? documents.ToArray();
+		var current = all;
+		// maps positions in the current attempt back to positions in the original documents, null means identity
+		int[]? map = null;
+		BulkResponseItem[]? merged = null;
 		BulkResponse response = null!;
 
 		for (var attempt = 0; attempt <= retries; attempt++)
 		{
-			var page = new ArraySegment<TDocument>(currentDocuments);
-			response = await ExportAsync(Options.Transport, page, ctx).ConfigureAwait(false);
-
-			// If the HTTP request itself failed, no items to inspect — stop.
-			if (!response.ApiCallDetails.HasSuccessfulStatusCode)
-				break;
+			response = await ExportAsync(Options.Transport, new ArraySegment<TDocument>(current), ctx).ConfigureAwait(false);
 
 			// 429 at HTTP level: retry all items.
 			if (RetryAllItems(response))
@@ -248,25 +250,41 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 				break;
 			}
 
+			// If the HTTP request itself failed, no items to inspect — stop.
+			if (!response.ApiCallDetails.HasSuccessfulStatusCode)
+				break;
+
 			// Inspect individual items for retryable failures.
-			if (response.Items == null)
+			// ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
+			if (response.Items == null || response.Items.Count != current.Length)
 				break;
 
-			var zipped = Zip(response, page);
-			var retryItems = zipped
-				.Where(t => RetryEvent(t))
-				.Select(t => t.Item1)
-				.ToArray();
-
-			if (retryItems.Length == 0)
-				break;
-
-			if (attempt < retries)
+			var items = response.Items as IReadOnlyList<BulkResponseItem> ?? response.Items.ToArray();
+			merged ??= new BulkResponseItem[all.Length];
+			var retryPositions = new List<int>();
+			for (var i = 0; i < items.Count; i++)
 			{
-				currentDocuments = retryItems;
-				await Task.Delay(backoffPeriod.Value, ctx).ConfigureAwait(false);
+				merged[map is null ? i : map[i]] = items[i];
+				if (RetryStatusCodes.Contains(items[i].Status)) retryPositions.Add(i);
 			}
+
+			if (retryPositions.Count == 0 || attempt == retries)
+				break;
+
+			var next = new TDocument[retryPositions.Count];
+			var nextMap = new int[retryPositions.Count];
+			for (var j = 0; j < retryPositions.Count; j++)
+			{
+				next[j] = current[retryPositions[j]];
+				nextMap[j] = map is null ? retryPositions[j] : map[retryPositions[j]];
+			}
+			current = next;
+			map = nextMap;
+			await Task.Delay(backoffPeriod.Value, ctx).ConfigureAwait(false);
 		}
+
+		// Items always line up positionally with the documents that were passed in.
+		if (merged != null) response.Items = merged;
 
 		return response;
 	}
@@ -274,7 +292,7 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 	/// <summary>
 	/// Asks implementations to create a <see cref="BulkOperationHeader"/> based on the <paramref name="document"/> being exported.
 	/// </summary>
-	protected abstract BulkOperationHeader CreateBulkOperationHeader(TDocument document);
+	protected abstract BulkAction CreateBulkOperationHeader(TDocument document);
 
 	/// <summary>  </summary>
 	protected class HeadIndexTemplateResponse : ElasticsearchResponse { }

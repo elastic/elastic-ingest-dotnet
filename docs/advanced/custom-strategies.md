@@ -67,26 +67,26 @@ public class CustomPipelineStep : IBootstrapStep
 
 ## Implementing IDocumentIngestStrategy&lt;T&gt;
 
-Custom ingest strategies control per-document bulk headers:
+Custom ingest strategies control the per-document bulk action (operation, index and id):
 
 ```csharp
-public class RoutedIngestStrategy<T> : IDocumentIngestStrategy<T>
+public class IdIngestStrategy<T> : IDocumentIngestStrategy<T>
 {
-    private readonly Func<T, string> _routingSelector;
+    private readonly Func<T, string> _idSelector;
     private readonly string _indexName;
 
-    public RoutedIngestStrategy(string indexName, Func<T, string> routingSelector)
+    public IdIngestStrategy(string indexName, Func<T, string> idSelector)
     {
         _indexName = indexName;
-        _routingSelector = routingSelector;
+        _idSelector = idSelector;
     }
 
     public string RefreshTargets => _indexName;
 
     public string GetBulkUrl(string defaultPath) => defaultPath;
 
-    public BulkOperationHeader CreateBulkOperationHeader(T document, string channelHash) =>
-        new IndexOperation { Index = _indexName, Routing = _routingSelector(document) };
+    public BulkAction CreateBulkOperationHeader(T document, string channelHash) =>
+        BulkAction.Index(id: _idSelector(document), index: _indexName);
 }
 ```
 

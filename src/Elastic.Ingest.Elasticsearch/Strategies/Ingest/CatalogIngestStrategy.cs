@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using Elastic.Ingest.Elasticsearch.Indices;
+using Elastic.Ingest.Elasticsearch.Bulk;
 using Elastic.Ingest.Elasticsearch.Serialization;
 
 namespace Elastic.Ingest.Elasticsearch.Strategies;
@@ -43,8 +44,8 @@ public class CatalogIngestStrategy<TDocument> : IDocumentIngestStrategy<TDocumen
 	public string IndexName => _indexName;
 
 	/// <inheritdoc />
-	public BulkOperationHeader CreateBulkOperationHeader(TDocument document, string channelHash) =>
-		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(document, channelHash, _options, skipIndexName: true);
+	public BulkAction CreateBulkOperationHeader(TDocument document, string channelHash) =>
+		BulkRequestDataFactory.CreateBulkActionForIndex(document, channelHash, _options, skipIndexName: true);
 
 	/// <inheritdoc />
 	public string GetBulkUrl(string baseBulkPathAndQuery) => _url;

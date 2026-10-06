@@ -20,7 +20,20 @@ Batches flush on count, age, **or byte budget** — whichever fires first — so
 
 Most users only need to install `Elastic.Ingest.Elasticsearch` — the other packages are pulled in as transitive dependencies.
 
-## Quick start
+## Quick starts
+
+How does your data arrive? Pick a shape, all of them are on [the quick starts page](https://elastic.github.io/elastic-ingest-dotnet/getting-started/quick-starts).
+
+| I have... | Use |
+|-----------|-----|
+| A live feed of events | `channel.TryWrite(doc)`: a buffered channel that batches, applies backpressure and retries |
+| A list or `IAsyncEnumerable` to store once | `BulkSender.IngestAllAsync(...)` or `channel.IngestAllAsync(...)`: pulls, batches, retries, returns when everything settled |
+| Batches I build myself (CDC, my own retry and ordering) | `BulkSender.SendAsync(batch)`: exactly one `_bulk` request, response lines up with your batch |
+| A handler that must wait until the data is stored | `channel.DirectWriteAsync(docs)` |
+
+The last three need no `Elastic.Mapping` context and are AOT and trim safe with a source generated serializer context.
+
+### Push, with a mapping context
 
 ```csharp
 // 1. Define a document
@@ -42,6 +55,23 @@ using var channel = new IngestChannel<Product>(options);
 await channel.BootstrapElasticsearchAsync(BootstrapMethod.Failure);
 channel.TryWrite(new Product { Sku = "ABC", Name = "Widget" });
 await channel.WaitForDrainAsync(TimeSpan.FromSeconds(10), ctx);
+```
+
+### Store a list
+
+```csharp
+var result = await BulkSender.IngestAllAsync(transport, MyJson.Default.Product, products, target: "products");
+foreach (var failure in result.Failures)
+    Console.WriteLine($"#{failure.Position}: {failure.Item.Status}");
+```
+
+### Send a batch
+
+```csharp
+var sender = BulkSender.Create(transport, MyJson.Default.Order,
+    action: static o => BulkAction.Index(id: o.Id, index: $"orders-{o.TenantId}"));
+
+BulkResponse response = await sender.SendAsync(batch, ct);   // Items[i] belongs to batch[i]
 ```
 
 See the [full documentation](https://elastic.github.io/elastic-ingest-dotnet/) for strategies, helpers, index management, and more.

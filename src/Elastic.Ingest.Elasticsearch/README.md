@@ -50,6 +50,30 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(10), ctx);
 
 From `[Index<Product>]` the channel infers: target an index named `products`, create component and index templates, use `index` bulk operations, and create a new index on each bootstrap.
 
+## Three ways to ingest
+
+| Shape | Use |
+|-------|-----|
+| **Push** | `channel.TryWrite(doc)`: a live feed, the channel owns threads, batching, concurrency and retry |
+| **Pull** | `channel.IngestAllAsync(source)` or `BulkSender.IngestAllAsync(...)`: you hold a finite `IEnumerable`/`IAsyncEnumerable`, the library batches and retries and returns when everything settled |
+| **Send** | `BulkSender.SendAsync(batch)`: one `_bulk` request per call, no threads, nothing to dispose, retry is opt-in |
+
+Pull and send need no `Elastic.Mapping` context, just an `ITransport` and a `JsonTypeInfo<T>` (AOT and trim safe):
+
+```csharp
+// "I have a list, store it"
+var result = await BulkSender.IngestAllAsync(transport, MyContext.Default.Product, products, target: "products");
+foreach (var failure in result.Failures)
+    Console.WriteLine($"{failure.Position}: {failure.Item.Status}");
+
+// one request, you own batching, ordering and retry; response.Items lines up with the items you sent
+var sender = BulkSender.Create(transport, MyContext.Default.Order,
+    action: static o => BulkAction.Index(id: o.Id, index: $"orders-{o.TenantId}"));
+BulkResponse response = await sender.SendAsync(batch, ct);
+```
+
+`BulkAction` also covers `Create`, `Update` (`doc_as_upsert`), `Delete` and `ScriptedHashUpsert`. Documents are serialized the same way channels do (`DefaultIgnoreCondition.WhenWritingDefault`), so the output is identical; see [bulk sender and pull ingestion](https://elastic.github.io/elastic-ingest-dotnet/channels/bulk-sender) for details and how to opt out.
+
 ## Strategies
 
 When you need more control, use the `IngestStrategies` and `BootstrapStrategies` factory methods:

@@ -22,7 +22,28 @@ public class BulkResponseItem
 
 internal sealed class ItemConverter : JsonConverter<BulkResponseItem>
 {
-	private static readonly BulkResponseItem OkayBulkResponseItem = new BulkResponseItem { Status = 200, Action = "index" };
+	private static readonly string[] ActionNames = ["index", "create", "update", "delete"];
+
+	// Successful items carry no per item state, so they are shared instead of allocated per response item.
+	private static readonly BulkResponseItem[] SuccessItems = CreateSuccessItems();
+
+	private static BulkResponseItem[] CreateSuccessItems()
+	{
+		var items = new BulkResponseItem[4 * 2];
+		for (var a = 0; a < 4; a++)
+		{
+			items[a * 2] = new BulkResponseItem { Status = 200, Action = ActionNames[a] };
+			items[a * 2 + 1] = new BulkResponseItem { Status = 201, Action = ActionNames[a] };
+		}
+		return items;
+	}
+
+	private static BulkResponseItem? GetSuccessItem(string action, int status)
+	{
+		if (status != 200 && status != 201) return null;
+		var a = action switch { "index" => 0, "create" => 1, "update" => 2, "delete" => 3, _ => -1 };
+		return a < 0 ? null : SuccessItems[a * 2 + (status == 200 ? 0 : 1)];
+	}
 
 	public override BulkResponseItem Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
 	{
@@ -51,9 +72,8 @@ internal sealed class ItemConverter : JsonConverter<BulkResponseItem>
 					break;
 			}
 		}
-		var r = status == 200
-			? OkayBulkResponseItem
-			: new BulkResponseItem { Action = action, Status = status, Error = error };
+		var r = (error is null ? GetSuccessItem(action, status) : null)
+			?? new BulkResponseItem { Action = action, Status = status, Error = error };
 
 		return r;
 	}

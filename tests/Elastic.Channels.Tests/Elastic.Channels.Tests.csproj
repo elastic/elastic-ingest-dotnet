@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- signed with the library key so the library can expose its internals to this assembly (InternalsVisibleTo) -->
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)../../build/keys/keypair.snk</AssemblyOriginatorKeyFile>
+    <NoWarn>$(NoWarn);CS8002</NoWarn>
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
 
@@ -9,6 +13,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Elastic.Channels\Elastic.Channels.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CsCheck" Version="4.9.1" />
   </ItemGroup>
 
 </Project>

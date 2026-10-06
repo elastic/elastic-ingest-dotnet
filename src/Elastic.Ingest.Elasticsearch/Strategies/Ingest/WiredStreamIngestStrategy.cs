@@ -2,7 +2,7 @@
 // Elasticsearch B.V licenses this file to you under the Apache 2.0 License.
 // See the LICENSE file in the project root for more information
 
-using Elastic.Ingest.Elasticsearch.Serialization;
+using Elastic.Ingest.Elasticsearch.Bulk;
 
 namespace Elastic.Ingest.Elasticsearch.Strategies;
 
@@ -12,7 +12,7 @@ namespace Elastic.Ingest.Elasticsearch.Strategies;
 /// </summary>
 public class WiredStreamIngestStrategy<TDocument> : IDocumentIngestStrategy<TDocument>
 {
-	private readonly CreateOperation _fixedHeader = new();
+	private static readonly BulkAction FixedAction = BulkAction.Create();
 	private readonly string _url;
 
 	/// <summary>
@@ -25,7 +25,7 @@ public class WiredStreamIngestStrategy<TDocument> : IDocumentIngestStrategy<TDoc
 	}
 
 	/// <inheritdoc />
-	public BulkOperationHeader CreateBulkOperationHeader(TDocument document, string channelHash) => _fixedHeader;
+	public BulkAction CreateBulkOperationHeader(TDocument document, string channelHash) => FixedAction;
 
 	/// <inheritdoc />
 	public string GetBulkUrl(string baseBulkPathAndQuery) => _url;

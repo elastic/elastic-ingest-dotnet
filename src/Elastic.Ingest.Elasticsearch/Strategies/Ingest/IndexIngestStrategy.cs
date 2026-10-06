@@ -4,6 +4,7 @@
 
 using System;
 using Elastic.Ingest.Elasticsearch.Indices;
+using Elastic.Ingest.Elasticsearch.Bulk;
 using Elastic.Ingest.Elasticsearch.Serialization;
 using static System.Globalization.CultureInfo;
 
@@ -41,8 +42,8 @@ public class IndexIngestStrategy<TDocument> : IDocumentIngestStrategy<TDocument>
 	}
 
 	/// <inheritdoc />
-	public BulkOperationHeader CreateBulkOperationHeader(TDocument document, string channelHash) =>
-		BulkRequestDataFactory.CreateBulkOperationHeaderForIndex(document, channelHash, _options, _skipIndexNameOnOperations);
+	public BulkAction CreateBulkOperationHeader(TDocument document, string channelHash) =>
+		BulkRequestDataFactory.CreateBulkActionForIndex(document, channelHash, _options, _skipIndexNameOnOperations);
 
 	/// <inheritdoc />
 	public string GetBulkUrl(string baseBulkPathAndQuery) => _url;

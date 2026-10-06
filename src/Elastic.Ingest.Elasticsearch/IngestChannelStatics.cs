@@ -40,7 +40,7 @@ internal static class IngestChannelStatics
 
 	public static readonly byte[] ScriptedHashUpsertEnd = " } } }"u8.ToArray();
 
-	public const string DefaultBulkPathAndQuery = "_bulk?filter_path=error,items.*.status,items.*.error,items.*.result,items.*._version";
+	public const string DefaultBulkPathAndQuery = "_bulk?filter_path=errors,error,items.*.status,items.*.error,items.*.result,items.*._version";
 
 	public static readonly HashSet<int> RetryStatusCodes = [502, 503, 504, 429];
 

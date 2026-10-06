@@ -20,6 +20,12 @@ public class BulkResponse : ElasticsearchResponse
 	[JsonConverter(typeof(ResponseItemsConverter))]
 	public IReadOnlyCollection<BulkResponseItem> Items { get; set; } = null!;
 
+	/// <summary>
+	/// <c>true</c> if at least one item failed, <c>false</c> if every item succeeded and <c>null</c> if the server did not report it.
+	/// </summary>
+	[JsonPropertyName("errors")]
+	public bool? Errors { get; set; }
+
 	/// <summary> Overall bulk error from Elasticsearch if any</summary>
 	[JsonPropertyName("error")]
 	public ErrorCause? Error { get; set; }

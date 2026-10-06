@@ -29,4 +29,9 @@
     <ProjectReference Include="..\Elastic.Mapping\Elastic.Mapping.csproj" />
   </ItemGroup>
 
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Elastic.Ingest.Elasticsearch.Tests" Key="$(TestAssemblyPublicKey)" />
+  </ItemGroup>
+
 </Project>

@@ -1,4 +1,5 @@
 toc:
   - file: index.md
   - file: composable-channel.md
+  - file: bulk-sender.md
   - file: legacy-channels.md
