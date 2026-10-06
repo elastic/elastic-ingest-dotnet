@@ -35,8 +35,6 @@ public sealed partial class BulkSender<TItem, TBody>
 	private readonly JsonTypeInfo<TBody> _typeInfo;
 	private readonly BulkRetryPolicy _retry;
 	private readonly string _url;
-	private readonly string _urlWithIdentity;
-	private readonly BulkItemIdentity _itemIdentity;
 	private readonly IRequestConfiguration? _requestConfiguration;
 	private readonly ArrayPool<byte> _bytePool;
 	private readonly ArrayPool<int> _intPool;
@@ -58,11 +56,7 @@ public sealed partial class BulkSender<TItem, TBody>
 		_body = options.Body;
 		_typeInfo = options.ApplyLibrarySerializerDefaults ? WithLibraryDefaults(options.BodyTypeInfo) : options.BodyTypeInfo;
 		_retry = options.Retry;
-		_itemIdentity = options.ItemIdentity;
-		if (_itemIdentity is not (BulkItemIdentity.Auto or BulkItemIdentity.Always or BulkItemIdentity.Never))
-			throw new ArgumentOutOfRangeException(nameof(options), _itemIdentity, "Unknown BulkItemIdentity value.");
-		_url = BuildUrl(options.Target, options.Refresh, identity: false);
-		_urlWithIdentity = BuildUrl(options.Target, options.Refresh, identity: true);
+		_url = BuildUrl(options.Target, options.Refresh, options.ItemIdentity);
 
 		if (options.RequestTimeout is { } timeout)
 		{
@@ -74,10 +68,10 @@ public sealed partial class BulkSender<TItem, TBody>
 
 	// Done once per sender: the target prefix and the refresh parameter are static for its lifetime.
 	// The built in filter_path stays untouched, there is no free form query string that could collide with it.
-	private static string BuildUrl(string? target, BulkRefresh? refresh, bool identity)
+	private static string BuildUrl(string? target, BulkRefresh? refresh, Track track)
 	{
 		const string bulkPrefix = "_bulk?";
-		var query = (identity ? WithItemIdentity(DefaultBulkPathAndQuery) : DefaultBulkPathAndQuery).Substring(bulkPrefix.Length);
+		var query = WithItemIdentity(DefaultBulkPathAndQuery, track).Substring(bulkPrefix.Length);
 		if (refresh is { } r)
 			query = "refresh=" + r switch
 			{
@@ -159,9 +153,6 @@ public sealed partial class BulkSender<TItem, TBody>
 	private void WriteItem(BulkRequestBuffer buffer, System.Text.Json.Utf8JsonWriter writer, TItem item)
 	{
 		var action = _action(item);
-		// a generated id or an alias is only visible in the response, so that request has to ask for it
-		if (action.RequireAlias || (action.Kind is BulkActionKind.Index or BulkActionKind.Create && string.IsNullOrWhiteSpace(action.Id)))
-			buffer.NeedsIdentity = true;
 		if (action.HasBody)
 			BulkNdjsonWriter.Write(buffer.Body, writer, in action, _body(item), _typeInfo);
 		else
@@ -177,11 +168,9 @@ public sealed partial class BulkSender<TItem, TBody>
 		var body = PostData.Bytes(buffer.Body.WrittenSpan.ToArray());
 #endif
 		// without a configured timeout the request is exactly what it was before
-		// retries of a request keep its identity setting: the flag is never reset
-		var url = _itemIdentity == BulkItemIdentity.Always || (_itemIdentity == BulkItemIdentity.Auto && buffer.NeedsIdentity) ? _urlWithIdentity : _url;
 		return _requestConfiguration is { } configuration
-			? _transport.RequestAsync<BulkResponse>(HttpMethod.POST, url, body, configuration, ct)
-			: _transport.RequestAsync<BulkResponse>(HttpMethod.POST, url, body, ct);
+			? _transport.RequestAsync<BulkResponse>(HttpMethod.POST, _url, body, configuration, ct)
+			: _transport.RequestAsync<BulkResponse>(HttpMethod.POST, _url, body, ct);
 	}
 
 	private async Task<BulkResponse> SendBufferedAsync(BulkRequestBuffer buffer, BulkRetryPolicy retry, CancellationToken ct)
@@ -306,7 +295,7 @@ public static partial class BulkSender
 		BulkRetryPolicy? retry = null,
 		BulkRefresh? refresh = null,
 		TimeSpan? requestTimeout = null,
-		BulkItemIdentity itemIdentity = BulkItemIdentity.Auto) =>
+		Track itemIdentity = Track.None) =>
 		new(new BulkSenderOptions<T, T>
 		{
 			Transport = transport,
@@ -316,7 +305,6 @@ public static partial class BulkSender
 			Target = target,
 			Retry = retry ?? BulkRetryPolicy.None,
 			Refresh = refresh,
-			RequestTimeout = requestTimeout,
-			ItemIdentity = itemIdentity
-		});
+			RequestTimeout = requestTimeout
+		}.ReturnItemIdentity(itemIdentity));
 }

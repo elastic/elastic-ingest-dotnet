@@ -18,120 +18,135 @@ using TUnit.Core;
 namespace Elastic.Ingest.Elasticsearch.Tests.Bulk;
 
 /// <summary>
-/// <c>_id</c> and <c>_index</c> of every response item (#216): server generated ids and alias resolved indices must come back on every path.
-/// The scripted transport answers like the server does, see <see cref="ScriptedTransport"/>.
+/// <c>_id</c> and <c>_index</c> of every response item (#216), requested per field with <c>ReturnItemIdentity(Track.Id | Track.Index)</c>.
+/// The scripted transport answers like the server does and reports only the fields the request asked for, see <see cref="ScriptedTransport"/>.
 /// </summary>
 public class BulkItemIdentityTests
 {
-	private const string IdentityFilter = "items.*._id,items.*._index";
+	private const string BaseQuery = "filter_path=errors,error,items.*.status,items.*.error,items.*.result,items.*._version";
 	private static readonly BulkRetryPolicy NoDelay = BulkRetryPolicy.Default with { Backoff = static _ => TimeSpan.Zero };
 
-	private static BulkSender<(BulkAction, Doc), Doc> SenderFor(ScriptedTransport t, BulkItemIdentity identity = BulkItemIdentity.Auto, string target = null, BulkRetryPolicy retry = null) =>
-		new(new BulkSenderOptions<(BulkAction, Doc), Doc>
+	private static BulkSenderOptions<(BulkAction, Doc), Doc> Options(ScriptedTransport t, string target = null, BulkRetryPolicy retry = null) =>
+		new()
 		{
 			Transport = t.Transport,
 			BodyTypeInfo = BulkTestContext.Default.Doc,
 			Action = static x => x.Item1,
 			Body = static x => x.Item2,
 			Target = target,
-			ItemIdentity = identity,
 			Retry = retry ?? BulkRetryPolicy.None
-		});
+		};
+
+	private static BulkSender<(BulkAction, Doc), Doc> SenderFor(ScriptedTransport t, Track track = Track.None, string target = null, BulkRetryPolicy retry = null) =>
+		new(Options(t, target, retry).ReturnItemIdentity(track));
 
 	private static (BulkAction, Doc)[] With(int n, Func<int, BulkAction> action) =>
 		Enumerable.Range(0, n).Select(i => (action(i), new Doc($"id{i}", "n", i))).ToArray();
 
-	private static bool Asked(CapturedRequest r) => r.PathAndQuery.Contains(IdentityFilter, StringComparison.Ordinal);
+	private static bool AskedId(CapturedRequest r) => r.PathAndQuery.Contains("items.*._id", StringComparison.Ordinal);
 
-	// ---- when the response is asked for identity ----
+	private static bool AskedIndex(CapturedRequest r) => r.PathAndQuery.Contains("items.*._index", StringComparison.Ordinal);
+
+	// ---- per field switch ----
 
 	[Test]
-	public async Task RequestsWhereEveryActionHasAnIdAndAConcreteIndexDoNotPayForIdentity()
+	public async Task NothingIsReportedByDefaultNotEvenForGeneratedIdsAndAliases()
 	{
 		var t = new ScriptedTransport((_, r) => ScriptedResponse.Items(Enumerable.Repeat(201, ScriptedTransport.CountOperations(r)).ToArray()));
-		var response = await SenderFor(t).SendAsync(With(4, i => BulkAction.Index($"id{i}", "idx")));
+		var response = await SenderFor(t, target: "p").SendAsync(With(4, i => i % 2 == 0 ? BulkAction.Index() : BulkAction.Index($"a{i}", "alias").WithRequireAlias()));
 
-		Asked(t.Requests.Single()).Should().BeFalse();
+		t.Requests.Single().PathAndQuery.Should().Be("p/_bulk?" + BaseQuery, "logs written to a data stream are the typical case that needs neither");
 		response.Items.Should().OnlyContain(i => i.Id == null && i.Index == null);
 		var items = response.Items.ToArray();
-		items[0].Should().BeSameAs(items[3], "items without per item state are still shared, so the common path allocates nothing extra");
+		items[0].Should().BeSameAs(items[3], "items without per item state are shared, so the default path allocates nothing extra");
 	}
 
 	[Test]
-	public async Task GeneratedIdsAreReported()
+	public async Task TrackIdReportsOnlyTheId()
 	{
 		var t = ScriptedTransport.AlwaysSucceeds();
-		var response = await SenderFor(t, target: "products").SendAsync(With(3, _ => BulkAction.Index()));
+		var response = await SenderFor(t, Track.Id, "products").SendAsync(With(3, _ => BulkAction.Create()));
 
-		Asked(t.Requests.Single()).Should().BeTrue();
+		var request = t.Requests.Single();
+		request.PathAndQuery.Should().Be("products/_bulk?" + BaseQuery + ",items.*._id");
+		AskedIndex(request).Should().BeFalse();
 		response.Items.Select(i => i.Id).Should().Equal("gen-0-0", "gen-0-1", "gen-0-2");
-		response.Items.Should().OnlyContain(i => i.Index == "products");
+		response.Items.Should().OnlyContain(i => i.Index == null);
 	}
 
 	[Test]
-	public async Task AnAliasWriteReportsTheConcreteIndexBehindIt()
+	public async Task TrackIndexReportsOnlyTheConcreteIndexBehindAnAlias()
 	{
 		var t = ScriptedTransport.AlwaysSucceeds();
-		var response = await SenderFor(t).SendAsync(With(2, i => BulkAction.Index($"id{i}", "orders-write").WithRequireAlias()));
+		var response = await SenderFor(t, Track.Index).SendAsync(With(2, i => BulkAction.Index($"id{i}", "orders-write").WithRequireAlias()));
 
-		Asked(t.Requests.Single()).Should().BeTrue();
-		response.Items.Select(i => (i.Id, i.Index)).Should().Equal(("id0", "orders-write-000001"), ("id1", "orders-write-000001"));
+		var request = t.Requests.Single();
+		request.PathAndQuery.Should().Be("_bulk?" + BaseQuery + ",items.*._index");
+		AskedId(request).Should().BeFalse();
+		response.Items.Should().OnlyContain(i => i.Index == "orders-write-000001" && i.Id == null);
 	}
 
 	[Test]
-	public async Task OneIdLessItemMakesTheWholeRequestReportIdentityForEveryItem()
+	public async Task BothFlagsReportBothAndEchoExplicitIds()
 	{
 		var t = ScriptedTransport.AlwaysSucceeds();
-		var response = await SenderFor(t, target: "p").SendAsync(With(3, i => i == 1 ? BulkAction.Create() : BulkAction.Index($"id{i}")));
+		var response = await SenderFor(t, Track.Id | Track.Index, "p").SendAsync(With(3, i => i == 1 ? BulkAction.Create() : BulkAction.Index($"id{i}")));
 
-		response.Items.Select(i => i.Id).Should().Equal("id0", "gen-0-1", "id2");
+		t.Requests.Single().PathAndQuery.Should().Be("p/_bulk?" + BaseQuery + ",items.*._id,items.*._index");
+		response.Items.Select(i => (i.Id, i.Index)).Should().Equal(("id0", "p"), ("gen-0-1", "p"), ("id2", "p"));
 	}
 
 	[Test]
-	public async Task AlwaysReportsEvenWhenEveryIdIsKnownAndNeverSuppressesEvenForGeneratedIds()
-	{
-		var always = ScriptedTransport.AlwaysSucceeds();
-		var withIds = await SenderFor(always, BulkItemIdentity.Always, "p").SendAsync(With(2, i => BulkAction.Index($"id{i}")));
-		withIds.Items.Select(i => (i.Id, i.Index)).Should().Equal(("id0", "p"), ("id1", "p"));
-
-		var never = ScriptedTransport.AlwaysSucceeds();
-		var generated = await SenderFor(never, BulkItemIdentity.Never, "p").SendAsync(With(2, _ => BulkAction.Index()));
-		Asked(never.Requests.Single()).Should().BeFalse();
-		generated.Items.Should().OnlyContain(i => i.Id == null && i.Index == null);
-	}
-
-	[Test]
-	public async Task UpdatesAndDeletesWithExplicitIdsDoNotAskForIdentity()
+	public async Task TheSwitchIsPerRequestOfTheSenderNotPerItemSoUpdatesAndDeletesReportToo()
 	{
 		var t = ScriptedTransport.AlwaysSucceeds();
-		await SenderFor(t).SendAsync(With(4, i => i % 2 == 0 ? BulkAction.Update($"id{i}", "idx") : BulkAction.Delete($"id{i}", "idx")));
-		Asked(t.Requests.Single()).Should().BeFalse();
+		var response = await SenderFor(t, Track.Id | Track.Index, "p").SendAsync(With(4, i => i % 2 == 0 ? BulkAction.Update($"id{i}") : BulkAction.Delete($"id{i}")));
+
+		response.Items.Select(i => i.Id).Should().Equal("id0", "id1", "id2", "id3");
 	}
 
 	[Test]
-	public void AnUnknownIdentityModeIsRejectedWhenTheSenderIsCreated()
+	public void ReturnItemIdentityAddsUpAndReturnsTheSameOptions()
 	{
-		var t = ScriptedTransport.AlwaysSucceeds();
-		Action act = () => SenderFor(t, (BulkItemIdentity)42);
+		var options = Options(ScriptedTransport.AlwaysSucceeds());
+		options.ItemIdentity.Should().Be(Track.None);
+
+		options.ReturnItemIdentity(Track.Id).Should().BeSameAs(options);
+		options.ItemIdentity.Should().Be(Track.Id);
+		options.ReturnItemIdentity(Track.None).ItemIdentity.Should().Be(Track.Id, "None never removes anything");
+		options.ReturnItemIdentity(Track.Index).ItemIdentity.Should().Be(Track.Id | Track.Index);
+		options.ReturnItemIdentity(Track.Id).ItemIdentity.Should().Be(Track.Id | Track.Index, "asking twice is harmless");
+	}
+
+	[Test]
+	public void UnknownFlagsAreRejectedAndLeaveTheOptionsUntouched()
+	{
+		var options = Options(ScriptedTransport.AlwaysSucceeds()).ReturnItemIdentity(Track.Id);
+
+		Action act = () => options.ReturnItemIdentity((Track)8);
 		act.Should().Throw<ArgumentOutOfRangeException>();
+		Action mixed = () => options.ReturnItemIdentity(Track.Index | (Track)4);
+		mixed.Should().Throw<ArgumentOutOfRangeException>();
+		options.ItemIdentity.Should().Be(Track.Id);
 	}
 
 	[Test]
-	public async Task TheCreateHelperPassesTheModeThrough()
+	public async Task TheCreateHelperPassesTheFlagsThrough()
 	{
 		var t = ScriptedTransport.AlwaysSucceeds();
-		var sender = BulkSender.Create(t.Transport, BulkTestContext.Default.Doc, static d => BulkAction.Index(d.Id), target: "p", itemIdentity: BulkItemIdentity.Always);
+		var sender = BulkSender.Create(t.Transport, BulkTestContext.Default.Doc, static d => BulkAction.Index(d.Id), target: "p", itemIdentity: Track.Id | Track.Index);
 		var response = await sender.SendAsync(new[] { new Doc("a", "n", 1) });
 
-		Asked(t.Requests.Single()).Should().BeTrue();
+		AskedId(t.Requests.Single()).Should().BeTrue();
+		AskedIndex(t.Requests.Single()).Should().BeTrue();
 		response.Items.Single().Id.Should().Be("a");
 	}
 
 	[Test]
-	public async Task IdentityComposesWithRefreshAndTarget()
+	public async Task TrackingComposesWithRefreshAndTarget()
 	{
 		var t = ScriptedTransport.AlwaysSucceeds();
-		var sender = new BulkSender<Doc, Doc>(new BulkSenderOptions<Doc, Doc>
+		var options = new BulkSenderOptions<Doc, Doc>
 		{
 			Transport = t.Transport,
 			BodyTypeInfo = BulkTestContext.Default.Doc,
@@ -139,24 +154,24 @@ public class BulkItemIdentityTests
 			Body = static d => d,
 			Target = "p",
 			Refresh = BulkRefresh.WaitFor
-		});
-		await sender.SendAsync(new[] { new Doc("a", "n", 1) });
+		}.ReturnItemIdentity(Track.Id);
+		await new BulkSender<Doc, Doc>(options).SendAsync(new[] { new Doc("a", "n", 1) });
 
-		t.Requests.Single().PathAndQuery.Should().Be("p/_bulk?refresh=wait_for&filter_path=errors,error,items.*.status,items.*.error,items.*.result,items.*._version,items.*._id,items.*._index");
+		t.Requests.Single().PathAndQuery.Should().Be("p/_bulk?refresh=wait_for&" + BaseQuery + ",items.*._id");
 	}
 
 	// ---- every path a response takes ----
 
 	[Test]
-	public async Task RetriesKeepAskingAndEachPositionKeepsTheIdentityOfTheAttemptThatSettledIt()
+	public async Task RetriesKeepTheFlagsAndEachPositionKeepsTheIdentityOfTheAttemptThatSettledIt()
 	{
 		var t = new ScriptedTransport((attempt, r) => attempt == 0
 			? ScriptedResponse.Items(201, 503, 201, 503)
 			: ScriptedResponse.Items(Enumerable.Repeat(201, ScriptedTransport.CountOperations(r)).ToArray()));
-		var response = await SenderFor(t, target: "p", retry: NoDelay).SendAsync(With(4, _ => BulkAction.Index()));
+		var response = await SenderFor(t, Track.Id | Track.Index, "p", NoDelay).SendAsync(With(4, _ => BulkAction.Index()));
 
 		t.Requests.Should().HaveCount(2);
-		t.Requests.Should().OnlyContain(r => Asked(r), "the retried subset is asked for identity like the request it came from");
+		t.Requests.Should().OnlyContain(r => AskedId(r) && AskedIndex(r), "the retried subset asks for the same fields as the request it came from");
 		// position 1 and 3 were re-sent as positions 0 and 1 of the second request
 		response.Items.Select(i => i.Id).Should().Equal("gen-0-0", "gen-1-0", "gen-0-2", "gen-1-1");
 		response.Items.Should().OnlyContain(i => i.Index == "p");
@@ -166,8 +181,7 @@ public class BulkItemIdentityTests
 	public async Task IngestAllFailuresCarryTheIdAndIndexOfTheFailedItem()
 	{
 		var t = new ScriptedTransport((_, r) => ScriptedResponse.Items(Enumerable.Range(0, ScriptedTransport.CountOperations(r)).Select(i => i == 1 ? 400 : 201).ToArray()));
-		var sender = SenderFor(t, target: "p").AsDocSender();
-		var result = await sender.IngestAllAsync(With(5, _ => BulkAction.Index()), new IngestAllOptions { BatchSize = 3, MaxConcurrency = 1 });
+		var result = await SenderFor(t, Track.Id | Track.Index, "p").IngestAllAsync(With(5, _ => BulkAction.Index()), new IngestAllOptions { BatchSize = 3, MaxConcurrency = 1 });
 
 		// positions 1 (batch 1) and 4 (batch 2, position 1 of that request) fail
 		result.Failures.Select(f => (f.Position, f.Item.Id, f.Item.Index, f.Item.Status)).Should().Equal(
@@ -179,7 +193,7 @@ public class BulkItemIdentityTests
 	public async Task ARequestThatFailedAsAWholeHasNoItemsToReportIdentityFor()
 	{
 		var t = new ScriptedTransport((_, _) => ScriptedResponse.Http(500));
-		var result = await SenderFor(t, target: "p").AsDocSender().IngestAllAsync(With(2, _ => BulkAction.Index()));
+		var result = await SenderFor(t, Track.Id | Track.Index, "p").IngestAllAsync(With(2, _ => BulkAction.Index()));
 
 		result.Failures.Should().HaveCount(2);
 		result.Failures.Should().OnlyContain(f => f.Item.Id == null && f.Item.Index == null);
@@ -187,14 +201,14 @@ public class BulkItemIdentityTests
 
 	// ---- channels ----
 
-	private static IndexChannel<TestDocument> Channel(ScriptedTransport t, bool identity, bool readOnlyMemory, long? maxBytes = null)
+	private static IndexChannel<TestDocument> Channel(ScriptedTransport t, Track track, bool readOnlyMemory, long? maxBytes = null)
 	{
 		var options = new IndexChannelOptions<TestDocument>(t.Transport)
 		{
 			IndexFormat = "my-index",
-			ReturnItemIdentity = identity,
 			BufferOptions = new Elastic.Channels.BufferOptions { OutboundBufferMaxBytes = maxBytes, OutboundBufferMaxSize = 100 }
 		};
+		options.ReturnItemIdentity(track);
 #pragma warning disable CS0618
 		options.UseReadOnlyMemory = readOnlyMemory;
 #pragma warning restore CS0618
@@ -204,37 +218,50 @@ public class BulkItemIdentityTests
 	private static TestDocument[] Documents(int n) => Enumerable.Range(0, n).Select(i => new TestDocument { Timestamp = DateTimeOffset.UnixEpoch.AddSeconds(i) }).ToArray();
 
 	[Test]
-	public async Task ChannelsDoNotAskForIdentityByDefault()
+	public async Task ChannelsReportNothingByDefault()
 	{
 		var t = ScriptedTransport.AlwaysSucceeds();
-		using var channel = Channel(t, identity: false, readOnlyMemory: true);
+		using var channel = Channel(t, Track.None, readOnlyMemory: true);
 		var response = await channel.DirectWriteAsync(Documents(2));
 
-		t.Requests.Single().PathAndQuery.Should().Be("my-index/_bulk?filter_path=errors,error,items.*.status,items.*.error,items.*.result,items.*._version");
+		t.Requests.Single().PathAndQuery.Should().Be("my-index/_bulk?" + BaseQuery);
 		response.Items.Should().OnlyContain(i => i.Id == null && i.Index == null);
 	}
 
 	[Test]
-	[Arguments(true, null)]
-	[Arguments(false, null)]
-	[Arguments(true, 200L)]
-	[Arguments(false, 200L)]
-	public async Task ChannelsReportIdentityOnEveryExportPathWhenAsked(bool readOnlyMemory, long? maxBytes)
+	public void ChannelOptionsAddUpAndRejectUnknownFlags()
 	{
-		var t = ScriptedTransport.AlwaysSucceeds();
-		using var channel = Channel(t, identity: true, readOnlyMemory, maxBytes);
-		var response = await channel.DirectWriteAsync(Documents(6));
+		var options = new IndexChannelOptions<TestDocument>(ScriptedTransport.AlwaysSucceeds().Transport);
+		options.ReturnItemIdentity(Track.Id).Should().BeSameAs(options);
+		options.ReturnItemIdentity(Track.Index);
+		options.ItemIdentity.Should().Be(Track.Id | Track.Index);
 
-		if (maxBytes is not null) t.Requests.Count.Should().BeGreaterThan(1, "the byte budget splits the batch into sub-requests whose items are merged");
-		t.Requests.Should().OnlyContain(r => Asked(r));
-		var items = response.Items.ToArray();
-		items.Should().HaveCount(6);
-		items.Should().OnlyContain(i => i.Id != null && i.Index == "my-index");
-		items.Select(i => i.Id).Distinct().Should().HaveCount(6, "every position keeps the id of its own response item");
+		Action act = () => options.ReturnItemIdentity((Track)16);
+		act.Should().Throw<ArgumentOutOfRangeException>();
+		options.ItemIdentity.Should().Be(Track.Id | Track.Index);
 	}
 
 	[Test]
-	public async Task PushedEventsReachTheResponseCallbackWithTheirIdentity()
+	[Arguments(true, null, Track.Id)]
+	[Arguments(false, null, Track.Index)]
+	[Arguments(true, 200L, Track.Id | Track.Index)]
+	[Arguments(false, 200L, Track.Id | Track.Index)]
+	public async Task ChannelsReportTheRequestedFieldsOnEveryExportPath(bool readOnlyMemory, long? maxBytes, Track track)
+	{
+		var t = ScriptedTransport.AlwaysSucceeds();
+		using var channel = Channel(t, track, readOnlyMemory, maxBytes);
+		var response = await channel.DirectWriteAsync(Documents(6));
+
+		if (maxBytes is not null) t.Requests.Count.Should().BeGreaterThan(1, "the byte budget splits the batch into sub-requests whose items are merged");
+		t.Requests.Should().OnlyContain(r => AskedId(r) == ((track & Track.Id) != 0) && AskedIndex(r) == ((track & Track.Index) != 0));
+		var items = response.Items.ToArray();
+		items.Should().HaveCount(6);
+		items.Should().OnlyContain(i => ((track & Track.Id) != 0) == (i.Id != null) && ((track & Track.Index) != 0) == (i.Index == "my-index"));
+		if ((track & Track.Id) != 0) items.Select(i => i.Id).Distinct().Should().HaveCount(6, "every position keeps the id of its own response item");
+	}
+
+	[Test]
+	public void PushedEventsReachTheResponseCallbackWithTheirIdentity()
 	{
 		var t = ScriptedTransport.AlwaysSucceeds();
 		using var done = new System.Threading.CountdownEvent(1);
@@ -242,10 +269,10 @@ public class BulkItemIdentityTests
 		var options = new IndexChannelOptions<TestDocument>(t.Transport)
 		{
 			IndexFormat = "my-index",
-			ReturnItemIdentity = true,
 			BufferOptions = new Elastic.Channels.BufferOptions { OutboundBufferMaxSize = 3, WaitHandle = done },
 			ExportResponseCallback = (r, _) => seen = r
 		};
+		options.ReturnItemIdentity(Track.Id | Track.Index);
 		using var channel = new IndexChannel<TestDocument>(options);
 		foreach (var d in Documents(3)) channel.TryWrite(d);
 		done.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();
@@ -261,10 +288,10 @@ public class BulkItemIdentityTests
 		var options = new IndexChannelOptions<TestDocument>(t.Transport)
 		{
 			IndexFormat = "my-index",
-			ReturnItemIdentity = true,
 			BufferOptions = new Elastic.Channels.BufferOptions { OutboundBufferMaxSize = 4, ExportMaxConcurrency = 1 },
 			ExportResponseCallback = (r, _) => { foreach (var i in r.Items) ids.Add(i.Id); }
 		};
+		options.ReturnItemIdentity(Track.Id);
 		using var channel = new IndexChannel<TestDocument>(options);
 		await channel.IngestAllAsync(Documents(10));
 
@@ -407,6 +434,34 @@ public class BulkItemIdentityTests
 		}, iter: 300);
 	}
 
+	private static readonly Gen<Track> AnyTrack = Gen.OneOfConst(Track.None, Track.Id, Track.Index, Track.Id | Track.Index);
+
+	[Test]
+	public async Task TheUrlRequestsExactlyTheTrackedFieldsForEveryCombination()
+	{
+		var targets = Gen.OneOfConst<string>(null, "", "a", "/a/", "logs-*");
+		var refreshes = Gen.OneOfConst<BulkRefresh?>(null, BulkRefresh.True, BulkRefresh.WaitFor);
+		await Gen.Select(AnyTrack, targets, refreshes).SampleAsync(async x =>
+		{
+			var (track, target, refresh) = x;
+			var t = ScriptedTransport.AlwaysSucceeds();
+			var options = Options(t, target).ReturnItemIdentity(track);
+			var sender = new BulkSender<(BulkAction, Doc), Doc>(refresh is null ? options : new BulkSenderOptions<(BulkAction, Doc), Doc>
+			{
+				Transport = t.Transport, BodyTypeInfo = BulkTestContext.Default.Doc, Action = static y => y.Item1, Body = static y => y.Item2, Target = target, Refresh = refresh
+			}.ReturnItemIdentity(track));
+			await sender.SendAsync(With(1, _ => BulkAction.Index()));
+
+			var request = t.Requests.Single();
+			var filter = request.Query.Single(q => q.StartsWith("filter_path=", StringComparison.Ordinal));
+			filter.Should().StartWith(BaseQuery);
+			AskedId(request).Should().Be((track & Track.Id) != 0);
+			AskedIndex(request).Should().Be((track & Track.Index) != 0);
+			filter.Should().Be(BaseQuery + ((track & Track.Id) != 0 ? ",items.*._id" : "") + ((track & Track.Index) != 0 ? ",items.*._index" : ""));
+			request.Query.Count(q => q.StartsWith("filter_path=", StringComparison.Ordinal)).Should().Be(1);
+		}, iter: 200);
+	}
+
 	private static readonly Gen<BulkAction> AnyAction = Gen.Select(Gen.Int[0, 4], Gen.OneOfConst<string>(null, "", "  ", "id1"), Gen.Bool, Gen.OneOfConst<string>(null, "idx", "alias"), (kind, id, alias, index) =>
 	{
 		var explicitId = string.IsNullOrWhiteSpace(id) ? "needed" : id;
@@ -421,51 +476,24 @@ public class BulkItemIdentityTests
 		return alias ? a.WithRequireAlias() : a;
 	});
 
-	private static bool NeedsIdentity(BulkAction a) =>
-		a.RequireAlias || (a.Kind is BulkActionKind.Index or BulkActionKind.Create && string.IsNullOrWhiteSpace(a.Id));
-
 	[Test]
-	public async Task IdentityIsRequestedExactlyWhenARequestHasSomethingOnlyTheServerKnows()
+	public async Task EveryPositionReportsExactlyTheTrackedFieldsOfTheServer()
 	{
-		await Gen.Select(AnyAction.List[1, 12], Gen.OneOfConst(BulkItemIdentity.Auto, BulkItemIdentity.Always, BulkItemIdentity.Never)).SampleAsync(async x =>
+		await Gen.Select(AnyAction.List[1, 20], AnyTrack).SampleAsync(async x =>
 		{
-			var (actions, mode) = x;
+			var (actions, track) = x;
 			var t = ScriptedTransport.AlwaysSucceeds();
-			await SenderFor(t, mode, "p").SendAsync(actions.Select((a, i) => (a, new Doc($"d{i}", "n", i))).ToArray());
+			var response = await SenderFor(t, track, "p").SendAsync(actions.Select((a, i) => (a, new Doc($"d{i}", "n", i))).ToArray());
 
-			var expected = mode switch
-			{
-				BulkItemIdentity.Always => true,
-				BulkItemIdentity.Never => false,
-				_ => actions.Any(NeedsIdentity)
-			};
-			Asked(t.Requests.Single()).Should().Be(expected);
-		}, iter: 300);
-	}
-
-	[Test]
-	public async Task EveryPositionReportsTheServersIdAndIndexWhenAsked()
-	{
-		await Gen.Select(AnyAction.List[1, 20], Gen.OneOfConst(BulkItemIdentity.Auto, BulkItemIdentity.Always)).SampleAsync(async x =>
-		{
-			var (actions, mode) = x;
-			var t = ScriptedTransport.AlwaysSucceeds();
-			var response = await SenderFor(t, mode, "p").SendAsync(actions.Select((a, i) => (a, new Doc($"d{i}", "n", i))).ToArray());
-
-			var asked = Asked(t.Requests.Single());
 			var items = response.Items.ToArray();
 			items.Should().HaveCount(actions.Count);
 			for (var i = 0; i < actions.Count; i++)
 			{
 				var a = actions[i];
-				if (!asked)
-				{
-					items[i].Id.Should().BeNull();
-					items[i].Index.Should().BeNull();
-					continue;
-				}
-				items[i].Id.Should().Be(string.IsNullOrWhiteSpace(a.Id) ? $"gen-0-{i}" : a.Id);
-				items[i].Index.Should().Be((a.IndexName ?? "p") + (a.RequireAlias ? "-000001" : ""));
+				if ((track & Track.Id) != 0) items[i].Id.Should().Be(string.IsNullOrWhiteSpace(a.Id) ? $"gen-0-{i}" : a.Id);
+				else items[i].Id.Should().BeNull();
+				if ((track & Track.Index) != 0) items[i].Index.Should().Be((a.IndexName ?? "p") + (a.RequireAlias ? "-000001" : ""));
+				else items[i].Index.Should().BeNull();
 			}
 		}, iter: 300);
 	}
@@ -474,9 +502,9 @@ public class BulkItemIdentityTests
 	public async Task IdentityIsCorrectPerPositionThroughRetriesOfAnyShape()
 	{
 		var statuses = Gen.OneOfConst(201, 201, 400, 503);
-		await Gen.Select(Gen.Int[1, 20], Gen.Int[0, 3]).SelectMany(x => statuses.Array[(x.Item2 + 1) * x.Item1].Select(flat => (n: x.Item1, retries: x.Item2, flat))).SampleAsync(async x =>
+		await Gen.Select(Gen.Int[1, 20], Gen.Int[0, 3], AnyTrack).SelectMany(x => statuses.Array[(x.Item2 + 1) * x.Item1].Select(flat => (n: x.Item1, retries: x.Item2, track: x.Item3, flat))).SampleAsync(async x =>
 		{
-			var (n, retries, flat) = x;
+			var (n, retries, track, flat) = x;
 			int StatusFor(int attempt, int orig) => flat[attempt * n + orig];
 
 			// the script cannot know the original position of a re-sent item from the request alone, so every body carries it (N = position + 1)
@@ -484,7 +512,7 @@ public class BulkItemIdentityTests
 				.Select(l => StatusFor(attempt, JsonDocument.Parse(l).RootElement.GetProperty("N").GetInt32() - 1)).ToArray()));
 
 			var docs = Enumerable.Range(0, n).Select(i => (BulkAction.Index(), new Doc("x", "n", i + 1))).ToArray();
-			var response = await SenderFor(t, target: "p", retry: NoDelay with { MaxRetries = retries }).SendAsync(docs);
+			var response = await SenderFor(t, track, "p", NoDelay with { MaxRetries = retries }).SendAsync(docs);
 
 			// reference model: the id of a position comes from the last request that carried it
 			var lastId = new string[n];
@@ -495,15 +523,9 @@ public class BulkItemIdentityTests
 				remaining = remaining.Where(i => StatusFor(attempt, i) == 503).ToList();
 			}
 
-			t.Requests.Should().OnlyContain(r => Asked(r));
-			response.Items.Select(i => i.Id).Should().Equal(lastId);
-			response.Items.Should().OnlyContain(i => i.Index == "p");
+			t.Requests.Should().OnlyContain(r => AskedId(r) == ((track & Track.Id) != 0) && AskedIndex(r) == ((track & Track.Index) != 0));
+			response.Items.Select(i => i.Id).Should().Equal((track & Track.Id) != 0 ? lastId : new string[n]);
+			response.Items.Select(i => i.Index).Should().Equal(Enumerable.Repeat((track & Track.Index) != 0 ? "p" : null, n));
 		}, iter: 300);
 	}
-}
-
-internal static class BulkItemIdentityTestExtensions
-{
-	/// <summary>Re-creates a sender over plain documents with the same transport behaviour, for the IngestAll tests.</summary>
-	public static BulkSender<(BulkAction, Doc), Doc> AsDocSender(this BulkSender<(BulkAction, Doc), Doc> sender) => sender;
 }

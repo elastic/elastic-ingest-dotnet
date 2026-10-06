@@ -150,8 +150,9 @@ public sealed class ScriptedTransport
 		/// </summary>
 		private static string BuildBody(int[] statuses, bool includeErrorsFlag, CapturedRequest request, int attempt)
 		{
-			var identity = request.PathAndQuery.Contains("items.*._id", StringComparison.Ordinal);
-			var actions = identity ? ParseActions(request) : System.Array.Empty<(string Id, string Index, bool Alias)>();
+			var wantId = request.PathAndQuery.Contains("items.*._id", StringComparison.Ordinal);
+			var wantIndex = request.PathAndQuery.Contains("items.*._index", StringComparison.Ordinal);
+			var actions = wantId || wantIndex ? ParseActions(request) : System.Array.Empty<(string Id, string Index, bool Alias)>();
 			var target = request.Path.EndsWith("/_bulk", StringComparison.Ordinal) ? request.Path[..^"/_bulk".Length] : null;
 
 			var sb = new StringBuilder("{");
@@ -162,14 +163,17 @@ public sealed class ScriptedTransport
 				if (i > 0) sb.Append(',');
 				var s = statuses[i];
 				sb.Append("{\"index\":{");
-				if (identity && i < actions.Length)
+				if (i < actions.Length)
 				{
 					var (id, index, alias) = actions[i];
-					var resolved = index ?? target ?? "default-index";
-					if (alias) resolved += "-000001";
 					// ids and index names are arbitrary text in the property tests, so they must be escaped like a server does
-					sb.Append("\"_index\":").Append(System.Text.Json.JsonSerializer.Serialize(resolved))
-						.Append(",\"_id\":").Append(System.Text.Json.JsonSerializer.Serialize(id ?? $"gen-{attempt}-{i}")).Append(',');
+					if (wantIndex)
+					{
+						var resolved = index ?? target ?? "default-index";
+						if (alias) resolved += "-000001";
+						sb.Append("\"_index\":").Append(System.Text.Json.JsonSerializer.Serialize(resolved)).Append(',');
+					}
+					if (wantId) sb.Append("\"_id\":").Append(System.Text.Json.JsonSerializer.Serialize(id ?? $"gen-{attempt}-{i}")).Append(',');
 				}
 				sb.Append("\"status\":").Append(s);
 				if (s is < 200 or > 299)

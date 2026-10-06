@@ -41,11 +41,24 @@ public sealed class BulkSenderOptions<TItem, TBody>
 	/// </summary>
 	public TimeSpan? RequestTimeout { get; init; }
 
+	/// <summary>The identity fields responses report for each item. <see cref="Bulk.Track.None"/> (the default) reports none, see <see cref="ReturnItemIdentity"/>.</summary>
+	public Track ItemIdentity { get; private set; }
+
 	/// <summary>
-	/// Whether responses report the <c>_id</c> and <c>_index</c> of each item, see <see cref="BulkItemIdentity"/>.
-	/// Defaults to <see cref="BulkItemIdentity.Auto"/>: requested only when an action has no id or requires an alias.
+	/// Makes responses report the given identity fields for every item, applied to every request the sender issues.
+	/// <c>options.ReturnItemIdentity(Track.Id | Track.Index)</c> requests both. Calls add up and cannot be undone.
+	/// <para><see cref="Track.Id"/> is the only way to learn an id Elasticsearch generated (an <c>index</c> or <c>create</c> action without an id),
+	/// <see cref="Track.Index"/> the only way to learn the concrete index behind an alias (<see cref="BulkAction.WithRequireAlias"/>) or a data stream.</para>
+	/// <para>Each field costs: an item that carries an id is its own object plus the id string, and the response gets larger.
+	/// Request only what you use. An index name is reused across the items of a response, so <see cref="Track.Index"/> is the cheaper one.</para>
 	/// </summary>
-	public BulkItemIdentity ItemIdentity { get; init; } = BulkItemIdentity.Auto;
+	/// <returns>These options, for chaining.</returns>
+	public BulkSenderOptions<TItem, TBody> ReturnItemIdentity(Track track)
+	{
+		if ((track & ~(Track.Id | Track.Index)) != 0) throw new ArgumentOutOfRangeException(nameof(track), track, "Unknown Track flags.");
+		ItemIdentity |= track;
+		return this;
+	}
 
 	/// <summary>
 	/// When <c>true</c> (the default) documents are serialized with the same <see cref="System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault"/>

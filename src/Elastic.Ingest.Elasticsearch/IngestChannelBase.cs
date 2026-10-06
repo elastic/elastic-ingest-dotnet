@@ -59,7 +59,7 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 	protected virtual string BulkPathAndQuery => "_bulk?filter_path=errors,error,items.*.status,items.*.error,items.*.result,items.*._version";
 
 	// BulkPathAndQuery can change at runtime (catalog channels switch index), so the identity variant is derived per export
-	private string EffectiveBulkPathAndQuery => Options.ReturnItemIdentity ? WithItemIdentity(BulkPathAndQuery) : BulkPathAndQuery;
+	private string EffectiveBulkPathAndQuery => Options.ItemIdentity == Track.None ? BulkPathAndQuery : WithItemIdentity(BulkPathAndQuery, Options.ItemIdentity);
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryAllItems"/>
 	protected override bool RetryAllItems(BulkResponse response) => response.ApiCallDetails.HttpStatusCode == 429;

@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Elastic.Ingest.Elasticsearch.Bulk;
 using Elastic.Ingest.Elasticsearch.Serialization;
 
 namespace Elastic.Ingest.Elasticsearch;
@@ -42,16 +43,19 @@ internal static class IngestChannelStatics
 
 	public const string DefaultBulkPathAndQuery = "_bulk?filter_path=errors,error,items.*.status,items.*.error,items.*.result,items.*._version";
 
-	/// <summary>The same query, additionally reporting <c>_id</c> and <c>_index</c> of every item.</summary>
-	public const string BulkItemIdentityFilterPath = ",items.*._id,items.*._index";
-
 	private const string DefaultBulkFilterPath = "filter_path=errors,error,items.*.status,items.*.error,items.*.result,items.*._version";
 
-	/// <summary>Adds <c>_id</c> and <c>_index</c> of every item to the response of a bulk url built from <see cref="DefaultBulkPathAndQuery"/>.</summary>
-	public static string WithItemIdentity(string bulkPathAndQuery) =>
-		bulkPathAndQuery.Contains("items.*._id", System.StringComparison.Ordinal)
-			? bulkPathAndQuery
-			: bulkPathAndQuery.Replace(DefaultBulkFilterPath, DefaultBulkFilterPath + BulkItemIdentityFilterPath);
+	/// <summary>
+	/// Adds <c>items.*._id</c> and/or <c>items.*._index</c> to the <c>filter_path</c> of a bulk url built from
+	/// <see cref="DefaultBulkPathAndQuery"/>, so the response reports them. Fields that are already requested are not added twice.
+	/// </summary>
+	public static string WithItemIdentity(string bulkPathAndQuery, Track track)
+	{
+		var extra = string.Empty;
+		if ((track & Track.Id) != 0 && !bulkPathAndQuery.Contains("items.*._id", System.StringComparison.Ordinal)) extra += ",items.*._id";
+		if ((track & Track.Index) != 0 && !bulkPathAndQuery.Contains("items.*._index", System.StringComparison.Ordinal)) extra += ",items.*._index";
+		return extra.Length == 0 ? bulkPathAndQuery : bulkPathAndQuery.Replace(DefaultBulkFilterPath, DefaultBulkFilterPath + extra);
+	}
 
 	public static readonly HashSet<int> RetryStatusCodes = [502, 503, 504, 429];
 

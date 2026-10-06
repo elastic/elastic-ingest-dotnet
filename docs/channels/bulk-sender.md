@@ -99,26 +99,28 @@ Both are fixed for the lifetime of a sender. To vary them per call, keep one sen
 
 ### Generated ids and resolved indices
 
-`BulkResponseItem.Id` and `BulkResponseItem.Index` report the `_id` and `_index` Elasticsearch used for each item. They are the only way to learn an id the server generated (`BulkAction.Index()` or `Create()` without an id) or the concrete index behind an alias (`WithRequireAlias()`) or a data stream.
+`BulkResponseItem.Id` and `BulkResponseItem.Index` report the `_id` and `_index` Elasticsearch used for each item. They are the only way to learn an id the server generated (`BulkAction.Index()` or `Create()` without an id) or the concrete index behind an alias (`WithRequireAlias()`) or a data stream. Neither is reported by default; ask for the fields you use with `ReturnItemIdentity`:
 
 ```csharp
-var sender = BulkSender.Create(transport, MyContext.Default.Event, static _ => BulkAction.Create(), target: "events");
-BulkResponse response = await sender.SendAsync(events, ct);
+var options = new BulkSenderOptions<Event, Event> { /* transport, action, body ... */ }
+    .ReturnItemIdentity(Track.Id);                       // or Track.Index, or Track.Id | Track.Index
 
-var generatedId = response.Items.First().Id;   // "AXx9kQ3pTzGm..." assigned by Elasticsearch
+BulkResponse response = await new BulkSender<Event, Event>(options).SendAsync(events, ct);
+var generatedId = response.Items.First().Id;              // "AXx9kQ3pTzGm..." assigned by Elasticsearch
 ```
 
-Reporting them costs something per item. A response item that only carries an action and a status is a shared, immutable instance, so it allocates nothing. An item that carries an `_id` is its own object (about 56 bytes) plus the id string (about 64 bytes), and the response itself is several times larger because every item repeats an id and an index name. The index string is reused across the items of a response, so it adds no allocation of its own. For 1,000 items that is roughly 120 KB more to allocate and about 4 times as many bytes to read. So `BulkSenderOptions.ItemIdentity` defaults to `BulkItemIdentity.Auto`, which only asks when a request holds something only the server knows:
+`BulkSender.Create(..., itemIdentity: Track.Id | Track.Index)` takes the same flags.
 
-| `ItemIdentity` | Requested when |
-|----------------|----------------|
-| `Auto` (default) | an `index` or `create` action has no id, or an action uses `WithRequireAlias()`. Requests where every action carries its id and targets a concrete index pay nothing. |
-| `Always` | every request. Use it when `Target` or an action's index is an alias or a data stream without `WithRequireAlias()`, which `Auto` cannot detect. |
-| `Never` | never: `Id` and `Index` stay `null`. |
+| Flag | Reports | Use it for |
+|------|---------|-----------|
+| `Track.Id` | `Id`: the generated id, or the explicit id echoed back | learning ids Elasticsearch assigned |
+| `Track.Index` | `Index`: the concrete index that received the item | learning the backing index behind an alias or data stream |
 
-The decision is per request. If one action needs it, every item of that request reports its id and index, with explicit ids echoed back. Retries of a request keep asking, and `response.Items[i]` still belongs to `items[i]`, carrying the identity from the attempt that settled it. `IngestAllAsync` failures expose the same properties. A request that failed as a whole has no items, so the failures synthesized for it have `Id` and `Index` set to `null`.
+Each field costs something, so request only what you use. A response item that only carries an action and a status is a shared, immutable instance and allocates nothing. An item that carries an `_id` is its own object (about 56 bytes) plus the id string (about 64 bytes), and the response is larger because every item repeats the field. The index string is reused across the items of a response, so `Track.Index` costs about half of `Track.Id`. Measured for 1,000 items: 18 KB without either field, 74 KB with `Track.Index`, 138 KB with `Track.Id` or both. Many workloads, for example logs written to a data stream, need neither and pay nothing.
 
-Channels do not ask by default. Set `ReturnItemIdentity = true` on the channel options to have `DirectWriteAsync`, the response callbacks and `IngestAllAsync` see `Id` and `Index` for every item.
+The flags apply to every request the sender issues, retries and the batches of `IngestAllAsync` included, and they add up: calling `ReturnItemIdentity` twice combines the flags. `response.Items[i]` still belongs to `items[i]`, carrying the identity from the attempt that settled it, and `IngestAllAsync` failures expose the same properties. A request that failed as a whole has no items, so the failures made up for it have `Id` and `Index` set to `null`.
+
+Channels work the same way: call `ReturnItemIdentity(Track.Id | Track.Index)` on the channel options to have `DirectWriteAsync`, the response callbacks and `IngestAllAsync` see `Id` and `Index` for every item.
 
 ### Serialization settings
 

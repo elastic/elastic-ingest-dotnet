@@ -116,7 +116,7 @@ public class BulkSenderIntegrationTests(IngestionCluster cluster) : IntegrationT
 		var index = $"{Prefix}-generated";
 		await CleanupPrefixAsync(index);
 
-		var sender = BulkSender.Create(Transport, BulkItContext.Default.BulkItDoc, static _ => BulkAction.Create(), target: index);
+		var sender = BulkSender.Create(Transport, BulkItContext.Default.BulkItDoc, static _ => BulkAction.Create(), target: index, itemIdentity: Track.Id | Track.Index);
 		var response = await sender.SendAsync(Docs(5));
 
 		response.AllItemsPersisted().Should().BeTrue();
@@ -147,11 +147,12 @@ public class BulkSenderIntegrationTests(IngestionCluster cluster) : IntegrationT
 			Elastic.Transport.PostData.String($"{{\"aliases\":{{\"{alias}\":{{\"is_write_index\":true}}}}}}"));
 		create.ApiCallDetails.HttpStatusCode.Should().Be(200);
 
-		var sender = BulkSender.Create(Transport, BulkItContext.Default.BulkItDoc, static d => BulkAction.Index(d.Id).WithRequireAlias(), target: alias);
+		var sender = BulkSender.Create(Transport, BulkItContext.Default.BulkItDoc, static d => BulkAction.Index(d.Id).WithRequireAlias(), target: alias, itemIdentity: Track.Index);
 		var response = await sender.SendAsync(Docs(3));
 
 		response.AllItemsPersisted().Should().BeTrue();
-		response.Items.Select(i => (i.Id, i.Index)).Should().Equal(("d0", concrete), ("d1", concrete), ("d2", concrete));
+		response.Items.Select(i => i.Index).Should().Equal(concrete, concrete, concrete);
+		response.Items.Should().OnlyContain(i => i.Id == null, "only the index was requested");
 
 		await CleanupPrefixAsync($"{Prefix}-alias");
 	}
@@ -162,7 +163,8 @@ public class BulkSenderIntegrationTests(IngestionCluster cluster) : IntegrationT
 		var index = $"{Prefix}-channel-identity";
 		await CleanupPrefixAsync(index);
 
-		var options = new IndexChannelOptions<BulkItDocClass>(Transport) { IndexFormat = index, ReturnItemIdentity = true };
+		var options = new IndexChannelOptions<BulkItDocClass>(Transport) { IndexFormat = index };
+		options.ReturnItemIdentity(Track.Id | Track.Index);
 		using var channel = new IndexChannel<BulkItDocClass>(options);
 		var response = await channel.DirectWriteAsync(new BulkItDocClass { Id = "x", Name = "n1" }, new BulkItDocClass { Id = "y", Name = "n2" });
 
