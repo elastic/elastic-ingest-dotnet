@@ -79,6 +79,10 @@ flowchart TD
 | `[DataStream<T>]` | `DataStream` | `create` (append-only) | Component + data stream templates |
 | `[WiredStream<T>]` | `WiredStream` | `create` (append-only) | No-op (managed by Elasticsearch) |
 
+:::{note}
+**Wired streams and mappings.** Wired streams support mappings via [Kibana Streams](https://www.elastic.co/docs/solutions/observability/streams/map-fields) (including inherited parent→child schema). This library’s bootstrap is a no-op for `[WiredStream<T>]`, so attribute-generated mappings are **not** pushed as component templates — configure schema in Streams, and choose `IngestEndpoint` (`logs.ecs` / `logs.otel`) for field-name normalization. See [Wired streams](../index-management/wired-streams.md) and [ECS and OTel endpoints](../index-management/ecs-and-otel-endpoints.md).
+:::
+
 ### Field attributes
 
 | Attribute | Generated delegate | Effect |

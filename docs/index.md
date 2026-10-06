@@ -113,7 +113,7 @@ dotnet add package Elastic.Ingest.Elasticsearch
 - [Getting started](getting-started/index.md): install, define documents, create your first channel
 - [Channels](channels/index.md): buffer tuning, callbacks, serialization
 - [Architecture](architecture/index.md): how the two-stage buffered pipeline works
-- [Index management](index-management/index.md): indices, data streams, rollover, and lifecycle
+- [Index management](index-management/index.md): indices, data streams, Streams (classic/wired), rollover, and lifecycle
 - [Strategies](strategies/index.md): composable strategy pattern and factory methods
 - [Orchestration](orchestration/index.md): coordinating multiple channels
 - [Helpers](helpers/index.md): PIT search, server-side reindex, delete-by-query, client-side reindex

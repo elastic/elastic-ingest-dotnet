@@ -223,7 +223,10 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			return null;
 
 		var dataStreamModeValue = GetNamedEnumArg(attr, "DataStreamMode", "Default");
-		var entityConfig = new EntityConfigModel(entityTarget, dataStreamModeValue);
+		var ingestEndpointValue = entityTarget == "WiredStream"
+			? GetNamedEnumArg(attr, "IngestEndpoint", "Logs")
+			: "Logs";
+		var entityConfig = new EntityConfigModel(entityTarget, dataStreamModeValue, ingestEndpointValue);
 
 		var type = GetNamedArg<string>(attr, "Type");
 		var dataset = GetNamedArg<string>(attr, "Dataset");

@@ -4,15 +4,17 @@ navigation_title: Wired streams
 
 # Wired streams (serverless)
 
-Wired streams are the simplest ingestion path. Elasticsearch manages all templates and lifecycle -- you just send documents.
+Wired streams are the simplest managed ingestion path. Elasticsearch owns templates and lifecycle — you send documents to a wired bulk endpoint.
+
+For the full reference (endpoints, mappings caveats, Kibana Streams), see [Wired streams](../index-management/wired-streams.md) under index management.
 
 ## When to use
 
-- Serverless Elasticsearch
-- Log data that doesn't need custom mappings or templates
-- You want the minimum possible configuration
+- Serverless Elasticsearch or Elastic Stack with wired streams enabled
+- ECS or OTel log documents that should land in Kibana Streams
+- You want the minimum local configuration (no template bootstrap)
 
-## Document type
+## Document type (ECS-shaped)
 
 ```csharp
 public class LogEntry
@@ -21,22 +23,27 @@ public class LogEntry
     [JsonPropertyName("@timestamp")]
     public DateTimeOffset Timestamp { get; set; }
 
-    [Keyword]
+    [JsonPropertyName("log.level")]
     public string Level { get; set; }
 
-    [Text]
+    [JsonPropertyName("message")]
     public string Message { get; set; }
 
-    [Keyword]
+    [JsonPropertyName("service.name")]
     public string Service { get; set; }
 }
 ```
 
 ## Mapping context
 
+Prefer `LogsEcs` when sending Elastic Common Schema documents (including payloads from [ecs-dotnet](https://github.com/elastic/ecs-dotnet)):
+
 ```csharp
 [ElasticsearchMappingContext]
-[WiredStream<LogEntry>(Type = "logs", Dataset = "myapp")]
+[WiredStream<LogEntry>(
+    Type = "logs",
+    Dataset = "myapp",
+    IngestEndpoint = WiredStreamIngestEndpoint.LogsEcs)]
 public static partial class WiredContext;
 ```
 
@@ -59,12 +66,14 @@ await channel.WaitForDrainAsync(TimeSpan.FromSeconds(10), ctx);
 
 | Behavior | Strategy | Why |
 |----------|----------|-----|
-| Ingest | `WiredStreamIngestStrategy` | Sends to `logs/_bulk` endpoint |
+| Ingest | `WiredStreamIngestStrategy` | Sends to `logs.ecs/_bulk` (or `logs` / `logs.otel`) |
 | Bootstrap | `NoopBootstrapStep` | Elasticsearch manages all templates |
 | Provisioning | `AlwaysCreateProvisioning` | No local index management |
 | Alias | `NoAliasStrategy` | Elasticsearch manages routing |
 
 ## Related
 
-- [LogsDB](../index-management/logsdb.md): LogsDB mode and wired stream details
+- [Wired streams](../index-management/wired-streams.md): reference
+- [ECS and OTel endpoints](../index-management/ecs-and-otel-endpoints.md): endpoint choice and ecs-dotnet paths
+- [Streams](../index-management/streams.md): classic vs wired
 - [Time-series](time-series.md): data streams with local template management
