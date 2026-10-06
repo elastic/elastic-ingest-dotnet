@@ -72,7 +72,7 @@ var sender = BulkSender.Create(transport, MyContext.Default.Order,
 BulkResponse response = await sender.SendAsync(batch, ct);
 ```
 
-`BulkAction` also covers `Create`, `Update` (`doc_as_upsert`), `Delete` and `ScriptedHashUpsert`. Documents sent through a `BulkSender` are serialized exactly as your `JsonTypeInfo` is configured, whereas channels apply `DefaultIgnoreCondition.WhenWritingDefault`; see [bulk sender and pull ingestion](https://elastic.github.io/elastic-ingest-dotnet/channels/bulk-sender) for the details.
+`BulkAction` also covers `Create`, `Update` (`doc_as_upsert`), `Delete` and `ScriptedHashUpsert`. Documents are serialized the same way channels do (`DefaultIgnoreCondition.WhenWritingDefault`), so the output is identical; see [bulk sender and pull ingestion](https://elastic.github.io/elastic-ingest-dotnet/channels/bulk-sender) for details and how to opt out.
 
 ## Strategies
 

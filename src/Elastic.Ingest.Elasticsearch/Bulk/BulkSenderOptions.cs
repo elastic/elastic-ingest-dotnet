@@ -28,6 +28,14 @@ public sealed class BulkSenderOptions<TItem, TBody>
 	/// <summary>When set requests go to <c>{Target}/_bulk</c> and actions may omit their index.</summary>
 	public string? Target { get; init; }
 
+	/// <summary>
+	/// When <c>true</c> (the default) documents are serialized with the same <see cref="System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault"/>
+	/// default that channels use, so output is identical to a channel. This overrides a <c>DefaultIgnoreCondition</c> set on the
+	/// serializer context (per property <c>[JsonIgnore(Condition = ...)]</c> attributes still apply).
+	/// Set to <c>false</c> to serialize exactly as <see cref="BodyTypeInfo"/> is configured.
+	/// </summary>
+	public bool ApplyLibrarySerializerDefaults { get; init; } = true;
+
 	/// <summary>The retry policy, defaults to <see cref="BulkRetryPolicy.None"/>.</summary>
 	public BulkRetryPolicy Retry { get; init; } = BulkRetryPolicy.None;
 }

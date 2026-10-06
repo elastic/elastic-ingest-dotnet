@@ -17,8 +17,10 @@ namespace Elastic.Ingest.Elasticsearch.Tests.Bulk;
 /// <param name="HttpStatus">The HTTP status of the response</param>
 /// <param name="ItemStatuses">Status per item, null returns an empty body</param>
 /// <param name="Throw">Throw this from the transport instead</param>
-public record ScriptedResponse(int HttpStatus, int[] ItemStatuses = null, Exception Throw = null)
+public record ScriptedResponse(int HttpStatus, int[] ItemStatuses = null, Exception Throw = null, string RawBody = null, bool IncludeErrorsFlag = true)
 {
+	public static ScriptedResponse Raw(string body, int http = 200) => new(http, null, null, body);
+	public static ScriptedResponse WithoutErrorsFlag(params int[] statuses) => new(200, statuses, null, null, false);
 	public static ScriptedResponse Items(params int[] statuses) => new(200, statuses);
 	public static ScriptedResponse Http(int status) => new(status);
 }
@@ -113,15 +115,18 @@ public sealed class ScriptedTransport
 				// give concurrent requests a chance to overlap
 				await Task.Yield();
 
-				var body = response.ItemStatuses is null ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(BuildBody(response.ItemStatuses));
+				var body = response.RawBody is not null ? Encoding.UTF8.GetBytes(response.RawBody)
+					: response.ItemStatuses is null ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(BuildBody(response.ItemStatuses, response.IncludeErrorsFlag));
 				return await _inner.BuildResponseAsync<TResponse>(endpoint, boundConfiguration, postData, cancellationToken, body, response.HttpStatus, "application/json").ConfigureAwait(false);
 			}
 			finally { Interlocked.Decrement(ref owner._inflight); }
 		}
 
-		private static string BuildBody(int[] statuses)
+		private static string BuildBody(int[] statuses, bool includeErrorsFlag)
 		{
-			var sb = new StringBuilder("{\"errors\":").Append(statuses.Any(s => s is < 200 or > 299) ? "true" : "false").Append(",\"items\":[");
+			var sb = new StringBuilder("{");
+			if (includeErrorsFlag) sb.Append("\"errors\":").Append(statuses.Any(s => s is < 200 or > 299) ? "true" : "false").Append(',');
+			sb.Append("\"items\":[");
 			for (var i = 0; i < statuses.Length; i++)
 			{
 				if (i > 0) sb.Append(',');

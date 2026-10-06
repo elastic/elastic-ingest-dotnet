@@ -68,7 +68,7 @@ public class BulkSenderTests
 		await sender.SendAsync(new Doc[actions.Length].Select((_, n) => new Doc("x", "n", n)).ToArray());
 
 		t.Requests.Single().BodyText.Should().Be(string.Join("",
-			"{\"index\":{\"_index\":\"idx\",\"_id\":\"1\"}}\n{\"Id\":\"x\",\"Name\":\"n\",\"N\":0}\n",
+			"{\"index\":{\"_index\":\"idx\",\"_id\":\"1\"}}\n{\"Id\":\"x\",\"Name\":\"n\"}\n",
 			"{\"index\":{}}\n{\"Id\":\"x\",\"Name\":\"n\",\"N\":1}\n",
 			"{\"create\":{\"_id\":\"2\",\"require_alias\":true}}\n{\"Id\":\"x\",\"Name\":\"n\",\"N\":2}\n",
 			"{\"create\":{\"_index\":\"idx\",\"_id\":\"3\",\"dynamic_templates\":{\"a\":\"b\"}}}\n{\"Id\":\"x\",\"Name\":\"n\",\"N\":3}\n",
@@ -229,7 +229,7 @@ public class BulkSenderTests
 		var lines = t.Requests.Single().Lines;
 		lines.Should().HaveCount(6000);
 		for (var i = 0; i < 3000; i++)
-			JsonDocument.Parse(lines[i * 2 + 1]).RootElement.GetProperty("N").GetInt32().Should().Be(i);
+			(JsonDocument.Parse(lines[i * 2 + 1]).RootElement.TryGetProperty("N", out var n) ? n.GetInt32() : 0).Should().Be(i);
 	}
 
 	[Test]
@@ -269,4 +269,27 @@ public class BulkSenderTests
 		request.Lines.Where((_, i) => i % 2 == 0)
 			.Select(l => JsonDocument.Parse(l).RootElement.EnumerateObject().First().Value.GetProperty("_id").GetString())
 			.ToArray();
+
+	private static async Task<string> BodyOfAsync(bool applyDefaults)
+	{
+		var t = ScriptedTransport.AlwaysSucceeds();
+		var sender = new BulkSender<ConfiguredDoc, ConfiguredDoc>(new BulkSenderOptions<ConfiguredDoc, ConfiguredDoc>
+		{
+			Transport = t.Transport,
+			BodyTypeInfo = ExplicitNeverContext.Default.ConfiguredDoc,
+			Action = static _ => BulkAction.Index(),
+			Body = static d => d,
+			ApplyLibrarySerializerDefaults = applyDefaults
+		});
+		await sender.SendAsync(new[] { new ConfiguredDoc("a", 0, 0, null) });
+		return t.Requests.Single().Lines[1];
+	}
+
+	[Test]
+	public async Task LibraryDefaultOverridesAContextLevelIgnoreConditionButNotPropertyAttributes() =>
+		(await BodyOfAsync(true)).Should().Be("{\"Name\":\"a\",\"Keep\":0}");
+
+	[Test]
+	public async Task OptingOutSerializesExactlyAsTheTypeInfoIsConfigured() =>
+		(await BodyOfAsync(false)).Should().Be("{\"Name\":\"a\",\"N\":0,\"Keep\":0,\"renamed\":null}");
 }

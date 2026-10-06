@@ -101,33 +101,27 @@ public class BulkSenderPropertyTests
 				};
 				source.GetProperty("Id").GetString().Should().Be(doc.Id);
 				source.GetProperty("Name").GetString().Should().Be(doc.Name);
-				source.GetProperty("N").GetInt32().Should().Be(doc.N);
+				(source.TryGetProperty("N", out var n) ? n.GetInt32() : 0).Should().Be(doc.N);
 			}
 		}, iter: 300);
 	}
 
 	[Test]
-	public async Task OutputIsByteIdenticalToTheLegacyWriter()
+	public async Task OutputIsByteIdenticalToTheFrozenLegacyWriter()
 	{
 		// The legacy writer does not support delete (it always writes a body line) so it is excluded from the model.
-		// The legacy path serializes with DefaultIgnoreCondition.WhenWritingDefault while BulkSender follows the caller's
-		// JsonTypeInfo, so keep default valued members (N == 0) out of this comparison.
-		var legacyActions = Actions.Where(a => a.Kind != BulkActionKind.Delete);
-		var nonDefaultDocs = Docs.Select(d => d with { N = d.N == 0 ? 1 : d.N });
-		await Gen.Select(legacyActions, nonDefaultDocs).List[1, 20].SampleAsync(async items =>
+		var legacyActions = Actions.Select(a => a.Kind == BulkActionKind.Delete ? BulkAction.Index(a.Id, a.IndexName) : a);
+		var legacyOptions = LegacyBulkWriter.ChannelLikeOptions(BulkTestContext.Default);
+		await Gen.Select(legacyActions, Docs).List[1, 20].SampleAsync(async items =>
 		{
 			var t = ScriptedTransport.AlwaysSucceeds();
 			await SenderFor(t).SendAsync(items.ToArray());
 
-			var legacyOptions = new IndexChannelOptions<Doc>(t.Transport) { SerializerContext = BulkTestContext.Default };
-			var queue = new Queue<BulkAction>(items.Select(i => i.Item1));
-			var page = items.Select(i => i.Item2).ToArray();
-			// the legacy factory calls the header factory once per event, in order
-			var expected = BulkRequestDataFactory.GetBytes(new ArraySegment<Doc>(page), legacyOptions, _ => ToLegacy(queue.Dequeue()));
+			var expected = LegacyBulkWriter.GetBytes(items.Select(i => i.Item2).ToArray(), legacyOptions, i => LegacyBulkWriter.ToLegacy(items[i].Item1));
 
-			System.Text.Encoding.UTF8.GetString(t.Requests.Single().Body).Should().Be(System.Text.Encoding.UTF8.GetString(expected.Span),
+			System.Text.Encoding.UTF8.GetString(t.Requests.Single().Body).Should().Be(System.Text.Encoding.UTF8.GetString(expected),
 				string.Join(", ", items.Select(i => $"{i.Item1.Kind}(alias={i.Item1.RequireAlias},tpl={i.Item1.DynamicTemplates?.Count})")));
-		}, iter: 300);
+		}, iter: 400);
 	}
 
 	[Test]

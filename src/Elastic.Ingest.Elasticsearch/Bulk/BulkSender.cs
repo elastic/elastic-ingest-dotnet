@@ -43,11 +43,24 @@ public sealed partial class BulkSender<TItem, TBody>
 		_transport = options.Transport;
 		_action = options.Action;
 		_body = options.Body;
-		_typeInfo = options.BodyTypeInfo;
+		_typeInfo = options.ApplyLibrarySerializerDefaults ? WithLibraryDefaults(options.BodyTypeInfo) : options.BodyTypeInfo;
 		_retry = options.Retry;
 		_url = string.IsNullOrWhiteSpace(options.Target)
 			? DefaultBulkPathAndQuery
 			: options.Target!.Trim('/') + "/" + DefaultBulkPathAndQuery;
+	}
+
+	// Copies the options of the supplied type info (keeping its resolver and converters) with the library default applied.
+	// An options level DefaultIgnoreCondition wins over the one a source generated context was declared with, as for channels.
+	private static JsonTypeInfo<TBody> WithLibraryDefaults(JsonTypeInfo<TBody> typeInfo)
+	{
+		var options = typeInfo.Options;
+		if (options.DefaultIgnoreCondition == System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault) return typeInfo;
+		var copy = new System.Text.Json.JsonSerializerOptions(options)
+		{
+			DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault
+		};
+		return (JsonTypeInfo<TBody>)copy.GetTypeInfo(typeof(TBody));
 	}
 
 	/// <summary>

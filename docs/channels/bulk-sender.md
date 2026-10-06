@@ -78,7 +78,9 @@ Only the failed items are re-sent, without serializing them again. **`response.I
 
 ### Serialization settings
 
-The sender serializes documents with the `JsonTypeInfo<TBody>` you provide, exactly as configured. Channels serialize documents with the library's serializer options, which include `DefaultIgnoreCondition = WhenWritingDefault`. As a result a document with a default valued member (for example `int N = 0`) contains `"N":0` when written through a `BulkSender` and omits it when written through a channel. If you need identical output, configure the same `DefaultIgnoreCondition` on your `JsonSerializerContext` (`[JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault)]`).
+By default a sender serializes documents the same way channels do: with `DefaultIgnoreCondition = WhenWritingDefault` (members holding their default value, such as `int N = 0` or a `null` string, are omitted). Output from `BulkSender` and from a channel is therefore identical for the same document.
+
+This default is applied on top of your `JsonTypeInfo`: it **overrides a `DefaultIgnoreCondition` set on your serializer context** (via `[JsonSourceGenerationOptions]`), exactly as it does for channels. Per property attributes such as `[JsonIgnore(Condition = ...)]`, custom converters and naming policies keep working. To serialize exactly as your type info is configured, set `ApplyLibrarySerializerDefaults = false` on `BulkSenderOptions`.
 
 ## IngestAllAsync
 

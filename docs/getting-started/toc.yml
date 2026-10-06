@@ -1,4 +1,5 @@
 toc:
   - file: index.md
+  - file: quick-starts.md
   - file: mapping-context.md
   - file: templated-index-names.md
