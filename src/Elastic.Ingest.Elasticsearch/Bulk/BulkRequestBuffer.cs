@@ -32,6 +32,9 @@ internal sealed class BulkRequestBuffer : IDisposable
 
 	public int Count { get; private set; }
 
+	/// <summary>True once an operation was written whose response carries information the caller does not have (a generated id or a resolved alias).</summary>
+	public bool NeedsIdentity { get; set; }
+
 	/// <summary>Takes the thread's cached writer and points it at the body. Always pair with <see cref="ReleaseWriter"/>.</summary>
 	public Utf8JsonWriter RentWriter()
 	{

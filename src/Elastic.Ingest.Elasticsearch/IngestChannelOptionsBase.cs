@@ -41,6 +41,14 @@ public abstract class IngestChannelOptionsBase<TEvent> : TransportChannelOptions
 	[Obsolete("Temporary exposed expert option, used to evaluate two different approaches to serialization")]
 	public bool UseReadOnlyMemory { get; set; }
 
+	/// <summary>
+	/// When <c>true</c> the <c>_bulk</c> responses report the <c>_id</c> and <c>_index</c> of every item
+	/// (<see cref="BulkResponseItem.Id"/> and <see cref="BulkResponseItem.Index"/>), so generated ids and the concrete index behind an
+	/// alias or data stream reach the response callbacks and <c>DirectWriteAsync</c>. Defaults to <c>false</c>: it makes every response larger
+	/// and costs an allocation per item.
+	/// </summary>
+	public bool ReturnItemIdentity { get; set; }
+
 	private IJsonTypeInfoResolver? _serializerContext;
 
 	/// <summary> The JsonSerializerContext to use for serialization. </summary>

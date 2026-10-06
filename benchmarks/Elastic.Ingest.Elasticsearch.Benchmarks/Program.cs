@@ -39,7 +39,12 @@ var config = ManualConfig.Create(DefaultConfig.Instance);
 config.SummaryStyle = new SummaryStyle(CultureInfo.CurrentCulture, true, SizeUnit.B, null!, ratioStyle: BenchmarkDotNet.Columns.RatioStyle.Percentage);
 config.AddDiagnoser(MemoryDiagnoser.Default);
 
-if (args.Contains("--bulk-sender"))
+if (args.Contains("--item-identity"))
+{
+	if (args.Contains("--short")) config.AddJob(BenchmarkDotNet.Jobs.Job.ShortRun);
+	BenchmarkRunner.Run<BulkItemIdentityBenchmarks>(config);
+}
+else if (args.Contains("--bulk-sender"))
 {
 	// quick comparison run: dotnet run -c Release -- --bulk-sender [--short]
 	if (args.Contains("--short")) config.AddJob(BenchmarkDotNet.Jobs.Job.ShortRun);

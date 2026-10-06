@@ -97,6 +97,29 @@ var sender = BulkSender.Create(transport, MyContext.Default.Order,
 
 Both are fixed for the lifetime of a sender. To vary them per call, keep one sender per setting. A sender is cheap, immutable and thread safe. There is deliberately no free form query string, so these options cannot collide with the built in `filter_path`.
 
+### Generated ids and resolved indices
+
+`BulkResponseItem.Id` and `BulkResponseItem.Index` report the `_id` and `_index` Elasticsearch used for each item. They are the only way to learn an id the server generated (`BulkAction.Index()` or `Create()` without an id) or the concrete index behind an alias (`WithRequireAlias()`) or a data stream.
+
+```csharp
+var sender = BulkSender.Create(transport, MyContext.Default.Event, static _ => BulkAction.Create(), target: "events");
+BulkResponse response = await sender.SendAsync(events, ct);
+
+var generatedId = response.Items.First().Id;   // "AXx9kQ3pTzGm..." assigned by Elasticsearch
+```
+
+Reporting them costs something per item. A response item that only carries an action and a status is a shared, immutable instance, so it allocates nothing. An item that carries an `_id` is its own object (about 56 bytes) plus the id string (about 64 bytes), and the response itself is several times larger because every item repeats an id and an index name. The index string is reused across the items of a response, so it adds no allocation of its own. For 1,000 items that is roughly 120 KB more to allocate and about 4 times as many bytes to read. So `BulkSenderOptions.ItemIdentity` defaults to `BulkItemIdentity.Auto`, which only asks when a request holds something only the server knows:
+
+| `ItemIdentity` | Requested when |
+|----------------|----------------|
+| `Auto` (default) | an `index` or `create` action has no id, or an action uses `WithRequireAlias()`. Requests where every action carries its id and targets a concrete index pay nothing. |
+| `Always` | every request. Use it when `Target` or an action's index is an alias or a data stream without `WithRequireAlias()`, which `Auto` cannot detect. |
+| `Never` | never: `Id` and `Index` stay `null`. |
+
+The decision is per request. If one action needs it, every item of that request reports its id and index, with explicit ids echoed back. Retries of a request keep asking, and `response.Items[i]` still belongs to `items[i]`, carrying the identity from the attempt that settled it. `IngestAllAsync` failures expose the same properties. A request that failed as a whole has no items, so the failures synthesized for it have `Id` and `Index` set to `null`.
+
+Channels do not ask by default. Set `ReturnItemIdentity = true` on the channel options to have `DirectWriteAsync`, the response callbacks and `IngestAllAsync` see `Id` and `Index` for every item.
+
 ### Serialization settings
 
 By default a sender serializes documents the same way channels do: with `DefaultIgnoreCondition = WhenWritingDefault` (members holding their default value, such as `int N = 0` or a `null` string, are omitted). Output from `BulkSender` and from a channel is therefore identical for the same document.

@@ -58,6 +58,9 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 	/// </summary>
 	protected virtual string BulkPathAndQuery => "_bulk?filter_path=errors,error,items.*.status,items.*.error,items.*.result,items.*._version";
 
+	// BulkPathAndQuery can change at runtime (catalog channels switch index), so the identity variant is derived per export
+	private string EffectiveBulkPathAndQuery => Options.ReturnItemIdentity ? WithItemIdentity(BulkPathAndQuery) : BulkPathAndQuery;
+
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryAllItems"/>
 	protected override bool RetryAllItems(BulkResponse response) => response.ApiCallDetails.HttpStatusCode == 429;
 
@@ -90,14 +93,14 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 #pragma warning restore CS0618
 		{
 			var bytes = BulkRequestDataFactory.GetBytes(page, Options, CreateBulkOperationHeader);
-			return transport.RequestAsync<BulkResponse>(HttpMethod.POST, BulkPathAndQuery, PostData.ReadOnlyMemory(bytes), ctx);
+			return transport.RequestAsync<BulkResponse>(HttpMethod.POST, EffectiveBulkPathAndQuery, PostData.ReadOnlyMemory(bytes), ctx);
 		}
 #endif
 		return ExportStreamingAsync(transport, page, ctx);
 	}
 
 	private Task<BulkResponse> ExportStreamingAsync(ITransport transport, ArraySegment<TDocument> page, CancellationToken ctx) =>
-		transport.RequestAsync<BulkResponse>(new(HttpMethod.POST, BulkPathAndQuery),
+		transport.RequestAsync<BulkResponse>(new(HttpMethod.POST, EffectiveBulkPathAndQuery),
 			PostData.StreamHandler(page,
 				(_, _) => { /* sync writer not used */ },
 				async (b, stream, localCtx) =>
@@ -154,7 +157,7 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 	{
 		buffer.TryGetBuffer(out var segment);
 		var bytes = new ReadOnlyMemory<byte>(segment.Array, segment.Offset, (int)buffer.Length);
-		return transport.RequestAsync<BulkResponse>(HttpMethod.POST, BulkPathAndQuery,
+		return transport.RequestAsync<BulkResponse>(HttpMethod.POST, EffectiveBulkPathAndQuery,
 			PostData.ReadOnlyMemory(bytes), ctx);
 	}
 

@@ -76,6 +76,18 @@ public sealed class ScriptedTransport
 			|| l.StartsWith("{\"update\":", StringComparison.Ordinal)
 			|| l.StartsWith("{\"delete\":", StringComparison.Ordinal));
 
+	/// <summary>The _id, _index and require_alias of every action line of the request.</summary>
+	public static (string Id, string Index, bool Alias)[] ParseActions(CapturedRequest request) =>
+		request.Lines.Where(l => l.StartsWith("{\"index\":", StringComparison.Ordinal) || l.StartsWith("{\"create\":", StringComparison.Ordinal)
+				|| l.StartsWith("{\"update\":", StringComparison.Ordinal) || l.StartsWith("{\"delete\":", StringComparison.Ordinal))
+			.Select(l =>
+			{
+				var op = System.Text.Json.JsonDocument.Parse(l).RootElement.EnumerateObject().First().Value;
+				return (op.TryGetProperty("_id", out var id) ? id.GetString() : null,
+					op.TryGetProperty("_index", out var index) ? index.GetString() : null,
+					op.TryGetProperty("require_alias", out var alias) && alias.GetBoolean());
+			}).ToArray();
+
 	/// <summary>The _id of every action line of the request, in order.</summary>
 	public static string[] IdsOf(CapturedRequest request) =>
 		request.Lines.Where(l => l.StartsWith("{\"index\":", StringComparison.Ordinal) || l.StartsWith("{\"create\":", StringComparison.Ordinal)
@@ -125,14 +137,23 @@ public sealed class ScriptedTransport
 				await Task.Yield();
 
 				var body = response.RawBody is not null ? Encoding.UTF8.GetBytes(response.RawBody)
-					: response.ItemStatuses is null ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(BuildBody(response.ItemStatuses, response.IncludeErrorsFlag));
+					: response.ItemStatuses is null ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(BuildBody(response.ItemStatuses, response.IncludeErrorsFlag, captured, attempt));
 				return await _inner.BuildResponseAsync<TResponse>(endpoint, boundConfiguration, postData, cancellationToken, body, response.HttpStatus, "application/json").ConfigureAwait(false);
 			}
 			finally { Interlocked.Decrement(ref owner._inflight); }
 		}
 
-		private static string BuildBody(int[] statuses, bool includeErrorsFlag)
+		/// <summary>
+		/// Builds the response body like the server does: when the request asked for it through filter_path, every item
+		/// reports _id (echoing an explicit id, otherwise generated as "gen-{attempt}-{position}") and _index
+		/// (the action's index or the path target, resolved to "{name}-000001" for require_alias actions).
+		/// </summary>
+		private static string BuildBody(int[] statuses, bool includeErrorsFlag, CapturedRequest request, int attempt)
 		{
+			var identity = request.PathAndQuery.Contains("items.*._id", StringComparison.Ordinal);
+			var actions = identity ? ParseActions(request) : System.Array.Empty<(string Id, string Index, bool Alias)>();
+			var target = request.Path.EndsWith("/_bulk", StringComparison.Ordinal) ? request.Path[..^"/_bulk".Length] : null;
+
 			var sb = new StringBuilder("{");
 			if (includeErrorsFlag) sb.Append("\"errors\":").Append(statuses.Any(s => s is < 200 or > 299) ? "true" : "false").Append(',');
 			sb.Append("\"items\":[");
@@ -140,7 +161,17 @@ public sealed class ScriptedTransport
 			{
 				if (i > 0) sb.Append(',');
 				var s = statuses[i];
-				sb.Append("{\"index\":{\"status\":").Append(s);
+				sb.Append("{\"index\":{");
+				if (identity && i < actions.Length)
+				{
+					var (id, index, alias) = actions[i];
+					var resolved = index ?? target ?? "default-index";
+					if (alias) resolved += "-000001";
+					// ids and index names are arbitrary text in the property tests, so they must be escaped like a server does
+					sb.Append("\"_index\":").Append(System.Text.Json.JsonSerializer.Serialize(resolved))
+						.Append(",\"_id\":").Append(System.Text.Json.JsonSerializer.Serialize(id ?? $"gen-{attempt}-{i}")).Append(',');
+				}
+				sb.Append("\"status\":").Append(s);
 				if (s is < 200 or > 299)
 					sb.Append(",\"error\":{\"type\":\"t").Append(s).Append("\",\"reason\":\"r").Append(s).Append("\"}");
 				sb.Append("}}");

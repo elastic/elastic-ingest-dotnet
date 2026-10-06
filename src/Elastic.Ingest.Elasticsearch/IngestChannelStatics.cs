@@ -42,6 +42,17 @@ internal static class IngestChannelStatics
 
 	public const string DefaultBulkPathAndQuery = "_bulk?filter_path=errors,error,items.*.status,items.*.error,items.*.result,items.*._version";
 
+	/// <summary>The same query, additionally reporting <c>_id</c> and <c>_index</c> of every item.</summary>
+	public const string BulkItemIdentityFilterPath = ",items.*._id,items.*._index";
+
+	private const string DefaultBulkFilterPath = "filter_path=errors,error,items.*.status,items.*.error,items.*.result,items.*._version";
+
+	/// <summary>Adds <c>_id</c> and <c>_index</c> of every item to the response of a bulk url built from <see cref="DefaultBulkPathAndQuery"/>.</summary>
+	public static string WithItemIdentity(string bulkPathAndQuery) =>
+		bulkPathAndQuery.Contains("items.*._id", System.StringComparison.Ordinal)
+			? bulkPathAndQuery
+			: bulkPathAndQuery.Replace(DefaultBulkFilterPath, DefaultBulkFilterPath + BulkItemIdentityFilterPath);
+
 	public static readonly HashSet<int> RetryStatusCodes = [502, 503, 504, 429];
 
 	public static readonly JsonSerializerOptions SerializerOptions = new(IngestSerializationContext.Default.Options)

@@ -42,6 +42,12 @@ public sealed class BulkSenderOptions<TItem, TBody>
 	public TimeSpan? RequestTimeout { get; init; }
 
 	/// <summary>
+	/// Whether responses report the <c>_id</c> and <c>_index</c> of each item, see <see cref="BulkItemIdentity"/>.
+	/// Defaults to <see cref="BulkItemIdentity.Auto"/>: requested only when an action has no id or requires an alias.
+	/// </summary>
+	public BulkItemIdentity ItemIdentity { get; init; } = BulkItemIdentity.Auto;
+
+	/// <summary>
 	/// When <c>true</c> (the default) documents are serialized with the same <see cref="System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault"/>
 	/// default that channels use, so output is identical to a channel. This overrides a <c>DefaultIgnoreCondition</c> set on the
 	/// serializer context (per property <c>[JsonIgnore(Condition = ...)]</c> attributes still apply).

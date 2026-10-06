@@ -111,6 +111,70 @@ public class BulkSenderIntegrationTests(IngestionCluster cluster) : IntegrationT
 	}
 
 	[Test]
+	public async Task ServerGeneratedIdsComeBackAndAddressTheDocuments()
+	{
+		var index = $"{Prefix}-generated";
+		await CleanupPrefixAsync(index);
+
+		var sender = BulkSender.Create(Transport, BulkItContext.Default.BulkItDoc, static _ => BulkAction.Create(), target: index);
+		var response = await sender.SendAsync(Docs(5));
+
+		response.AllItemsPersisted().Should().BeTrue();
+		var ids = response.Items.Select(i => i.Id).ToArray();
+		ids.Should().OnlyContain(id => !string.IsNullOrEmpty(id), "Elasticsearch generated them, the response is the only place to learn them");
+		ids.Distinct().Should().HaveCount(5);
+		response.Items.Should().OnlyContain(i => i.Index == index);
+
+		// the reported id really addresses the document that was sent at that position
+		for (var i = 0; i < 5; i++)
+		{
+			var get = await Transport.RequestAsync<StringResponse>(Elastic.Transport.HttpMethod.GET, $"/{index}/_doc/{ids[i]}");
+			get.ApiCallDetails.HttpStatusCode.Should().Be(200);
+			System.Text.Json.JsonDocument.Parse(get.Body).RootElement.GetProperty("_source").GetProperty("name").GetString().Should().Be($"name {i}");
+		}
+
+		await CleanupPrefixAsync(index);
+	}
+
+	[Test]
+	public async Task AnAliasWriteReportsTheConcreteBackingIndex()
+	{
+		var alias = $"{Prefix}-alias-write";
+		var concrete = $"{Prefix}-alias-000001";
+		await CleanupPrefixAsync($"{Prefix}-alias");
+
+		var create = await Transport.RequestAsync<StringResponse>(Elastic.Transport.HttpMethod.PUT, $"/{concrete}",
+			Elastic.Transport.PostData.String($"{{\"aliases\":{{\"{alias}\":{{\"is_write_index\":true}}}}}}"));
+		create.ApiCallDetails.HttpStatusCode.Should().Be(200);
+
+		var sender = BulkSender.Create(Transport, BulkItContext.Default.BulkItDoc, static d => BulkAction.Index(d.Id).WithRequireAlias(), target: alias);
+		var response = await sender.SendAsync(Docs(3));
+
+		response.AllItemsPersisted().Should().BeTrue();
+		response.Items.Select(i => (i.Id, i.Index)).Should().Equal(("d0", concrete), ("d1", concrete), ("d2", concrete));
+
+		await CleanupPrefixAsync($"{Prefix}-alias");
+	}
+
+	[Test]
+	public async Task ChannelsReportGeneratedIdsWhenAsked()
+	{
+		var index = $"{Prefix}-channel-identity";
+		await CleanupPrefixAsync(index);
+
+		var options = new IndexChannelOptions<BulkItDocClass>(Transport) { IndexFormat = index, ReturnItemIdentity = true };
+		using var channel = new IndexChannel<BulkItDocClass>(options);
+		var response = await channel.DirectWriteAsync(new BulkItDocClass { Id = "x", Name = "n1" }, new BulkItDocClass { Id = "y", Name = "n2" });
+
+		response.AllItemsPersisted().Should().BeTrue();
+		response.Items.Should().OnlyContain(i => !string.IsNullOrEmpty(i.Id) && i.Index == index);
+		var get = await Transport.RequestAsync<StringResponse>(Elastic.Transport.HttpMethod.GET, $"/{index}/_doc/{response.Items.First().Id}");
+		get.ApiCallDetails.HttpStatusCode.Should().Be(200);
+
+		await CleanupPrefixAsync(index);
+	}
+
+	[Test]
 	public async Task StaticHelperStoresAList()
 	{
 		var index = $"{Prefix}-list";
