@@ -18,12 +18,14 @@ internal sealed class BulkRequestBuffer : IDisposable
 	[ThreadStatic]
 	private static Utf8JsonWriter? _cachedWriter;
 
+	private readonly ArrayPool<int> _intPool;
 	private int[] _ends;
 
-	public BulkRequestBuffer(int expectedItems)
+	public BulkRequestBuffer(int expectedItems, ArrayPool<byte>? bytePool = null, ArrayPool<int>? intPool = null)
 	{
-		Body = new PooledByteBufferWriter(Math.Max(expectedItems, 1) * 256);
-		_ends = ArrayPool<int>.Shared.Rent(Math.Max(expectedItems, 16));
+		_intPool = intPool ?? ArrayPool<int>.Shared;
+		Body = new PooledByteBufferWriter(Math.Max(expectedItems, 1) * 256, bytePool);
+		_ends = _intPool.Rent(Math.Max(expectedItems, 16));
 	}
 
 	public PooledByteBufferWriter Body { get; }
@@ -51,9 +53,9 @@ internal sealed class BulkRequestBuffer : IDisposable
 	{
 		if (Count == _ends.Length)
 		{
-			var next = ArrayPool<int>.Shared.Rent(_ends.Length * 2);
+			var next = _intPool.Rent(_ends.Length * 2);
 			Array.Copy(_ends, next, Count);
-			ArrayPool<int>.Shared.Return(_ends);
+			_intPool.Return(_ends);
 			_ends = next;
 		}
 		_ends[Count++] = Body.WrittenCount;
@@ -94,6 +96,6 @@ internal sealed class BulkRequestBuffer : IDisposable
 		Body.Dispose();
 		var ends = _ends;
 		_ends = Array.Empty<int>();
-		if (ends.Length > 0) ArrayPool<int>.Shared.Return(ends);
+		if (ends.Length > 0) _intPool.Return(ends);
 	}
 }

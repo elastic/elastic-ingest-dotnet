@@ -553,13 +553,13 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 				await run.AddAsync(item).ConfigureAwait(false);
 			}
 			await run.FlushAsync().ConfigureAwait(false);
+			return await run.CompleteAsync().ConfigureAwait(false);
 		}
 		catch
 		{
 			await run.AbortAsync().ConfigureAwait(false);
 			throw;
 		}
-		return await run.CompleteAsync().ConfigureAwait(false);
 	}
 
 	/// <inheritdoc cref="IngestAllAsync(IEnumerable{TEvent},int?,CancellationToken)"/>
@@ -598,6 +598,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 				await run.AddAsync(enumerator.Current).ConfigureAwait(false);
 			}
 			await run.FlushAsync().ConfigureAwait(false);
+			return await run.CompleteAsync().ConfigureAwait(false);
 		}
 		catch
 		{
@@ -608,8 +609,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		{
 			await enumerator.DisposeAsync().ConfigureAwait(false);
 		}
-		return await run.CompleteAsync().ConfigureAwait(false);
 	}
+
+	// injectable so tests can prove every pulled batch array is returned
+	internal ArrayPool<TEvent> PullPool { get; set; } = ArrayPool<TEvent>.Shared;
 
 	/// <summary>State of one <c>IngestAllAsync</c> call: the batch being filled and the exports in flight.</summary>
 	private sealed class PullRun
@@ -642,7 +645,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		{
 			if (_batch is null)
 			{
-				_batch = ArrayPool<TEvent>.Shared.Rent(_batchSize);
+				_batch = _channel.PullPool.Rent(_batchSize);
 				_batchStart = System.Diagnostics.Stopwatch.GetTimestamp();
 			}
 			_batch[_count++] = item;
@@ -654,7 +657,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		{
 			if (_count == 0 || _batch is null) return;
 
-			var buffer = new PullBuffer<TEvent>(_batch, _count, BatchAge);
+			var buffer = new PullBuffer<TEvent>(_batch, _count, BatchAge, _channel.PullPool);
 			_batch = null;
 			_count = 0;
 			_batches++;
@@ -690,7 +693,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			if (_batch is not null)
 			{
 				Array.Clear(_batch, 0, _count);
-				ArrayPool<TEvent>.Shared.Return(_batch);
+				_channel.PullPool.Return(_batch);
 				_batch = null;
 				_count = 0;
 			}

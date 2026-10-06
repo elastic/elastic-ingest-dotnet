@@ -15,11 +15,15 @@ internal sealed class PooledByteBufferWriter : IBufferWriter<byte>, IDisposable
 {
 	private const int MinimumGrowth = 4096;
 	private const int MaxArrayLength = 0x7FFFFFC7;
+	private readonly ArrayPool<byte> _pool;
 	private byte[] _buffer;
 	private int _written;
 
-	public PooledByteBufferWriter(int initialCapacity = 16 * 1024) =>
-		_buffer = ArrayPool<byte>.Shared.Rent(Math.Max(initialCapacity, 256));
+	public PooledByteBufferWriter(int initialCapacity = 16 * 1024, ArrayPool<byte>? pool = null)
+	{
+		_pool = pool ?? ArrayPool<byte>.Shared;
+		_buffer = _pool.Rent(Math.Max(initialCapacity, 256));
+	}
 
 	public int WrittenCount => _written;
 
@@ -73,9 +77,9 @@ internal sealed class PooledByteBufferWriter : IBufferWriter<byte>, IDisposable
 
 		var newSize = (int)Math.Min(Math.Max((long)_buffer.Length * 2, (long)_written + sizeHint + MinimumGrowth), MaxArrayLength);
 		if (newSize - _written < sizeHint) throw new InvalidOperationException("Bulk request body exceeds the maximum buffer size.");
-		var next = ArrayPool<byte>.Shared.Rent(newSize);
+		var next = _pool.Rent(newSize);
 		Buffer.BlockCopy(_buffer, 0, next, 0, _written);
-		ArrayPool<byte>.Shared.Return(_buffer);
+		_pool.Return(_buffer);
 		_buffer = next;
 	}
 
@@ -84,6 +88,6 @@ internal sealed class PooledByteBufferWriter : IBufferWriter<byte>, IDisposable
 		var b = _buffer;
 		_buffer = Array.Empty<byte>();
 		_written = 0;
-		if (b.Length > 0) ArrayPool<byte>.Shared.Return(b);
+		if (b.Length > 0) _pool.Return(b);
 	}
 }

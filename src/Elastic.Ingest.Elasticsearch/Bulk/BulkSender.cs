@@ -35,10 +35,20 @@ public sealed partial class BulkSender<TItem, TBody>
 	private readonly JsonTypeInfo<TBody> _typeInfo;
 	private readonly BulkRetryPolicy _retry;
 	private readonly string _url;
+	private readonly ArrayPool<byte> _bytePool;
+	private readonly ArrayPool<int> _intPool;
+	private readonly ArrayPool<TItem> _itemPool;
 
 	/// <summary>Creates a sender, all per request setup happens here once.</summary>
 	public BulkSender(BulkSenderOptions<TItem, TBody> options)
+		: this(options, ArrayPool<byte>.Shared, ArrayPool<int>.Shared, ArrayPool<TItem>.Shared) { }
+
+	// the pools are injectable so tests can prove every rented array is returned
+	internal BulkSender(BulkSenderOptions<TItem, TBody> options, ArrayPool<byte> bytePool, ArrayPool<int> intPool, ArrayPool<TItem> itemPool)
 	{
+		_bytePool = bytePool;
+		_intPool = intPool;
+		_itemPool = itemPool;
 		if (options is null) throw new ArgumentNullException(nameof(options));
 		_transport = options.Transport;
 		_action = options.Action;
@@ -72,7 +82,7 @@ public sealed partial class BulkSender<TItem, TBody>
 
 	private Task<BulkResponse> SendCoreAsync(ReadOnlySpan<TItem> items, BulkRetryPolicy retry, CancellationToken ct)
 	{
-		var buffer = new BulkRequestBuffer(items.Length);
+		var buffer = new BulkRequestBuffer(items.Length, _bytePool, _intPool);
 		try
 		{
 			var writer = buffer.RentWriter();
@@ -96,7 +106,7 @@ public sealed partial class BulkSender<TItem, TBody>
 	{
 		if (items is TItem[] array) return SendAsync(new ReadOnlySpan<TItem>(array), ct);
 
-		var buffer = new BulkRequestBuffer(items is ICollection<TItem> c ? c.Count : 16);
+		var buffer = new BulkRequestBuffer(items is ICollection<TItem> c ? c.Count : 16, _bytePool, _intPool);
 		try
 		{
 			var writer = buffer.RentWriter();
@@ -158,7 +168,7 @@ public sealed partial class BulkSender<TItem, TBody>
 					if (response.Errors == false) break;
 					if (response.Items is null || response.Items.Count != current) break;
 
-					keep = ArrayPool<int>.Shared.Rent(current);
+					keep = _intPool.Rent(current);
 					try
 					{
 						var i = 0;
@@ -176,14 +186,14 @@ public sealed partial class BulkSender<TItem, TBody>
 
 						if (keepCount == 0)
 						{
-							ArrayPool<int>.Shared.Return(keep);
+							_intPool.Return(keep);
 							keep = null;
 							break;
 						}
 					}
 					catch
 					{
-						ArrayPool<int>.Shared.Return(keep!);
+						_intPool.Return(keep!);
 						throw;
 					}
 				}
@@ -206,7 +216,7 @@ public sealed partial class BulkSender<TItem, TBody>
 					{
 						if (map is null)
 						{
-							map = ArrayPool<int>.Shared.Rent(total);
+							map = _intPool.Rent(total);
 							for (var i = 0; i < total; i++) map[i] = i;
 						}
 						// keep (positions in the current attempt) maps back to original positions, in place as keep[j] >= j.
@@ -214,7 +224,7 @@ public sealed partial class BulkSender<TItem, TBody>
 							map[j] = map[keep[j]];
 						buffer.Compact(keep.AsSpan(0, keepCount));
 					}
-					finally { ArrayPool<int>.Shared.Return(keep!); }
+					finally { _intPool.Return(keep!); }
 				}
 
 				await Task.Delay(retry.Backoff(attempt), ct).ConfigureAwait(false);
@@ -238,7 +248,7 @@ public sealed partial class BulkSender<TItem, TBody>
 		}
 		finally
 		{
-			if (map is not null) ArrayPool<int>.Shared.Return(map);
+			if (map is not null) _intPool.Return(map);
 			buffer.Dispose();
 		}
 	}

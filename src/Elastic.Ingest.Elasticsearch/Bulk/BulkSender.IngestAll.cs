@@ -64,7 +64,7 @@ public sealed partial class BulkSender<TItem, TBody>
 			}
 			else
 			{
-				var batch = ArrayPool<TItem>.Shared.Rent(run.BatchSize);
+				var batch = _itemPool.Rent(run.BatchSize);
 				var count = 0;
 				try
 				{
@@ -74,7 +74,7 @@ public sealed partial class BulkSender<TItem, TBody>
 						batch[count++] = item;
 						if (count < run.BatchSize) continue;
 						var full = batch;
-						batch = ArrayPool<TItem>.Shared.Rent(run.BatchSize);
+						batch = _itemPool.Rent(run.BatchSize);
 						await run.StartAsync(full, 0, count, rented: true).ConfigureAwait(false);
 						count = 0;
 					}
@@ -87,23 +87,23 @@ public sealed partial class BulkSender<TItem, TBody>
 				}
 				finally
 				{
-					if (batch is not null) ArrayPool<TItem>.Shared.Return(batch, clearArray: true);
+					if (batch is not null) _itemPool.Return(batch, clearArray: true);
 				}
 			}
+			return await run.CompleteAsync().ConfigureAwait(false);
 		}
 		catch
 		{
 			await run.AbortAsync().ConfigureAwait(false);
 			throw;
 		}
-		return await run.CompleteAsync().ConfigureAwait(false);
 	}
 
 	/// <inheritdoc cref="IngestAllAsync(IEnumerable{TItem},IngestAllOptions,CancellationToken)"/>
 	public async Task<BulkIngestAllResult> IngestAllAsync(IAsyncEnumerable<TItem> source, IngestAllOptions? options = null, CancellationToken ct = default)
 	{
 		var run = new IngestRun(this, options, ct);
-		var batch = ArrayPool<TItem>.Shared.Rent(run.BatchSize);
+		var batch = _itemPool.Rent(run.BatchSize);
 		var count = 0;
 		try
 		{
@@ -112,7 +112,7 @@ public sealed partial class BulkSender<TItem, TBody>
 				batch[count++] = item;
 				if (count < run.BatchSize) continue;
 				var full = batch;
-				batch = ArrayPool<TItem>.Shared.Rent(run.BatchSize);
+				batch = _itemPool.Rent(run.BatchSize);
 				await run.StartAsync(full, 0, count, rented: true).ConfigureAwait(false);
 				count = 0;
 			}
@@ -122,6 +122,7 @@ public sealed partial class BulkSender<TItem, TBody>
 				batch = null!;
 				await run.StartAsync(last, 0, count, rented: true).ConfigureAwait(false);
 			}
+			return await run.CompleteAsync().ConfigureAwait(false);
 		}
 		catch
 		{
@@ -130,9 +131,8 @@ public sealed partial class BulkSender<TItem, TBody>
 		}
 		finally
 		{
-			if (batch is not null) ArrayPool<TItem>.Shared.Return(batch, clearArray: true);
+			if (batch is not null) _itemPool.Return(batch, clearArray: true);
 		}
-		return await run.CompleteAsync().ConfigureAwait(false);
 	}
 
 	private sealed class IngestRun
@@ -159,9 +159,18 @@ public sealed partial class BulkSender<TItem, TBody>
 
 		public async Task StartAsync(TItem[] items, int offset, int length, bool rented)
 		{
-			_ct.ThrowIfCancellationRequested();
-			while (_inflight.Count >= _concurrency)
-				await ReapOneAsync().ConfigureAwait(false);
+			try
+			{
+				_ct.ThrowIfCancellationRequested();
+				while (_inflight.Count >= _concurrency)
+					await ReapOneAsync().ConfigureAwait(false);
+			}
+			catch
+			{
+				// never handed over, so it is ours to return
+				if (rented) _sender._itemPool.Return(items, clearArray: true);
+				throw;
+			}
 
 			var position = _read;
 			_read += length;
@@ -172,7 +181,7 @@ public sealed partial class BulkSender<TItem, TBody>
 			try { send = _sender.SendCoreAsync(new ReadOnlySpan<TItem>(items, offset, length), _retry, _ct); }
 			finally
 			{
-				if (rented) ArrayPool<TItem>.Shared.Return(items, clearArray: true);
+				if (rented) _sender._itemPool.Return(items, clearArray: true);
 			}
 
 			var tracked = TrackAsync(send, position, length);

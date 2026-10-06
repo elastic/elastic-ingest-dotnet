@@ -8,7 +8,7 @@ using System.Buffers;
 namespace Elastic.Channels.Buffers;
 
 /// <summary>A batch pulled from a sequence into an <see cref="ArrayPool{T}"/> array, exported like any other outbound buffer.</summary>
-internal sealed class PullBuffer<TEvent>(TEvent[] items, int count, TimeSpan? duration) : IOutboundBuffer<TEvent>
+internal sealed class PullBuffer<TEvent>(TEvent[] items, int count, TimeSpan? duration, ArrayPool<TEvent> pool) : IOutboundBuffer<TEvent>
 {
 	public int Count { get; } = count;
 
@@ -22,6 +22,6 @@ internal sealed class PullBuffer<TEvent>(TEvent[] items, int count, TimeSpan? du
 	{
 		// do not keep the exported events alive through the pooled array
 		Array.Clear(items, 0, Count);
-		ArrayPool<TEvent>.Shared.Return(items);
+		pool.Return(items);
 	}
 }

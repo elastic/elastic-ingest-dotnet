@@ -60,6 +60,9 @@ public sealed class ScriptedTransport
 
 	public int MaxInflight => _maxInflight;
 
+	/// <summary>Requests currently being served, must be zero once the code under test returned or threw.</summary>
+	public int Inflight => _inflight;
+
 	/// <summary>Number of bulk operations: action lines are the ones starting with an operation name.</summary>
 	public static int CountOperations(CapturedRequest request) =>
 		request.Lines.Count(l => l.StartsWith("{\"index\":", StringComparison.Ordinal)

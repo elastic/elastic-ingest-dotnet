@@ -93,4 +93,52 @@ public class IngestAllTests
 			channel.InflightExportOperations.Should().Be(0);
 		}, iter: 150);
 	}
+
+	private static IEnumerable<NoopBufferedChannel.NoopEvent> Faulty(int n, int failAt, Action<int> onItem)
+	{
+		for (var i = 0; i < n; i++)
+		{
+			onItem(i);
+			if (i == failAt) throw new InvalidOperationException("source failed");
+			yield return new NoopBufferedChannel.NoopEvent { Id = i };
+		}
+	}
+
+	private static async IAsyncEnumerable<NoopBufferedChannel.NoopEvent> FaultyAsync(int n, int failAt, Action<int> onItem,
+		[System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken ct = default)
+	{
+		foreach (var e in Faulty(n, failAt, onItem))
+		{
+			await Task.Yield();
+			ct.ThrowIfCancellationRequested();
+			yield return e;
+		}
+	}
+
+	[Test]
+	public async Task EveryPulledBatchArrayIsReturnedWhateverHappensToTheSource()
+	{
+		await Gen.Select(Gen.Int[0, 120], Gen.Int[1, 15], Gen.Int[1, 4], Gen.Int[-1, 120], Gen.Int[-1, 120], Gen.Bool).SampleAsync(async x =>
+		{
+			var (n, batch, conc, failAt, cancelAt, useAsync) = x;
+			var pool = new TrackingArrayPool<NoopBufferedChannel.NoopEvent>();
+			using var channel = new NoopBufferedChannel(new BufferOptions { OutboundBufferMaxSize = batch, ExportMaxConcurrency = conc });
+			channel.PullPool = pool;
+			using var cts = new System.Threading.CancellationTokenSource();
+			void OnItem(int i) { if (i == cancelAt) cts.Cancel(); }
+
+			try
+			{
+				if (useAsync) await channel.IngestAllAsync(FaultyAsync(n, failAt, OnItem), conc, cts.Token);
+				else await channel.IngestAllAsync(Faulty(n, failAt, OnItem), conc, cts.Token);
+			}
+			catch (Exception)
+			{
+				// expected for failing or cancelled sources
+			}
+
+			pool.AssertBalanced();
+			channel.InflightExportOperations.Should().Be(0);
+		}, iter: 300);
+	}
 }
