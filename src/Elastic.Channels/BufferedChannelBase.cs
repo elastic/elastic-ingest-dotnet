@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -389,8 +390,9 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		_callbacks.OutboundChannelExitedCallback?.Invoke();
 	}
 
-	private async Task ExportBufferAsync(ArraySegment<TEvent> items, IOutboundBuffer<TEvent> buffer)
+	private async Task<int> ExportBufferAsync(ArraySegment<TEvent> items, IOutboundBuffer<TEvent> buffer)
 	{
+		var exhausted = 0;
 		Interlocked.Increment(ref _inflightExportOperations);
 		using var outboundBuffer = buffer;
 		var maxRetries = Options.BufferOptions.ExportMaxRetries;
@@ -420,6 +422,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 				_callbacks.ExportExceptionCallback?.Invoke(e);
 				if (atEndOfRetries)
 				{
+					exhausted = items.Count;
 					_callbacks.ExportMaxRetriesCallback?.Invoke(items);
 					break;
 				}
@@ -438,7 +441,10 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			}
 			// otherwise if retryable items still exist and the user wants to be notified
 			else if (items.Count > 0 && atEndOfRetries)
+			{
+				exhausted = items.Count;
 				_callbacks.ExportMaxRetriesCallback?.Invoke(items);
+			}
 		}
 		Interlocked.Decrement(ref _inflightExportOperations);
 		_callbacks.ExportBufferCallback?.Invoke();
@@ -446,6 +452,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			_signal.Signal();
 		if (_waitForDrain is { IsSet: false })
 			_waitForDrain.Signal();
+		return exhausted;
 	}
 
 	private int _seenTimeouts;
@@ -524,6 +531,175 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		return OutChannel.Writer.TryWrite(buffer)
 			? new ValueTask<bool>(true)
 			: new ValueTask<bool>(AsyncSlowPathAsync(buffer));
+	}
+
+	/// <summary>
+	/// Pulls <paramref name="source"/> to exhaustion, batches it by <see cref="BatchExportSize"/> and exports every batch
+	/// with the same retry and callback machinery used for pushed events. The returned task completes when every batch settled.
+	/// <para>This bypasses the inbound buffer: it starts no threads, never touches <see cref="InflightEvents"/>, never
+	/// completes the channel and can be called repeatedly and alongside <see cref="TryWrite"/>.</para>
+	/// </summary>
+	/// <param name="source">The finite sequence to export.</param>
+	/// <param name="maxConcurrency">Maximum batches in flight, defaults to <see cref="MaxConcurrency"/>. Use <c>1</c> to preserve order.</param>
+	/// <param name="ctx">Cancels reading, batches already in flight are awaited.</param>
+	public async Task<IngestAllResult> IngestAllAsync(IEnumerable<TEvent> source, int? maxConcurrency = null, CancellationToken ctx = default)
+	{
+		var run = new PullRun(this, maxConcurrency, ctx);
+		try
+		{
+			foreach (var item in source)
+			{
+				ctx.ThrowIfCancellationRequested();
+				await run.AddAsync(item).ConfigureAwait(false);
+			}
+			await run.FlushAsync().ConfigureAwait(false);
+		}
+		catch
+		{
+			await run.AbortAsync().ConfigureAwait(false);
+			throw;
+		}
+		return await run.CompleteAsync().ConfigureAwait(false);
+	}
+
+	/// <inheritdoc cref="IngestAllAsync(IEnumerable{TEvent},int?,CancellationToken)"/>
+	/// <remarks>A partial batch is exported once it is older than <see cref="Channels.BufferOptions.OutboundBufferMaxLifetime"/>, also while waiting on a slow source.</remarks>
+	public async Task<IngestAllResult> IngestAllAsync(IAsyncEnumerable<TEvent> source, int? maxConcurrency = null, CancellationToken ctx = default)
+	{
+		var run = new PullRun(this, maxConcurrency, ctx);
+		var enumerator = source.GetAsyncEnumerator(ctx);
+		try
+		{
+			var maxLifetime = Options.BufferOptions.OutboundBufferMaxLifetime;
+			while (true)
+			{
+				var next = enumerator.MoveNextAsync();
+				bool hasNext;
+				if (next.IsCompleted || run.PendingCount == 0)
+					hasNext = await next.ConfigureAwait(false);
+				else
+				{
+					// slow source with a partial batch waiting: flush it when it gets too old instead of holding it hostage
+					var moveNext = next.AsTask();
+					var remaining = maxLifetime - run.BatchAge;
+					if (remaining > TimeSpan.Zero)
+					{
+						using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx);
+						var delay = Task.Delay(remaining, cts.Token);
+						var winner = await Task.WhenAny(moveNext, delay).ConfigureAwait(false);
+						if (winner == moveNext) cts.Cancel();
+						else await run.FlushAsync().ConfigureAwait(false);
+					}
+					else
+						await run.FlushAsync().ConfigureAwait(false);
+					hasNext = await moveNext.ConfigureAwait(false);
+				}
+				if (!hasNext) break;
+				await run.AddAsync(enumerator.Current).ConfigureAwait(false);
+			}
+			await run.FlushAsync().ConfigureAwait(false);
+		}
+		catch
+		{
+			await run.AbortAsync().ConfigureAwait(false);
+			throw;
+		}
+		finally
+		{
+			await enumerator.DisposeAsync().ConfigureAwait(false);
+		}
+		return await run.CompleteAsync().ConfigureAwait(false);
+	}
+
+	/// <summary>State of one <c>IngestAllAsync</c> call: the batch being filled and the exports in flight.</summary>
+	private sealed class PullRun
+	{
+		private readonly BufferedChannelBase<TChannelOptions, TEvent, TResponse> _channel;
+		private readonly int _concurrency;
+		private readonly int _batchSize;
+		private readonly List<Task<int>> _inflight;
+		private TEvent[]? _batch;
+		private int _count;
+		private long _batchStart;
+		private long _read;
+		private long _batches;
+		private long _exhausted;
+
+		public PullRun(BufferedChannelBase<TChannelOptions, TEvent, TResponse> channel, int? maxConcurrency, CancellationToken ctx)
+		{
+			_channel = channel;
+			_concurrency = Math.Max(1, maxConcurrency ?? channel.MaxConcurrency);
+			_batchSize = Math.Max(1, channel.BatchExportSize);
+			_inflight = new List<Task<int>>(_concurrency);
+			_ = ctx;
+		}
+
+		public int PendingCount => _count;
+
+		public TimeSpan BatchAge => _count == 0 ? TimeSpan.Zero : TimeSpan.FromTicks((System.Diagnostics.Stopwatch.GetTimestamp() - _batchStart) * TimeSpan.TicksPerSecond / System.Diagnostics.Stopwatch.Frequency);
+
+		public ValueTask AddAsync(TEvent item)
+		{
+			if (_batch is null)
+			{
+				_batch = ArrayPool<TEvent>.Shared.Rent(_batchSize);
+				_batchStart = System.Diagnostics.Stopwatch.GetTimestamp();
+			}
+			_batch[_count++] = item;
+			_read++;
+			return _count >= _batchSize ? new ValueTask(FlushAsync()) : default;
+		}
+
+		public async Task FlushAsync()
+		{
+			if (_count == 0 || _batch is null) return;
+
+			var buffer = new PullBuffer<TEvent>(_batch, _count, BatchAge);
+			_batch = null;
+			_count = 0;
+			_batches++;
+
+			if (_concurrency == 1)
+			{
+				_exhausted += await _channel.ExportBufferAsync(buffer.GetArraySegment(), buffer).ConfigureAwait(false);
+				return;
+			}
+
+			while (_inflight.Count >= _concurrency)
+				await ReapOneAsync().ConfigureAwait(false);
+			_inflight.Add(_channel.ExportBufferAsync(buffer.GetArraySegment(), buffer));
+		}
+
+		private async Task ReapOneAsync()
+		{
+			var done = await Task.WhenAny(_inflight).ConfigureAwait(false);
+			_inflight.Remove(done);
+			_exhausted += await done.ConfigureAwait(false);
+		}
+
+		public async Task<IngestAllResult> CompleteAsync()
+		{
+			while (_inflight.Count > 0)
+				await ReapOneAsync().ConfigureAwait(false);
+			return new IngestAllResult(_read, _batches, _exhausted);
+		}
+
+		/// <summary>Returns the unsent batch and waits for exports in flight so nothing outlives the call.</summary>
+		public async Task AbortAsync()
+		{
+			if (_batch is not null)
+			{
+				Array.Clear(_batch, 0, _count);
+				ArrayPool<TEvent>.Shared.Return(_batch);
+				_batch = null;
+				_count = 0;
+			}
+			try { await Task.WhenAll(_inflight).ConfigureAwait(false); }
+			catch
+			{
+				// the original failure is the one that matters
+			}
+		}
 	}
 
 	/// <inheritdoc cref="object.ToString"/>>

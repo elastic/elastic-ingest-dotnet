@@ -27,7 +27,7 @@ namespace Elastic.Ingest.Elasticsearch.Bulk;
 /// </summary>
 /// <typeparam name="TItem">The item the action and body are derived from.</typeparam>
 /// <typeparam name="TBody">The type serialized as the document.</typeparam>
-public sealed class BulkSender<TItem, TBody>
+public sealed partial class BulkSender<TItem, TBody>
 {
 	private readonly ITransport _transport;
 	private readonly Func<TItem, BulkAction> _action;
@@ -54,7 +54,10 @@ public sealed class BulkSender<TItem, TBody>
 	/// Serializes <paramref name="items"/> and sends them in a single <c>_bulk</c> request.
 	/// Serialization runs synchronously, so a failing action or body throws from this call.
 	/// </summary>
-	public Task<BulkResponse> SendAsync(ReadOnlySpan<TItem> items, CancellationToken ct = default)
+	public Task<BulkResponse> SendAsync(ReadOnlySpan<TItem> items, CancellationToken ct = default) =>
+		SendCoreAsync(items, _retry, ct);
+
+	private Task<BulkResponse> SendCoreAsync(ReadOnlySpan<TItem> items, BulkRetryPolicy retry, CancellationToken ct)
 	{
 		var buffer = new BulkRequestBuffer(items.Length);
 		try
@@ -72,7 +75,7 @@ public sealed class BulkSender<TItem, TBody>
 			buffer.Dispose();
 			throw;
 		}
-		return SendBufferedAsync(buffer, ct);
+		return SendBufferedAsync(buffer, retry, ct);
 	}
 
 	/// <summary>Serializes <paramref name="items"/> and sends them in a single <c>_bulk</c> request.</summary>
@@ -96,7 +99,7 @@ public sealed class BulkSender<TItem, TBody>
 			buffer.Dispose();
 			throw;
 		}
-		return SendBufferedAsync(buffer, ct);
+		return SendBufferedAsync(buffer, _retry, ct);
 	}
 
 	private void WriteItem(BulkRequestBuffer buffer, System.Text.Json.Utf8JsonWriter writer, TItem item)
@@ -118,7 +121,7 @@ public sealed class BulkSender<TItem, TBody>
 #endif
 			ct);
 
-	private async Task<BulkResponse> SendBufferedAsync(BulkRequestBuffer buffer, CancellationToken ct)
+	private async Task<BulkResponse> SendBufferedAsync(BulkRequestBuffer buffer, BulkRetryPolicy retry, CancellationToken ct)
 	{
 		int[]? map = null;
 		BulkResponseItem[]? merged = null;
@@ -126,7 +129,7 @@ public sealed class BulkSender<TItem, TBody>
 		try
 		{
 			var response = await RequestAsync(buffer, ct).ConfigureAwait(false);
-			for (var attempt = 0; attempt < _retry.MaxRetries && total > 0; attempt++)
+			for (var attempt = 0; attempt < retry.MaxRetries && total > 0; attempt++)
 			{
 				var current = buffer.Count;
 				var details = response.ApiCallDetails;
@@ -135,7 +138,7 @@ public sealed class BulkSender<TItem, TBody>
 				var keepCount = 0;
 				if (!details.HasSuccessfulStatusCode)
 				{
-					if (!(_retry.RetryAllOnHttp429 && details.HttpStatusCode == 429)) break;
+					if (!(retry.RetryAllOnHttp429 && details.HttpStatusCode == 429)) break;
 				}
 				else
 				{
@@ -149,12 +152,12 @@ public sealed class BulkSender<TItem, TBody>
 						if (response.Items is IReadOnlyList<BulkResponseItem> list)
 							for (; i < list.Count; i++)
 							{
-								if (_retry.IsRetryable(list[i])) keep[keepCount++] = i;
+								if (retry.IsRetryable(list[i])) keep[keepCount++] = i;
 							}
 						else
 							foreach (var item in response.Items)
 							{
-								if (_retry.IsRetryable(item)) keep[keepCount++] = i;
+								if (retry.IsRetryable(item)) keep[keepCount++] = i;
 								i++;
 							}
 
@@ -201,7 +204,7 @@ public sealed class BulkSender<TItem, TBody>
 					finally { ArrayPool<int>.Shared.Return(keep!); }
 				}
 
-				await Task.Delay(_retry.Backoff(attempt), ct).ConfigureAwait(false);
+				await Task.Delay(retry.Backoff(attempt), ct).ConfigureAwait(false);
 				response = await RequestAsync(buffer, ct).ConfigureAwait(false);
 			}
 
@@ -229,7 +232,7 @@ public sealed class BulkSender<TItem, TBody>
 }
 
 /// <summary>Factory helpers for the common <see cref="BulkSender{TItem,TBody}"/> shape where the item is the document.</summary>
-public static class BulkSender
+public static partial class BulkSender
 {
 	/// <summary>Creates a sender where each item is both the source of the action and the serialized document.</summary>
 	public static BulkSender<T, T> Create<T>(

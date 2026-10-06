@@ -65,6 +65,13 @@ public sealed class ScriptedTransport
 			|| l.StartsWith("{\"update\":", StringComparison.Ordinal)
 			|| l.StartsWith("{\"delete\":", StringComparison.Ordinal));
 
+	/// <summary>The _id of every action line of the request, in order.</summary>
+	public static string[] IdsOf(CapturedRequest request) =>
+		request.Lines.Where(l => l.StartsWith("{\"index\":", StringComparison.Ordinal) || l.StartsWith("{\"create\":", StringComparison.Ordinal)
+				|| l.StartsWith("{\"update\":", StringComparison.Ordinal) || l.StartsWith("{\"delete\":", StringComparison.Ordinal))
+			.Select(l => System.Text.Json.JsonDocument.Parse(l).RootElement.EnumerateObject().First().Value.GetProperty("_id").GetString())
+			.ToArray();
+
 	private sealed class ScriptedInvoker(ScriptedTransport owner, Func<int, CapturedRequest, ScriptedResponse> script) : IRequestInvoker
 	{
 		private readonly InMemoryRequestInvoker _inner = new();
