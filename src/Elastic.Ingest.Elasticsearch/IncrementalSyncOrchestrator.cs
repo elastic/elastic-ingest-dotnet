@@ -134,6 +134,13 @@ public class IncrementalSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	/// <summary> The field name used for batch-index-date range queries. </summary>
 	public string BatchIndexDateField { get; init; } = "batch_index_date";
 
+	/// <summary>
+	/// When <c>true</c>, a document whose content hash matches the stored one is still replaced with the
+	/// incoming document (including fresh batch tracking fields) instead of only refreshing the batch index date.
+	/// The stored content hash stays deterministic, so the next run without this flag matches again and skips unchanged documents.
+	/// </summary>
+	public bool ForceReindex { get; init; }
+
 	/// <summary> Optional configuration callback for the primary channel options. </summary>
 	public Action<IngestChannelOptions<TEvent>>? ConfigurePrimary { get; init; }
 
@@ -205,14 +212,7 @@ public class IncrementalSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 		    && _primaryChannel.Options.Strategy.DocumentIngest is TypeContextIndexIngestStrategy<TEvent> primaryStrategy)
 		{
 			primaryStrategy.HashInfoFactory = (_, fieldName, combinedHash) =>
-				new HashedBulkUpdate(
-					fieldName,
-					combinedHash,
-					$"ctx._source.{BatchIndexDateField} = params.{BatchIndexDateField}",
-					new Dictionary<string, string>
-					{
-						[BatchIndexDateField] = _batchTimestamp.ToString("o")
-					});
+				CreateHashMatchUpdate(fieldName, combinedHash, BatchIndexDateField, _batchTimestamp, ForceReindex);
 		}
 
 		var primaryMeta = await _primaryChannel.GetIndexTemplateMetaAsync(ctx).ConfigureAwait(false);
@@ -457,6 +457,23 @@ public class IncrementalSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	}
 
 	// ── Private helpers ───────────────────────────────────────────────────
+
+	/// <summary>
+	/// Builds the scripted upsert used for the primary channel. On a hash match the default only refreshes the
+	/// batch index date; with <paramref name="forceReindex"/> the stored document is replaced by the incoming one.
+	/// </summary>
+	internal static HashedBulkUpdate CreateHashMatchUpdate(
+		string hashField, string combinedHash, string batchIndexDateField, DateTimeOffset batchTimestamp, bool forceReindex)
+	{
+		var matchScript = forceReindex
+			? $"ctx._source = params.doc; ctx._source.{hashField} = params.hash"
+			: $"ctx._source.{batchIndexDateField} = params.{batchIndexDateField}";
+		return new HashedBulkUpdate(
+			hashField,
+			combinedHash,
+			matchScript,
+			new Dictionary<string, string> { [batchIndexDateField] = batchTimestamp.ToString("o") });
+	}
 
 	private void StampDocument(TEvent item)
 	{
