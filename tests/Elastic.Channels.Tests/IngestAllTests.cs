@@ -80,7 +80,13 @@ public class IngestAllTests
 		await Gen.Select(Gen.Int[0, 300], Gen.Int[1, 40], Gen.Int[1, 6], Gen.Int[1, 6], Gen.Bool).SampleAsync(async x =>
 		{
 			var (n, batch, channelConcurrency, pullConcurrency, useAsync) = x;
-			using var channel = new NoopBufferedChannel(new BufferOptions { OutboundBufferMaxSize = batch, ExportMaxConcurrency = channelConcurrency });
+			// the async path flushes a batch older than OutboundBufferMaxLifetime, so a stalled runner must not shift the expected batch count
+			using var channel = new NoopBufferedChannel(new BufferOptions
+			{
+				OutboundBufferMaxSize = batch,
+				ExportMaxConcurrency = channelConcurrency,
+				OutboundBufferMaxLifetime = TimeSpan.FromHours(1)
+			});
 
 			var result = useAsync
 				? await channel.IngestAllAsync(AsyncEvents(n), pullConcurrency)

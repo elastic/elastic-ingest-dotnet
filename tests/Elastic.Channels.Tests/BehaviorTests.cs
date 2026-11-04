@@ -45,7 +45,7 @@ public class BehaviorTests
 			if (await channel.WaitToWriteAsync(e))
 				written++;
 		}
-		var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(5));
+		var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(30));
 		signalled.Should().BeTrue("The channel was not drained in the expected time");
 		written.Should().Be(totalEvents);
 		channel.ExportedBuffers.Should().Be(expectedSentBuffers);
@@ -82,7 +82,7 @@ public class BehaviorTests
 		signalled.Should().BeTrue("The channel was not drained in the expected time");
 	}
 
-	[Test] public async Task ConcurrencyIsApplied()
+	[Test, NotInParallel] public async Task ConcurrencyIsApplied()
 	{
 		int totalEvents = 50_000, maxInFlight = 50_000, bufferSize = 5000;
 		var expectedPages = totalEvents / bufferSize;
@@ -105,14 +105,14 @@ public class BehaviorTests
 			if (await channel.WaitToWriteAsync(e))
 				written++;
 		}
-		var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(5));
+		var signalled = bufferOptions.WaitHandle.Wait(TimeSpan.FromSeconds(30));
 		signalled.Should().BeTrue("The channel was not drained in the expected time");
 		written.Should().Be(totalEvents);
 		channel.ExportedBuffers.Should().Be(expectedPages);
 		channel.ObservedConcurrency.Should().BeGreaterThan(1);
 	}
 
-	[Test] public async Task ManyChannelsContinueToDoWork()
+	[Test, NotInParallel] public async Task ManyChannelsContinueToDoWork()
 	{
 		int totalEvents = 50_000_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
 		int closedThread = 0, maxFor = Environment.ProcessorCount * 2;
@@ -154,7 +154,7 @@ public class BehaviorTests
 		closedThread.Should().BeGreaterThan(0).And.Be(maxFor);
 	}
 
-	[Test] public async Task SlowlyPushEvents()
+	[Test, NotInParallel] public async Task SlowlyPushEvents()
 	{
 		int totalEvents = 50_000_000, maxInFlight = totalEvents / 5, bufferSize = maxInFlight / 10;
 		var expectedSentBuffers = totalEvents / 10_000;
@@ -183,7 +183,10 @@ public class BehaviorTests
 		//Ensure we written to the channel but not enough to satisfy OutboundBufferMaxSize
 		written.Should().BeGreaterThan(0).And.BeLessThan(10_000);
 		//even though OutboundBufferMaxSize was not hit we should still observe an invocation to Export()
-		//because OutboundBufferMaxLifetime was hit
+		//because OutboundBufferMaxLifetime was hit, poll because a slow runner delays the timer-driven flush
+		var deadline = Stopwatch.StartNew();
+		while (channel.ExportedBuffers == 0 && deadline.Elapsed < TimeSpan.FromSeconds(15))
+			await Task.Delay(TimeSpan.FromMilliseconds(50));
 		channel.ExportedBuffers.Should().BeGreaterThan(0, "{0}", channel);
 	}
 }

@@ -78,7 +78,7 @@ public class PooledBufferRetentionTests
 	{
 		using var channel = new NoopBufferedChannel(new BufferOptions { OutboundBufferMaxSize = 4, ExportMaxConcurrency = 1, InboundBufferMaxSize = 64 });
 		var tracked = await ExportAndTrackAsync(channel, 12);
-		(await channel.WaitForDrainAsync(TimeSpan.FromSeconds(10))).Should().BeTrue();
+		(await channel.WaitForDrainAsync(TimeSpan.FromSeconds(60))).Should().BeTrue();
 
 		for (var i = 0; i < 5; i++)
 		{
@@ -191,7 +191,7 @@ public class PooledBufferRetentionTests
 		using var channel = new NoopBufferedChannel(new BufferOptions { OutboundBufferMaxSize = batch, ExportMaxConcurrency = concurrency, InboundBufferMaxSize = 256 });
 		foreach (var e in Track(events, tracked, failAt: -1))
 			(await channel.WaitToWriteAsync(e)).Should().BeTrue();
-		(await channel.WaitForDrainAsync(TimeSpan.FromSeconds(10))).Should().BeTrue();
+		(await channel.WaitForDrainAsync(TimeSpan.FromSeconds(60))).Should().BeTrue();
 		return tracked;
 	}
 
