@@ -140,6 +140,39 @@ public class IncrementalSyncOrchestratorTests(IngestionCluster cluster)
 		title6.Should().Be("Modified title 6");
 	}
 
+	[Test]
+	public async Task ForceReindexRewritesUnchangedDocumentsOnce()
+	{
+		var lastUpdated1 = await RunAsync(forceReindex: false);
+		var lastUpdated2 = await RunAsync(forceReindex: false);
+		lastUpdated2.Should().Be(lastUpdated1, "an unchanged document is not rewritten without the flag");
+
+		var lastUpdated3 = await RunAsync(forceReindex: true);
+		lastUpdated3.Should().BeAfter(lastUpdated2, "a forced run replaces the document although its hash matches");
+		await AssertDocCount(SecondaryAlias, 3);
+
+		var lastUpdated4 = await RunAsync(forceReindex: false);
+		lastUpdated4.Should().Be(lastUpdated3, "the stored hash stays deterministic, so the next normal run matches again");
+	}
+
+	private async Task<DateTimeOffset> RunAsync(bool forceReindex)
+	{
+		using var orch = new IncrementalSyncOrchestrator<HashableArticle>(
+			Transport, TestMappingContext.HashableArticlePrimary, TestMappingContext.HashableArticleSecondary
+		)
+		{ ForceReindex = forceReindex };
+
+		await orch.StartAsync(BootstrapMethod.Failure);
+		for (var i = 0; i < 3; i++)
+			orch.TryWrite(new HashableArticle { Id = $"doc-{i}", Title = $"Title {i}", Hash = $"hash-{i}" });
+		(await orch.CompleteAsync(drainMaxWait: TimeSpan.FromSeconds(30))).Should().BeTrue();
+
+		await Transport.RequestAsync<StringResponse>(HttpMethod.POST, $"/{PrimaryAlias}/_refresh");
+		var response = await Transport.RequestAsync<StringResponse>(HttpMethod.GET, $"/{PrimaryAlias}/_doc/doc-0");
+		using var doc = JsonDocument.Parse(response.Body);
+		return doc.RootElement.GetProperty("_source").GetProperty("last_updated").GetDateTimeOffset();
+	}
+
 	private async Task AssertDocCount(string alias, long expected)
 	{
 		await Transport.RequestAsync<StringResponse>(HttpMethod.POST, $"/{alias}/_refresh");
