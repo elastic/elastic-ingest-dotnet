@@ -9,3 +9,4 @@ toc:
   - file: streams-downstream-features.md
   - file: tsdb.md
   - file: logsdb.md
+  - file: ai-index.md

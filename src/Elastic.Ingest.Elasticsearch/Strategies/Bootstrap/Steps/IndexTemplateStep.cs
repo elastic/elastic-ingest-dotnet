@@ -58,11 +58,14 @@ public class IndexTemplateStep : IBootstrapStep
 		var settingsName = $"{context.TemplateName}-settings";
 		var mappingsName = $"{context.TemplateName}-mappings";
 		var mappingVersionFragment = TemplateMetadataHelper.BuildMappingVersionFragment(context.MappingVersion);
+		var composedOf = AiIndexTemplate.ComposedOf(context, $"\"{mappingsName}\", \"{settingsName}\"");
+		var ignoreMissing = AiIndexTemplate.IgnoreMissingFragment(context);
+		var priority = AiIndexTemplate.Priority(context);
 
 		return @$"{{
                 ""index_patterns"": [""{context.TemplateWildcard}""],
-                ""composed_of"": [ ""{mappingsName}"", ""{settingsName}"" ],
-                ""priority"": 201,
+                ""composed_of"": [ {composedOf} ],{ignoreMissing}
+                ""priority"": {priority},
                 ""_meta"": {{
                     ""description"": ""Template installed by .NET ingest libraries (https://github.com/elastic/elastic-ingest-dotnet)"",
                     ""assembly_version"": ""{LibraryVersion.Current}"",

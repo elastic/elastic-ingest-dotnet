@@ -43,6 +43,11 @@ namespace Elastic.Mapping;
 /// <param name="BatchIndexDateFieldName">The JSON field name of the [BatchIndexDate] property.</param>
 /// <param name="LastUpdatedFieldName">The JSON field name of the [LastUpdated] property.</param>
 /// <param name="AiEnrichmentProvider">Source-generated AI enrichment provider for this document type, if any.</param>
+/// <param name="MappingVersion">Optional mapping version for version-aware bootstrap guards.</param>
+/// <param name="AiIndex">
+/// When true, the mappings include the <see cref="Mapping.AiIndexMapping"/> base fields and the index
+/// template composes the <c>ai-index@mappings</c> component template.
+/// </param>
 public record ElasticsearchTypeContext(
 	Func<string> GetSettingsJson,
 	Func<string> GetMappingsJson,
@@ -68,7 +73,8 @@ public record ElasticsearchTypeContext(
 	string? BatchIndexDateFieldName = null,
 	string? LastUpdatedFieldName = null,
 	IAiEnrichmentProvider? AiEnrichmentProvider = null,
-	string? MappingVersion = null
+	string? MappingVersion = null,
+	bool AiIndex = false
 )
 {
 	// ── Resolve methods ──────────────────────────────────────────────────

@@ -98,4 +98,16 @@ public sealed class DataStreamAttribute<T> : Attribute where T : class
 	/// </para>
 	/// </summary>
 	public bool MappingVersionFromAssembly { get; init; }
+
+	/// <summary>
+	/// Makes this data stream an Elasticsearch AI index (Elasticsearch 9.6+): the generated mapping gains the
+	/// <see cref="AiIndexMapping"/> base fields next to the document's own fields, and the index template
+	/// composes <c>ai-index@mappings</c> and <c>ai-index@custom</c> when the cluster has them.
+	/// See <see cref="IndexAttribute{T}.AiIndex"/> for the merge rules.
+	/// <para>
+	/// The AI index data stream defaults (90 day retention, <c>@timestamp</c> descending sort) are not
+	/// applied; configure retention through the bootstrap strategy.
+	/// </para>
+	/// </summary>
+	public bool AiIndex { get; init; }
 }

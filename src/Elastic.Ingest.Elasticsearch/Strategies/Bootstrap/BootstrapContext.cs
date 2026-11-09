@@ -74,4 +74,14 @@ public class BootstrapContext
 	/// </para>
 	/// </summary>
 	public string? MappingVersion { get; init; }
+
+	/// <summary>
+	/// Whether the type is an Elasticsearch AI index (<c>AiIndex = true</c> on the mapping attribute).
+	/// <para>
+	/// The index template then composes the <c>ai-index@mappings</c> and <c>ai-index@custom</c>
+	/// component templates when the cluster has them, and uses a priority above Elasticsearch's own
+	/// <c>ai-index-*</c> templates so that it applies to indices with those names.
+	/// </para>
+	/// </summary>
+	public bool AiIndex { get; init; }
 }

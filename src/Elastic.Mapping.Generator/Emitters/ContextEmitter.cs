@@ -264,11 +264,13 @@ internal static class ContextEmitter
 			|| (reg.DataStreamConfig?.MappingVersionFromAssembly ?? false);
 		var mappingVersion = reg.IndexConfig?.MappingVersion ?? reg.DataStreamConfig?.MappingVersion;
 		if (useAssemblyVersion)
-			sb.AppendLine($"{indent}\t\tMappingVersion: typeof({model.ContextTypeName}).Assembly.GetName().Version?.ToString()");
+			sb.AppendLine($"{indent}\t\tMappingVersion: typeof({model.ContextTypeName}).Assembly.GetName().Version?.ToString(),");
 		else if (mappingVersion != null)
-			sb.AppendLine($"{indent}\t\tMappingVersion: \"{mappingVersion}\"");
+			sb.AppendLine($"{indent}\t\tMappingVersion: \"{mappingVersion}\",");
 		else
-			sb.AppendLine($"{indent}\t\tMappingVersion: null");
+			sb.AppendLine($"{indent}\t\tMappingVersion: null,");
+
+		sb.AppendLine($"{indent}\t\tAiIndex: {(reg.AiIndex ? "true" : "false")}");
 
 		sb.AppendLine($"{indent}\t);");
 		sb.AppendLine();
@@ -647,8 +649,21 @@ internal static class ContextEmitter
 				sb.AppendLine($"{indent}\tvar builder = new {builderType}();");
 			}
 
-			sb.AppendLine($"{indent}\treturn builder.Build().MergeIntoMappings(_GetBaseMappingJson());");
+			if (reg.AiIndex)
+				sb.AppendLine($"{indent}\treturn global::Elastic.Mapping.AiIndexMapping.MergeInto(builder.Build().MergeIntoMappings(_GetBaseMappingJson()));");
+			else
+				sb.AppendLine($"{indent}\treturn builder.Build().MergeIntoMappings(_GetBaseMappingJson());");
 			sb.AppendLine($"{indent}}}");
+			sb.AppendLine();
+			sb.AppendLine($"{indent}private static string _GetMappingJson() => _mergedMappingJson.Value;");
+		}
+		else if (reg.AiIndex)
+		{
+			sb.AppendLine($"{indent}private static string _GetBaseMappingJson() =>");
+			SharedEmitterHelpers.EmitRawStringLiteral(sb, mappingsJson, indent + "\t");
+			sb.AppendLine();
+			sb.AppendLine($"{indent}private static readonly global::System.Lazy<string> _mergedMappingJson = new(static () =>");
+			sb.AppendLine($"{indent}\tglobal::Elastic.Mapping.AiIndexMapping.MergeInto(_GetBaseMappingJson()));");
 			sb.AppendLine();
 			sb.AppendLine($"{indent}private static string _GetMappingJson() => _mergedMappingJson.Value;");
 		}
