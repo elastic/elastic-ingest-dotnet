@@ -111,6 +111,27 @@ public abstract class AiIndexDocument
 	[JsonPropertyName("governance")]
 	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 	public virtual AiIndexGovernance? Governance { get; set; }
+
+	/// <summary>
+	/// Records <paramref name="actor"/> as the mechanism that wrote this version of the document, at
+	/// <paramref name="at"/>: it sets <c>governance.provenance.updated_by</c> and <see cref="UpdatedAt"/>, and
+	/// <c>governance.provenance.created_by</c> when that is empty. Other governance fields are left as they are.
+	/// <para>
+	/// <paramref name="actor"/> is stored as given, not copied, so one instance can serve many documents;
+	/// do not change it afterwards.
+	/// </para>
+	/// <para>
+	/// The sync orchestrators call this for every document they write when their <c>Provenance</c> option is set.
+	/// </para>
+	/// </summary>
+	public void StampProvenance(AiIndexActor actor, DateTimeOffset at)
+	{
+		var governance = Governance ??= new AiIndexGovernance();
+		var provenance = governance.Provenance ??= new AiIndexProvenance();
+		provenance.CreatedBy ??= actor;
+		provenance.UpdatedBy = actor;
+		UpdatedAt = at;
+	}
 }
 
 /// <summary>A URI related to an AI index document, and how it relates.</summary>

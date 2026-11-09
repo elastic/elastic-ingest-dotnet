@@ -60,9 +60,30 @@ A type that does not derive from `AiIndexDocument` can still set `AiIndex = true
 
 **Mapping.** The base fields are added next to your own: `@timestamp`, `id`, `type`, `title`, `description` and `content` (text with a `.semantic` `semantic_text` multi-field), `tags`, `attributes`, `references`, `updated_at`, `expires_at` and `governance`. The merge is additive: a field you already map keeps its definition, and a partly mapped field only gains what it lacks. In the example `Title` stays text with its `.keyword` multi-field and gains `.semantic`.
 
-The library does not fill in the base fields. Set the properties of `AiIndexDocument` yourself, or, for a type that does not derive from it, add properties with the JSON names you want, for example `[JsonPropertyName("content")]`.
+The library fills in only the provenance, see [Provenance](#provenance). Set the other properties of `AiIndexDocument` yourself, or, for a type that does not derive from it, add properties with the JSON names you want, for example `[JsonPropertyName("content")]`. To fill a base field from a field of your own, use `copy_to` in your mapping.
 
 **Template.** The index template composes `ai-index@mappings` before the generated mappings and `ai-index@custom` after the generated settings. Both are optional: a cluster without them (before 9.6, or without `ai-index@custom`) uses the copy of the base mapping that is already in the generated mapping. The template priority is 501, because Elasticsearch's own `ai-index-idx-*` and `ai-index-ds-*` templates use 500 and only the highest priority template that matches an index applies.
+
+## Provenance
+
+`governance.provenance` records which mechanism wrote a document. Pass the mechanism to a sync orchestrator and it stamps every `AiIndexDocument` it writes:
+
+```csharp
+var orchestrator = new IncrementalSyncOrchestrator<Article>(transport, primary, secondary)
+{
+    Provenance = new AiIndexActor
+    {
+        Uri = "workflow://docs-sync",
+        Metadata = new() { ["version"] = "3", ["run_id"] = runId }
+    }
+};
+```
+
+`IncrementalSyncOrchestrator` and `DeltaSyncOrchestrator` both have the `Provenance` option. For each document they set `governance.provenance.updated_by` and `updated_at` to the batch timestamp, and `created_by` when it is empty. Documents that do not derive from `AiIndexDocument` are not touched. Without an orchestrator, call `AiIndexDocument.StampProvenance(actor, at)` yourself.
+
+- A document whose content hash matches the stored one is not replaced, so it keeps its provenance. `ForceReindex` replaces it, and then it gets the new stamp.
+- A replaced document carries what the incoming document has. The orchestrator does not read the stored one, so `created_by` is only the original creator if you carry it over from the stored document; otherwise it is the mechanism that wrote this version.
+- The actor instance is shared by all documents of a run. Do not change it while the orchestrator runs.
 
 ## Limits
 

@@ -110,6 +110,17 @@ public class DeltaSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	/// <summary>The field name stamped on each document for observability and the reindex-updates cutoff.</summary>
 	public string BatchIndexDateField { get; init; } = "batch_index_date";
 
+	/// <summary>
+	/// The mechanism that writes the documents, such as a workflow or a job. For every document that derives from
+	/// <see cref="AiIndexDocument"/> the orchestrator calls <see cref="AiIndexDocument.StampProvenance"/> with it,
+	/// at the batch timestamp. Other documents are not touched.
+	/// <para>
+	/// <c>created_by</c> is only set when it is empty, so a caller that reads the stored document can carry the
+	/// original creator over.
+	/// </para>
+	/// </summary>
+	public AiIndexActor? Provenance { get; init; }
+
 	/// <summary>Optional configuration callback for the primary channel options.</summary>
 	public Action<IngestChannelOptions<TEvent>>? ConfigurePrimary { get; init; }
 
@@ -499,6 +510,8 @@ public class DeltaSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	{
 		_setBatchIndexDate?.Invoke(item, _batchTimestamp);
 		_setLastUpdated?.Invoke(item, _batchTimestamp);
+		if (Provenance != null && item is AiIndexDocument document)
+			document.StampProvenance(Provenance, _batchTimestamp);
 	}
 
 	private async Task<bool> WaitToWriteBothAsync(TEvent item, CancellationToken ctx)
