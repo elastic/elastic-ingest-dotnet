@@ -201,7 +201,8 @@ public class MappingSourceGenerator : IIncrementalGenerator
 			GetNamedArg<string>(attr, "RefreshInterval"),
 			GetNamedArg<bool>(attr, "Dynamic", true),
 			GetNamedArg<string>(attr, "MappingVersion"),
-			GetNamedArg<bool>(attr, "MappingVersionFromAssembly", false)
+			GetNamedArg<bool>(attr, "MappingVersionFromAssembly", false),
+			GetNamedArg<bool>(attr, "AiIndex", false)
 		);
 
 		var ingestProperties = AnalyzeIngestProperties(targetType, stjConfig);
@@ -239,7 +240,8 @@ public class MappingSourceGenerator : IIncrementalGenerator
 				dataset!,
 				GetNamedArg<string>(attr, "Namespace"),
 				GetNamedArg<string>(attr, "MappingVersion"),
-				GetNamedArg<bool>(attr, "MappingVersionFromAssembly", false)
+				GetNamedArg<bool>(attr, "MappingVersionFromAssembly", false),
+				GetNamedArg<bool>(attr, "AiIndex", false)
 			);
 		}
 

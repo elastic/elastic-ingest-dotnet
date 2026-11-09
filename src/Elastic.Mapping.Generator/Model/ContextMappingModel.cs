@@ -68,4 +68,9 @@ internal sealed record TypeRegistration(
 	/// The resolved property/resolver name: TypeName + Variant suffix (if any).
 	/// </summary>
 	public string ResolverName => string.IsNullOrEmpty(Variant) ? TypeName : $"{TypeName}{Variant}";
+
+	/// <summary>
+	/// True when <c>AiIndex = true</c> is set on the [Index] or [DataStream] attribute.
+	/// </summary>
+	public bool AiIndex => (IndexConfig?.AiIndex ?? false) || (DataStreamConfig?.AiIndex ?? false);
 }

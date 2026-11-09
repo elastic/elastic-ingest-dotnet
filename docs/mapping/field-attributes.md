@@ -155,8 +155,13 @@ public class Order
 
     [Nested(IncludeInParent = true)]
     public List<LineItem> Items { get; set; }
+
+    [Flattened]
+    public Dictionary<string, object?> Metadata { get; set; }
 }
 ```
+
+`[Flattened]` indexes the whole object, with any keys, as a single `flattened` field whose leaf values are keywords. It suits free-form metadata. It has no options.
 
 :::{dropdown} [Object] and [Nested] options
 **[Object]**

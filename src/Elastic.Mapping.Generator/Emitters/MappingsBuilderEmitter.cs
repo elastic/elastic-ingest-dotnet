@@ -32,6 +32,7 @@ internal static class MappingsBuilderEmitter
 	private const string CompletionFieldBuilderFqn = "global::Elastic.Mapping.Mappings.Builders.CompletionFieldBuilder";
 	private const string DenseVectorFieldBuilderFqn = "global::Elastic.Mapping.Mappings.Builders.DenseVectorFieldBuilder";
 	private const string SemanticTextFieldBuilderFqn = "global::Elastic.Mapping.Mappings.Builders.SemanticTextFieldBuilder";
+	private const string FlattenedFieldBuilderFqn = "global::Elastic.Mapping.Mappings.Builders.FlattenedFieldBuilder";
 
 	/// <summary>
 	/// Emits extension methods on MappingsBuilder&lt;T&gt; for a type registration within a context.
@@ -88,6 +89,7 @@ internal static class MappingsBuilderEmitter
 			FieldTypes.Completion => CompletionFieldBuilderFqn,
 			FieldTypes.DenseVector => DenseVectorFieldBuilderFqn,
 			FieldTypes.SemanticText => SemanticTextFieldBuilderFqn,
+			FieldTypes.Flattened => FlattenedFieldBuilderFqn,
 			_ => FieldBuilderFqn
 		};
 
@@ -112,6 +114,7 @@ internal static class MappingsBuilderEmitter
 			FieldTypes.Completion => "Completion",
 			FieldTypes.DenseVector => "DenseVector",
 			FieldTypes.SemanticText => "SemanticText",
+			FieldTypes.Flattened => "Flattened",
 			_ => null
 		};
 

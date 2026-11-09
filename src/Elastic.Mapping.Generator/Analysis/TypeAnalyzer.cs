@@ -32,6 +32,7 @@ internal static class TypeAnalyzer
 	private const string CompletionAttributeName = "Elastic.Mapping.CompletionAttribute";
 	private const string DenseVectorAttributeName = "Elastic.Mapping.DenseVectorAttribute";
 	private const string SemanticTextAttributeName = "Elastic.Mapping.SemanticTextAttribute";
+	private const string FlattenedAttributeName = "Elastic.Mapping.FlattenedAttribute";
 
 	/// <summary>
 	/// Analyzes a type for mapping, using optional STJ configuration for naming and enum inference.
@@ -422,6 +423,9 @@ internal static class TypeAnalyzer
 				case DenseVectorAttributeName:
 					ExtractOptions(attr, optionsBuilder, "Dims", "Similarity");
 					return (FieldTypes.DenseVector, optionsBuilder.ToImmutable());
+
+				case FlattenedAttributeName:
+					return (FieldTypes.Flattened, optionsBuilder.ToImmutable());
 
 				case SemanticTextAttributeName:
 					ExtractOptions(attr, optionsBuilder, "InferenceId");

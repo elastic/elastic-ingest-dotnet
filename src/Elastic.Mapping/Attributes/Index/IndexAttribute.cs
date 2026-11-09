@@ -159,4 +159,22 @@ public sealed class IndexAttribute<T> : Attribute where T : class
 	/// </example>
 	/// </summary>
 	public bool MappingVersionFromAssembly { get; init; }
+
+	/// <summary>
+	/// Makes this index an Elasticsearch AI index (Elasticsearch 9.6+): the generated mapping gains the
+	/// <see cref="AiIndexMapping"/> base fields (<c>id</c>, <c>type</c>, <c>title</c>, <c>description</c>,
+	/// <c>content</c> with <c>.semantic</c> multi-fields, <c>tags</c>, <c>attributes</c>, <c>references</c>,
+	/// <c>updated_at</c>, <c>expires_at</c>, <c>governance</c>) next to the document's own fields, and the
+	/// index template composes <c>ai-index@mappings</c> and <c>ai-index@custom</c> when the cluster has them.
+	/// <para>
+	/// Additive only: a field the document type already maps keeps its definition. Populating the base
+	/// fields is up to the document type; they are ordinary properties, for example
+	/// <c>[JsonPropertyName("content")]</c>.
+	/// </para>
+	/// <para>
+	/// The index template gets priority 501 so it applies to names that also match Elasticsearch's own
+	/// <c>ai-index-idx-*</c> template (priority 500).
+	/// </para>
+	/// </summary>
+	public bool AiIndex { get; init; }
 }

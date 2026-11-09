@@ -49,7 +49,8 @@ internal sealed record IndexConfigModel(
 	string? RefreshInterval,
 	bool Dynamic,
 	string? MappingVersion = null,
-	bool MappingVersionFromAssembly = false
+	bool MappingVersionFromAssembly = false,
+	bool AiIndex = false
 );
 
 /// <summary>
@@ -60,7 +61,8 @@ internal sealed record DataStreamConfigModel(
 	string Dataset,
 	string? Namespace,
 	string? MappingVersion = null,
-	bool MappingVersionFromAssembly = false
+	bool MappingVersionFromAssembly = false,
+	bool AiIndex = false
 )
 {
 	public string? FullName => Namespace != null ? $"{Type}-{Dataset}-{Namespace}" : null;
