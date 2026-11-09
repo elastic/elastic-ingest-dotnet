@@ -103,4 +103,5 @@ internal static class FieldTypes
 	public const string Completion = "completion";
 	public const string DenseVector = "dense_vector";
 	public const string SemanticText = "semantic_text";
+	public const string Flattened = "flattened";
 }

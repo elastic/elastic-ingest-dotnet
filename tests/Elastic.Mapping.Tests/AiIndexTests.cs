@@ -8,7 +8,7 @@ using Elastic.Mapping.Mappings;
 
 namespace Elastic.Mapping.Tests;
 
-public class AiIndexDocument
+public class AiIndexTestDocument
 {
 	[Id]
 	[Keyword]
@@ -32,14 +32,14 @@ public class AiIndexDocument
 }
 
 [ElasticsearchMappingContext]
-[Index<AiIndexDocument>(Name = "ai-index-idx-test-on", AiIndex = true, Variant = "On")]
-[Index<AiIndexDocument>(Name = "ai-index-idx-test-off", Variant = "Off")]
-[Index<AiIndexDocument>(Name = "ai-index-idx-test-configured", AiIndex = true, Variant = "Configured")]
-[DataStream<AiIndexDocument>(Type = "logs", Dataset = "ai-index", Namespace = "test", AiIndex = true, Variant = "Stream")]
+[Index<AiIndexTestDocument>(Name = "ai-index-idx-test-on", AiIndex = true, Variant = "On")]
+[Index<AiIndexTestDocument>(Name = "ai-index-idx-test-off", Variant = "Off")]
+[Index<AiIndexTestDocument>(Name = "ai-index-idx-test-configured", AiIndex = true, Variant = "Configured")]
+[DataStream<AiIndexTestDocument>(Type = "logs", Dataset = "ai-index", Namespace = "test", AiIndex = true, Variant = "Stream")]
 public static partial class AiIndexMappingContext
 {
-	public static MappingsBuilder<AiIndexDocument> ConfigureAiIndexDocumentConfiguredMappings(
-		MappingsBuilder<AiIndexDocument> mappings) =>
+	public static MappingsBuilder<AiIndexTestDocument> ConfigureAiIndexTestDocumentConfiguredMappings(
+		MappingsBuilder<AiIndexTestDocument> mappings) =>
 		mappings.AddField("title.exact", f => f.Keyword());
 }
 
@@ -60,7 +60,7 @@ public class AiIndexTests
 	[Test]
 	public void AiIndex_AddsEveryBaseField()
 	{
-		var mappings = Mappings(AiIndexMappingContext.AiIndexDocumentOn.Context);
+		var mappings = Mappings(AiIndexMappingContext.AiIndexTestDocumentOn.Context);
 
 		foreach (var field in new[]
 		{
@@ -78,7 +78,7 @@ public class AiIndexTests
 	[Test]
 	public void AiIndex_AddsSemanticMultiFieldToFieldsTheDocumentAlreadyMaps()
 	{
-		var mappings = Mappings(AiIndexMappingContext.AiIndexDocumentOn.Context);
+		var mappings = Mappings(AiIndexMappingContext.AiIndexTestDocumentOn.Context);
 
 		// title and content come from the document type and keep what the generator gives them.
 		TypeOf(mappings, "title").Should().Be("text");
@@ -92,7 +92,7 @@ public class AiIndexTests
 	[Test]
 	public void AiIndex_KeepsFieldsOfTheDocumentType()
 	{
-		var mappings = Mappings(AiIndexMappingContext.AiIndexDocumentOn.Context);
+		var mappings = Mappings(AiIndexMappingContext.AiIndexTestDocumentOn.Context);
 
 		TypeOf(mappings, "section").Should().Be("keyword");
 	}
@@ -100,7 +100,7 @@ public class AiIndexTests
 	[Test]
 	public void AiIndex_NeverChangesAFieldTheDocumentDefines()
 	{
-		var tags = Mappings(AiIndexMappingContext.AiIndexDocumentOn.Context)["properties"]!["tags"]!;
+		var tags = Mappings(AiIndexMappingContext.AiIndexTestDocumentOn.Context)["properties"]!["tags"]!;
 
 		tags["type"]!.GetValue<string>().Should().Be("keyword");
 		tags["normalizer"].Should().BeNull("the document's own definition wins over the base mapping");
@@ -109,7 +109,7 @@ public class AiIndexTests
 	[Test]
 	public void AiIndex_Off_AddsNoBaseFields()
 	{
-		var mappings = Mappings(AiIndexMappingContext.AiIndexDocumentOff.Context);
+		var mappings = Mappings(AiIndexMappingContext.AiIndexTestDocumentOff.Context);
 
 		mappings["properties"]!["governance"].Should().BeNull();
 		mappings["properties"]!["updated_at"].Should().BeNull();
@@ -119,16 +119,16 @@ public class AiIndexTests
 	[Test]
 	public void AiIndex_FlowsToContext()
 	{
-		AiIndexMappingContext.AiIndexDocumentOn.Context.AiIndex.Should().BeTrue();
-		AiIndexMappingContext.AiIndexDocumentStream.Context.AiIndex.Should().BeTrue();
-		AiIndexMappingContext.AiIndexDocumentOff.Context.AiIndex.Should().BeFalse();
+		AiIndexMappingContext.AiIndexTestDocumentOn.Context.AiIndex.Should().BeTrue();
+		AiIndexMappingContext.AiIndexTestDocumentStream.Context.AiIndex.Should().BeTrue();
+		AiIndexMappingContext.AiIndexTestDocumentOff.Context.AiIndex.Should().BeFalse();
 	}
 
 	[Test]
 	public void AiIndex_ChangesTheMappingsHash_SoBootstrapRewritesTheTemplate()
 	{
-		var on = AiIndexMappingContext.AiIndexDocumentOn.Context;
-		var off = AiIndexMappingContext.AiIndexDocumentOff.Context;
+		var on = AiIndexMappingContext.AiIndexTestDocumentOn.Context;
+		var off = AiIndexMappingContext.AiIndexTestDocumentOff.Context;
 
 		on.MappingsHash.Should().NotBe(off.MappingsHash);
 		on.Hash.Should().NotBe(off.Hash);
@@ -137,7 +137,7 @@ public class AiIndexTests
 	[Test]
 	public void AiIndex_AppliesToDataStreams()
 	{
-		var mappings = Mappings(AiIndexMappingContext.AiIndexDocumentStream.Context);
+		var mappings = Mappings(AiIndexMappingContext.AiIndexTestDocumentStream.Context);
 
 		TypeOf(mappings, "governance", "lifecycle", "status").Should().Be("keyword");
 		TypeOf(mappings, "title", "semantic").Should().Be("semantic_text");
@@ -146,7 +146,7 @@ public class AiIndexTests
 	[Test]
 	public void AiIndex_WithConfigureMappings_KeepsTheConfiguredFieldsAndAddsTheBase()
 	{
-		var mappings = Mappings(AiIndexMappingContext.AiIndexDocumentConfigured.Context);
+		var mappings = Mappings(AiIndexMappingContext.AiIndexTestDocumentConfigured.Context);
 
 		TypeOf(mappings, "title", "exact").Should().Be("keyword");
 		TypeOf(mappings, "title", "semantic").Should().Be("semantic_text");
