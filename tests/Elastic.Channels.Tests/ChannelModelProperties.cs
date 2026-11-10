@@ -122,4 +122,40 @@ public class ChannelModelProperties
 			exhausted.OrderBy(i => i).Should().Equal(expectedExhausted.OrderBy(i => i));
 		}, iter: 40);
 	}
+
+	/// <summary>
+	/// A full inbound channel that drops items (the oldest, the newest, or the one being written): every item the channel accepted
+	/// is delivered or reported as dropped, never both and never neither, and the drain still completes.
+	/// </summary>
+	[Test]
+	public async Task EveryAcceptedItemIsDeliveredOrDroppedWhenTheInboundChannelOverflows()
+	{
+		var modes = new[] { System.Threading.Channels.BoundedChannelFullMode.DropOldest, System.Threading.Channels.BoundedChannelFullMode.DropNewest, System.Threading.Channels.BoundedChannelFullMode.DropWrite };
+		var scenarios = Gen.Select(Gen.Int[1, 200], Gen.Int[2, 30], Gen.Int[1, 10], Gen.Int[0, 2].Select(i => modes[i]));
+		await scenarios.SampleAsync(async x =>
+		{
+			var (n, inbound, outbound, mode) = x;
+			var dropped = new ConcurrentBag<int>();
+			var accepted = new ConcurrentBag<int>();
+			var options = ScriptedChannel.Opts(inbound, outbound, concurrency: 1, lifetime: TimeSpan.FromMilliseconds(20), configure: o =>
+			{
+				o.BufferOptions.BoundedChannelFullMode = mode;
+				o.BufferItemDropped = item => dropped.Add(item.Id);
+			});
+			using var channel = new ScriptedChannel(options, async (_, _, ct) => { await Task.Delay(1, ct).ConfigureAwait(false); return new Response(); });
+
+			for (var i = 0; i < n; i++)
+				if (channel.TryWrite(new Item(i)))
+					accepted.Add(i);
+			var drained = await Task.Run(() => channel.WaitForDrainAsync(TimeSpan.FromSeconds(20)).AsTask()).ConfigureAwait(false);
+
+			drained.Should().BeTrue("the ledger must count dropped items as ended, or the drain never completes");
+			var delivered = channel.SeenByCompletedExports();
+			delivered.Distinct().Count().Should().Be(delivered.Length, "nothing is delivered twice");
+			dropped.Distinct().Count().Should().Be(dropped.Count, "nothing is dropped twice");
+			delivered.Intersect(dropped).Should().BeEmpty("an item is delivered or dropped, not both");
+			delivered.Union(dropped).OrderBy(i => i).Should().BeEquivalentTo(accepted.OrderBy(i => i), o => o.WithStrictOrdering(), "every accepted item reached an end");
+			channel.InflightEvents.Should().Be(0);
+		}, iter: 40);
+	}
 }
