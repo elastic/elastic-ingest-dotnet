@@ -369,20 +369,24 @@ public class IncrementalSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	/// <summary>
 	/// Drains both channels, then performs reindex/delete-by-query (Reindex mode) or
 	/// delete-old + alias (Multiplex mode), then runs the post-complete hook.
+	/// <para>Returns <c>false</c> without changing anything when a channel did not drain within <paramref name="drainMaxWait"/>:
+	/// deleting old documents or switching aliases is only right when every document of the run reached Elasticsearch.</para>
 	/// </summary>
 	public async Task<bool> CompleteAsync(TimeSpan? drainMaxWait = null, CancellationToken ctx = default)
 	{
 		EnsureStarted();
 
 		// 1. Drain + refresh + alias primary
-		await _primaryChannel!.WaitForDrainAsync(drainMaxWait, ctx).ConfigureAwait(false);
+		if (!await _primaryChannel!.WaitForDrainAsync(drainMaxWait, ctx).ConfigureAwait(false))
+			return false;
 		await _primaryChannel.RefreshAsync(ctx).ConfigureAwait(false);
 		await _primaryChannel.ApplyAliasesAsync(_primaryIndexName!, ctx).ConfigureAwait(false);
 
 		if (_strategy == IngestSyncStrategy.Multiplex)
 		{
 			// 2a. Drain + refresh + alias secondary
-			await _secondaryChannel!.WaitForDrainAsync(drainMaxWait, ctx).ConfigureAwait(false);
+			if (!await _secondaryChannel!.WaitForDrainAsync(drainMaxWait, ctx).ConfigureAwait(false))
+				return false;
 			await _secondaryChannel.RefreshAsync(ctx).ConfigureAwait(false);
 			await _secondaryChannel.ApplyAliasesAsync(_secondaryIndexName!, ctx).ConfigureAwait(false);
 
@@ -435,12 +439,14 @@ public class IncrementalSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	}
 
 	/// <summary> Drain all registered channels, waiting for pending data to be flushed. </summary>
-	public async Task DrainAllAsync(TimeSpan? maxWait = null, CancellationToken ctx = default)
+	/// <returns><c>true</c> when every channel drained within <paramref name="maxWait"/>.</returns>
+	public async Task<bool> DrainAllAsync(TimeSpan? maxWait = null, CancellationToken ctx = default)
 	{
 		EnsureStarted();
-		await _primaryChannel!.WaitForDrainAsync(maxWait, ctx).ConfigureAwait(false);
+		var drained = await _primaryChannel!.WaitForDrainAsync(maxWait, ctx).ConfigureAwait(false);
 		if (_strategy == IngestSyncStrategy.Multiplex)
-			await _secondaryChannel!.WaitForDrainAsync(maxWait, ctx).ConfigureAwait(false);
+			drained &= await _secondaryChannel!.WaitForDrainAsync(maxWait, ctx).ConfigureAwait(false);
+		return drained;
 	}
 
 	/// <summary> Refresh all registered channels' targets. </summary>

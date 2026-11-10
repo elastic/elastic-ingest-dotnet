@@ -19,6 +19,11 @@ namespace Elastic.Ingest.Elasticsearch.Tests.Bulk;
 /// <param name="Throw">Throw this from the transport instead</param>
 public record ScriptedResponse(int HttpStatus, int[] ItemStatuses = null, Exception Throw = null, string RawBody = null, bool IncludeErrorsFlag = true)
 {
+	/// <summary>How long the server takes to answer.</summary>
+	public TimeSpan Delay { get; init; }
+
+	public ScriptedResponse After(TimeSpan delay) => this with { Delay = delay };
+
 	public static ScriptedResponse Raw(string body, int http = 200) => new(http, null, null, body);
 	public static ScriptedResponse WithoutErrorsFlag(params int[] statuses) => new(200, statuses, null, null, false);
 	public static ScriptedResponse Items(params int[] statuses) => new(200, statuses);
@@ -131,6 +136,7 @@ public sealed class ScriptedTransport
 				}
 
 				var response = script(attempt, captured);
+				if (response.Delay > TimeSpan.Zero) await Task.Delay(response.Delay, cancellationToken).ConfigureAwait(false);
 				if (response.Throw is not null) throw response.Throw;
 
 				// give concurrent requests a chance to overlap
