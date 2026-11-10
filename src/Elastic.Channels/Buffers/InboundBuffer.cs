@@ -108,7 +108,9 @@ internal class InboundBuffer<TEvent>(int maxBufferSize, TimeSpan forceFlushAfter
 		}
 		catch (Exception)
 		{
-			return WaitToReadResult.Read;
+			// The reader was completed with an error (TryComplete(error)): nothing more will ever arrive. Reporting "Read" here
+			// sent the consumer round its loop again with a reader that throws at once, forever.
+			return WaitToReadResult.Completed;
 		}
 	}
 

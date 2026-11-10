@@ -419,18 +419,22 @@ public class DeltaSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	/// then fires the <see cref="OnPostComplete"/> hook.
 	/// Unlike <see cref="IncrementalSyncOrchestrator{TEvent}"/>, this method never issues a
 	/// <c>delete-by-query</c> over <c>batch_index_date</c>.
+	/// <para>Returns <c>false</c> without changing anything when a channel did not drain within <paramref name="drainMaxWait"/>:
+	/// no alias may point at an index that is still being filled.</para>
 	/// </summary>
 	public async Task<bool> CompleteAsync(TimeSpan? drainMaxWait = null, CancellationToken ctx = default)
 	{
 		EnsureStarted();
 
-		await _primaryChannel!.WaitForDrainAsync(drainMaxWait, ctx).ConfigureAwait(false);
+		if (!await _primaryChannel!.WaitForDrainAsync(drainMaxWait, ctx).ConfigureAwait(false))
+			return false;
 		await _primaryChannel.RefreshAsync(ctx).ConfigureAwait(false);
 		await _primaryChannel.ApplyAliasesAsync(_primaryIndexName!, ctx).ConfigureAwait(false);
 
 		if (_strategy == IngestSyncStrategy.Multiplex)
 		{
-			await _secondaryChannel!.WaitForDrainAsync(drainMaxWait, ctx).ConfigureAwait(false);
+			if (!await _secondaryChannel!.WaitForDrainAsync(drainMaxWait, ctx).ConfigureAwait(false))
+				return false;
 			await _secondaryChannel.RefreshAsync(ctx).ConfigureAwait(false);
 			await _secondaryChannel.ApplyAliasesAsync(_secondaryIndexName!, ctx).ConfigureAwait(false);
 		}

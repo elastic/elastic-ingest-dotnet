@@ -83,6 +83,19 @@ public class BufferOptions
 	public Func<int, TimeSpan> ExportBackoffPeriod { get; set; } = (i) => TimeSpan.FromSeconds(2 * (i + 1));
 
 	/// <summary>
+	/// Decides whether an export that threw is tried again. Called with the exception, defaults to never.
+	/// <para>
+	/// An exception that escapes <c>ExportAsync</c> is not a response the server gave: it is an unexpected failure, a cancellation or
+	/// a document that cannot be serialized. Trying again repeats a deterministic failure, and for documents without an id
+	/// a request that did reach the server can be indexed twice. So the items are given up on instead, reported through
+	/// <c>ExportExceptionCallback</c> and
+	/// <c>ExportMaxRetriesCallback</c>, and the caller decides what to do with them.
+	/// Return <c>true</c> for the exceptions that are safe to retry for your data, up to <see cref="ExportMaxRetries"/> times.
+	/// </para>
+	/// </summary>
+	public Func<Exception, bool> ExportRetryOnException { get; set; } = static _ => false;
+
+	/// <summary>
 	/// Allows you to inject a <see cref="CountdownEvent"/> to wait for N number of buffers to flush.
 	/// </summary>
 	public CountdownEvent? WaitHandle { get; set; }

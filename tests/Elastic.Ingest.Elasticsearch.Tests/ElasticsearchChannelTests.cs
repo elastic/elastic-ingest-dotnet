@@ -110,7 +110,8 @@ public class ElasticsearchChannelTests
 		session.TotalBulkRequests.Should().Be(1);
 		session.TotalBulkResponses.Should().Be(0);
 		session.TotalRetries.Should().Be(0);
-		session.MaxRetriesExceeded.Should().Be(0);
+		// the two events the export gave up on are reported, no longer dropped without a word
+		session.MaxRetriesExceeded.Should().Be(1);
 		session.Rejections.Should().Be(0);
 
 		session.WriteAndWait(events: 2);
