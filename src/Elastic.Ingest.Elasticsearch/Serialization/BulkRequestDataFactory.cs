@@ -46,7 +46,11 @@ public static class BulkRequestDataFactory
 		Func<TItem, BulkOperationHeader> headerFactory,
 		Func<TItem, TBody> bodySelector)
 	{
+		#if NET11_0_OR_GREATER
+		var typeInfo = serializerOptions.GetTypeInfo<TBody>();
+#else
 		var typeInfo = (JsonTypeInfo<TBody>)serializerOptions.GetTypeInfo(typeof(TBody));
+#endif
 		var bufferWriter = new ArrayBufferWriter<byte>();
 		using var writer = new Utf8JsonWriter(bufferWriter, WriterOptions);
 		foreach (var item in items)

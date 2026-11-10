@@ -12,6 +12,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Elastic.Ingest.Elasticsearch.Helpers;
+using Elastic.Ingest.Elasticsearch.Serialization;
 using Elastic.Mapping;
 using Elastic.Transport;
 
@@ -314,7 +315,7 @@ public partial class AiEnrichmentOrchestrator : IDisposable
 		yield return Progress(AiEnrichmentPhase.Backfilling, 0, 0, 0,
 			$"Starting full backfill on '{targetIndex}' via pipeline '{_infra.PipelineName}'...");
 
-		var matchAll = JsonDocument.Parse("{\"match_all\":{}}").RootElement.Clone();
+		var matchAll = JsonElements.Parse("{\"match_all\":{}}");
 
 		await foreach (var taskResponse in RunUpdateByQueryWithPollingAsync(
 			targetIndex, matchAll, ct, interval).ConfigureAwait(false))
@@ -465,7 +466,7 @@ public partial class AiEnrichmentOrchestrator : IDisposable
 				clauses.Add($"{{\"bool\":{{\"must_not\":{{\"term\":{{\"{phField}\":\"{phValue}\"}}}}}}}}");
 		}
 		var json = $"{{\"bool\":{{\"should\":[{string.Join(",", clauses)}],\"minimum_should_match\":1}}}}";
-		return JsonDocument.Parse(json).RootElement.Clone();
+		return JsonElements.Parse(json);
 	}
 
 	private static CancellationTokenSource CreateTimeoutCts(

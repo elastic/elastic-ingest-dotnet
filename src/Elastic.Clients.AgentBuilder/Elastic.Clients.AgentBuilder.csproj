@@ -20,12 +20,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Elastic.Transport" Version="0.17.3" />
-    <PackageReference Include="System.Net.ServerSentEvents" Version="10.0.5" />
+    <PackageReference Include="Elastic.Transport" />
+    <PackageReference Include="System.Net.ServerSentEvents" />
   </ItemGroup>
 
   <ItemGroup Condition="!$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">
-    <PackageReference Include="PolySharp" Version="1.15.0" PrivateAssets="all"
+    <PackageReference Include="PolySharp" PrivateAssets="all"
                       IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"/>
   </ItemGroup>
 

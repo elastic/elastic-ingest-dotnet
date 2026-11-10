@@ -2,13 +2,14 @@
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"/>
   <ItemGroup>
-    <PackageReference Include="FluentAssertions" Version="7.2.0" />
-    <PackageReference Include="TUnit" Version="1.16.4" />
-    <PackageReference Include="GitHubActionsTestLogger" Version="3.0.1" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="TUnit" />
+    <PackageReference Include="GitHubActionsTestLogger" />
   </ItemGroup>
 
   <PropertyGroup>
-    <NoWarn>ca1816</NoWarn>
+    <!-- CA2026: a test that parses a literal and keeps the element is not worth a disposable around every call -->
+    <NoWarn>ca1816;CA2026</NoWarn>
     <SignAssembly>false</SignAssembly>
     <UserSecretsId>elastic-ingest-dotnet-tests</UserSecretsId>
   </PropertyGroup>

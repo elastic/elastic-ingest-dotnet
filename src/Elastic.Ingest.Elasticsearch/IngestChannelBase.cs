@@ -72,12 +72,12 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 		: page.Zip(response.Items, (doc, item) => (doc, item)).ToList();
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryEvent"/>
-	protected override bool RetryEvent((TDocument, BulkResponseItem) @event) =>
-		RetryStatusCodes.Contains(@event.Item2.Status);
+	protected override bool RetryEvent((TDocument, BulkResponseItem) item) =>
+		RetryStatusCodes.Contains(item.Item2.Status);
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RejectEvent"/>
-	protected override bool RejectEvent((TDocument, BulkResponseItem) @event) =>
-		@event.Item2.Status < 200 || @event.Item2.Status > 299;
+	protected override bool RejectEvent((TDocument, BulkResponseItem) item) =>
+		item.Item2.Status < 200 || item.Item2.Status > 299;
 
 	/// <inheritdoc cref="TransportChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.ExportAsync(Elastic.Transport.ITransport,System.ArraySegment{TEvent},System.Threading.CancellationToken)"/>
 	protected override Task<BulkResponse> ExportAsync(ITransport transport, ArraySegment<TDocument> page, CancellationToken ctx = default)

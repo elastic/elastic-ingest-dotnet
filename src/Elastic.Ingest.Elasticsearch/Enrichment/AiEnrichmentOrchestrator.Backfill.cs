@@ -44,7 +44,7 @@ public partial class AiEnrichmentOrchestrator
 		}
 
 		sb.Append('}');
-		return JsonDocument.Parse(sb.ToString()).RootElement.Clone();
+		return JsonElements.Parse(sb.ToString());
 	}
 
 	private async Task<int> BulkUpsertLookupAsync(List<LookupUpdate> updates, CancellationToken ct)
@@ -108,7 +108,7 @@ public partial class AiEnrichmentOrchestrator
 		foreach (var batch in batches)
 		{
 			var idsJson = string.Join(",", batch.Select(id => $"\"{JsonEncodedText.Encode(id)}\""));
-			var query = JsonDocument.Parse($"{{\"ids\":{{\"values\":[{idsJson}]}}}}").RootElement.Clone();
+			var query = JsonElements.Parse($"{{\"ids\":{{\"values\":[{idsJson}]}}}}");
 
 			await foreach (var _ in RunUpdateByQueryWithPollingAsync(targetIndex, query, ct).ConfigureAwait(false))
 			{
