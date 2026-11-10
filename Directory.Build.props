@@ -24,7 +24,7 @@
   <PropertyGroup Condition="">
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="MinVer" Version="6.0.0" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net461" Version="1.0.3" PrivateAssets="all"/>
+    <PackageReference Include="MinVer" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net461" PrivateAssets="all"/>
   </ItemGroup>
 </Project>
