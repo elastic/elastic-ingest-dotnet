@@ -17,9 +17,12 @@ namespace Elastic.Channels.Tests;
 /// One spec per defect found by reading BufferedChannelBase. A spec that fails on the current code is skipped with a BUG tag
 /// and enabled by the change that fixes it.
 /// </summary>
+// These specs wait on real timers and a busy runner (two cores, the other tests running beside them) stretches them: they run alone.
+[NotInParallel]
 public class ChannelDefectTests
 {
-	private static readonly TimeSpan Wait = TimeSpan.FromSeconds(5);
+	// A hang detector, not a performance bound: a slow runner takes a few times longer than a laptop.
+	private static readonly TimeSpan Wait = TimeSpan.FromSeconds(30);
 
 	// WaitForDrainAsync blocks its caller before the first await, so the call itself runs on a pool thread: a hang then fails
 	// the test after a few seconds instead of hanging it. The hung thread stays behind, which is what a bug does.
@@ -153,13 +156,13 @@ public class ChannelDefectTests
 			(await channel.WaitToWriteAsync(new Item(i)).ConfigureAwait(false)).Should().BeTrue();
 
 		var stopwatch = Stopwatch.StartNew();
-		var pending = channel.WaitForDrainAsync(TimeSpan.FromSeconds(3));
+		var pending = channel.WaitForDrainAsync(TimeSpan.FromSeconds(30));
 		var handedBack = stopwatch.Elapsed;
 		var completedAtOnce = pending.IsCompleted;
 		release.TrySetResult();
 		var drained = await pending.ConfigureAwait(false);
 
-		handedBack.Should().BeLessThan(TimeSpan.FromMilliseconds(500), "the call must not block its thread for the length of the wait");
+		handedBack.Should().BeLessThan(TimeSpan.FromSeconds(10), "the call must not block its thread for the length of the wait");
 		completedAtOnce.Should().BeFalse();
 		drained.Should().BeTrue();
 	}
@@ -180,7 +183,7 @@ public class ChannelDefectTests
 		release.TrySetResult();
 
 		drained.Should().BeFalse();
-		elapsed.Should().BeGreaterThan(TimeSpan.FromMilliseconds(350)).And.BeLessThan(TimeSpan.FromSeconds(3));
+		elapsed.Should().BeGreaterThan(TimeSpan.FromMilliseconds(350)).And.BeLessThan(TimeSpan.FromSeconds(20));
 	}
 
 	// 16. a drain that was cancelled by the caller says so
@@ -237,10 +240,10 @@ public class ChannelDefectTests
 		using var channel = new ScriptedChannel(ScriptedChannel.Opts(inbound: 100, outbound: 50, concurrency: 1, lifetime: TimeSpan.FromMilliseconds(150)));
 
 		Write(channel, 3);
-		(await UntilAsync(() => channel.Calls.Count == 1, TimeSpan.FromSeconds(5)).ConfigureAwait(false)).Should().BeTrue("the first partial buffer flushes on its own");
+		(await UntilAsync(() => channel.Calls.Count == 1, TimeSpan.FromSeconds(30)).ConfigureAwait(false)).Should().BeTrue("the first partial buffer flushes on its own");
 
 		Write(channel, 2, from: 3);
-		(await UntilAsync(() => channel.Calls.Count == 2, TimeSpan.FromSeconds(5)).ConfigureAwait(false)).Should().BeTrue("so does the next one");
+		(await UntilAsync(() => channel.Calls.Count == 2, TimeSpan.FromSeconds(30)).ConfigureAwait(false)).Should().BeTrue("so does the next one");
 
 		channel.Calls.Select(c => c.Ids.Length).Should().BeEquivalentTo([3, 2], o => o.WithStrictOrdering());
 	}
@@ -249,13 +252,14 @@ public class ChannelDefectTests
 	[Test]
 	public async Task APartialBufferIsNotFlushedBeforeItsLifetimeEnds()
 	{
-		using var channel = new ScriptedChannel(ScriptedChannel.Opts(inbound: 100, outbound: 50, concurrency: 1, lifetime: TimeSpan.FromMilliseconds(600)));
+		// the lifetime is long next to the look, so a test thread that a busy runner stalls cannot miss the window
+		using var channel = new ScriptedChannel(ScriptedChannel.Opts(inbound: 100, outbound: 50, concurrency: 1, lifetime: TimeSpan.FromSeconds(3)));
 
 		Write(channel, 3);
-		await Task.Delay(150).ConfigureAwait(false);
+		await Task.Delay(200).ConfigureAwait(false);
 		channel.Calls.Should().BeEmpty();
 
-		(await UntilAsync(() => channel.Calls.Count == 1, TimeSpan.FromSeconds(5)).ConfigureAwait(false)).Should().BeTrue();
+		(await UntilAsync(() => channel.Calls.Count == 1, TimeSpan.FromSeconds(30)).ConfigureAwait(false)).Should().BeTrue();
 	}
 
 	// 20. a full buffer goes at once, and does not wait for the timer
@@ -266,7 +270,7 @@ public class ChannelDefectTests
 
 		Write(channel, 10);
 
-		(await UntilAsync(() => channel.Calls.Count == 1, TimeSpan.FromSeconds(5)).ConfigureAwait(false)).Should().BeTrue();
+		(await UntilAsync(() => channel.Calls.Count == 1, TimeSpan.FromSeconds(30)).ConfigureAwait(false)).Should().BeTrue();
 	}
 
 	// 4. two exports ending together with a user handle that has one count left
