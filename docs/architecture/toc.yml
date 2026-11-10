@@ -3,4 +3,5 @@ toc:
   - file: push-model.md
   - file: channel-hierarchy.md
   - file: channel-lifecycle.md
+  - file: complexity-findings.md
   - file: transport-layer.md
