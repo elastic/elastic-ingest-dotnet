@@ -89,6 +89,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// <summary> The number of inflight events </summary>
 	public long InflightEvents => _inflightEvents;
 
+	// Items that were accepted and have not reached an end yet: exported (also after retries), reported as exhausted, or dropped.
+	// Unlike _inflightEvents, which stops counting an item when it moves to the inbound buffer, this covers the whole way through
+	// the inbound buffer, the outbound channel and the export. Only when it reaches zero is the channel drained.
+	private long _pendingItems;
+	private bool IsIdle => Interlocked.Read(ref _pendingItems) == 0;
+
 	/// <summary> Current number of tasks handling exporting the events </summary>
 	public int ExportTasks => _taskList.Count;
 
@@ -155,7 +161,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		MaxConcurrency = BufferOptions.ExportMaxConcurrency ?? Math.Min(calculatedConcurrency, defaultConcurrency);
 
 		// The minimum out buffer the max of (1 or OutboundBufferMaxSize) as long as it does not exceed InboundBufferMaxSize / (MaxConcurrency * 2)
-		BatchExportSize = Math.Min(BufferOptions.InboundBufferMaxSize / (MaxConcurrency), Math.Max(1, BufferOptions.OutboundBufferMaxSize));
+		BatchExportSize = Math.Max(1, Math.Min(BufferOptions.InboundBufferMaxSize / (MaxConcurrency), Math.Max(1, BufferOptions.OutboundBufferMaxSize)));
 		DrainSize = Math.Min(100_000, Math.Min(BatchExportSize * 2, maxIn / 2));
 
 		_taskList = new List<Task>(MaxConcurrency * 2);
@@ -177,10 +183,13 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			});
 
 		//we don't expose the fact TEvent is nullable to the consumer
-		Action<TEvent?>? itemDropped = options.BufferItemDropped is null ? null : e =>
+		Action<TEvent?> itemDropped = e =>
 		{
-			if (e is not null)
-				options.BufferItemDropped?.Invoke(e);
+			if (e is null) return;
+			// a dropped item was counted when it was written, and it will never be read
+			Interlocked.Decrement(ref _inflightEvents);
+			Interlocked.Decrement(ref _pendingItems);
+			options.BufferItemDropped?.Invoke(e);
 		};
 		InChannel = Channel.CreateBounded<TEvent?>(new BoundedChannelOptions(maxIn)
 		{
@@ -259,12 +268,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var waitForSignals = TimeSpan.FromMilliseconds(waitForSignalsMs);
 		_ = TryComplete();
 
-		if (_outBoundChannelConsumed && _inflightExportOperations == 0 && _inflightEvents == 0)
+		if (IsIdle)
 			return true;
 
 		_waitForDrain.Wait(waitForSignals, ctx);
 
-		if (_outBoundChannelConsumed && _inflightExportOperations == 0 && _inflightEvents == 0)
+		if (IsIdle)
 			return true;
 
 		// recalculate pendingExports
@@ -277,9 +286,8 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var start = maxWait.HasValue ? startWaitTime : DateTimeOffset.UtcNow;
 		do
 			await Task.Delay(TimeSpan.FromMilliseconds(100), ctx).ConfigureAwait(false);
-		while ((!_outBoundChannelConsumed || _inflightEvents > 0 || _inflightExportOperations > 0)
-			   && (DateTimeOffset.UtcNow - start) < maxSanityWait);
-		return _outBoundChannelConsumed && _inflightEvents == 0 && _inflightExportOperations == 0;
+		while (!IsIdle && (DateTimeOffset.UtcNow - start) < maxSanityWait);
+		return IsIdle;
 	}
 
 	/// <inheritdoc cref="ChannelWriter{T}.TryComplete"/>
@@ -288,12 +296,16 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// <inheritdoc cref="ChannelWriter{T}.TryWrite"/>
 	public override bool TryWrite(TEvent item)
 	{
+		// Counted before it can be read: the reader takes the count off again, so counting after the write could see it go below zero.
+		Interlocked.Increment(ref _inflightEvents);
+		Interlocked.Increment(ref _pendingItems);
 		if (InChannel.Writer.TryWrite(item))
 		{
-			Interlocked.Increment(ref _inflightEvents);
 			_callbacks.PublishToInboundChannelCallback?.Invoke();
 			return true;
 		}
+		Interlocked.Decrement(ref _inflightEvents);
+		Interlocked.Decrement(ref _pendingItems);
 		_callbacks.PublishToInboundChannelFailureCallback?.Invoke();
 		return false;
 	}
@@ -331,11 +343,17 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		ctx = ctx == default ? TokenSource.Token : ctx;
 
-		if (await WaitToWriteAsync(ctx).ConfigureAwait(false) && InChannel.Writer.TryWrite(item))
+		if (await WaitToWriteAsync(ctx).ConfigureAwait(false))
 		{
 			Interlocked.Increment(ref _inflightEvents);
-			_callbacks.PublishToInboundChannelCallback?.Invoke();
-			return true;
+			Interlocked.Increment(ref _pendingItems);
+			if (InChannel.Writer.TryWrite(item))
+			{
+				_callbacks.PublishToInboundChannelCallback?.Invoke();
+				return true;
+			}
+			Interlocked.Decrement(ref _inflightEvents);
+			Interlocked.Decrement(ref _pendingItems);
 		}
 
 		_callbacks.PublishToInboundChannelFailureCallback?.Invoke();
@@ -400,64 +418,95 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var exhausted = 0;
 		Interlocked.Increment(ref _inflightExportOperations);
 		using var outboundBuffer = buffer;
-		var maxRetries = Options.BufferOptions.ExportMaxRetries;
-		for (var i = 0; i <= maxRetries && items.Count > 0; i++)
+		var itemsInBuffer = items.Count;
+		try
 		{
-			if (TokenSource.Token.IsCancellationRequested) break;
-			if (_signal is { IsSet: true }) break;
-
-			_callbacks.ExportItemsAttemptCallback?.Invoke(i, items.Count);
-			TResponse? response = null;
-
-			// delay if we still have items, and we are not at the end of the max retry cycle
-			var atEndOfRetries = i == maxRetries;
-			try
+			var maxRetries = Options.BufferOptions.ExportMaxRetries;
+			for (var i = 0; i <= maxRetries && items.Count > 0; i++)
 			{
-				response = await ExportAsync(items, TokenSource.Token).ConfigureAwait(false);
-				_callbacks.ExportResponseCallback?.Invoke(response,
-					new WriteTrackingBufferEventData
+				if (TokenSource.Token.IsCancellationRequested) break;
+				if (_signal is { IsSet: true }) break;
+
+				_callbacks.ExportItemsAttemptCallback?.Invoke(i, items.Count);
+				TResponse? response = null;
+				var threw = false;
+
+				// delay if we still have items, and we are not at the end of the max retry cycle
+				var atEndOfRetries = i == maxRetries;
+				try
+				{
+					response = await ExportAsync(items, TokenSource.Token).ConfigureAwait(false);
+					_callbacks.ExportResponseCallback?.Invoke(response,
+						new WriteTrackingBufferEventData
+						{
+							Count = outboundBuffer.Count,
+							DurationSinceFirstWrite = outboundBuffer.DurationSinceFirstWrite,
+							EstimatedBytes = outboundBuffer.EstimatedBytes
+						});
+				}
+				catch (Exception e)
+				{
+					threw = true;
+					_callbacks.ExportExceptionCallback?.Invoke(e);
+					// An exception is not a response to pick retryable items from. Unless the caller said this one is safe to try again,
+					// the items are given up on and reported, instead of being sent again with unknown idempotence or dropped silently.
+					if (atEndOfRetries || !Options.BufferOptions.ExportRetryOnException(e))
 					{
-						Count = outboundBuffer.Count,
-						DurationSinceFirstWrite = outboundBuffer.DurationSinceFirstWrite,
-						EstimatedBytes = outboundBuffer.EstimatedBytes
-					});
-			}
-			catch (Exception e)
-			{
-				_callbacks.ExportExceptionCallback?.Invoke(e);
-				if (atEndOfRetries)
+						exhausted = items.Count;
+						_callbacks.ExportMaxRetriesCallback?.Invoke(items);
+						break;
+					}
+				}
+
+				// An export that threw and was allowed to retry has no response to pick items from, so all of them are tried again.
+				items = threw
+					? items
+					: response == null
+						? EmptyArraySegments<TEvent>.Empty
+						: RetryBuffer(response, items, outboundBuffer);
+				if (items.Count > 0 && i == 0)
+					_callbacks.ExportRetryableCountCallback?.Invoke(items.Count);
+
+				if (items.Count > 0 && !atEndOfRetries)
+				{
+					await Task.Delay(Options.BufferOptions.ExportBackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
+					_callbacks.ExportRetryCallback?.Invoke(items);
+				}
+				// otherwise if retryable items still exist and the user wants to be notified
+				else if (items.Count > 0 && atEndOfRetries)
 				{
 					exhausted = items.Count;
 					_callbacks.ExportMaxRetriesCallback?.Invoke(items);
-					break;
 				}
 			}
-
-			items = response == null
-				? EmptyArraySegments<TEvent>.Empty
-				: RetryBuffer(response, items, outboundBuffer);
-			if (items.Count > 0 && i == 0)
-				_callbacks.ExportRetryableCountCallback?.Invoke(items.Count);
-
-			if (items.Count > 0 && !atEndOfRetries)
-			{
-				await Task.Delay(Options.BufferOptions.ExportBackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
-				_callbacks.ExportRetryCallback?.Invoke(items);
-			}
-			// otherwise if retryable items still exist and the user wants to be notified
-			else if (items.Count > 0 && atEndOfRetries)
-			{
-				exhausted = items.Count;
-				_callbacks.ExportMaxRetriesCallback?.Invoke(items);
-			}
 		}
-		Interlocked.Decrement(ref _inflightExportOperations);
-		_callbacks.ExportBufferCallback?.Invoke();
-		if (_signal is { IsSet: false })
-			_signal.Signal();
-		if (_waitForDrain is { IsSet: false })
-			_waitForDrain.Signal();
+		finally
+		{
+			// however the export ends (a cancelled backoff, a callback that throws) it stops being in flight and signals the waiters
+			Interlocked.Decrement(ref _inflightExportOperations);
+			Interlocked.Add(ref _pendingItems, -itemsInBuffer);
+			_callbacks.ExportBufferCallback?.Invoke();
+			TrySignal(_signal);
+			TrySignal(_waitForDrain);
+		}
 		return exhausted;
+	}
+
+	/// <summary>
+	/// Signals a countdown event once, unless it already reached zero. Two exports ending together can both see a count of one,
+	/// and the second signal throws, so the check and the signal cannot be separate steps.
+	/// </summary>
+	private static void TrySignal(CountdownEvent? countdown)
+	{
+		if (countdown is not { IsSet: false }) return;
+		try
+		{
+			countdown.Signal();
+		}
+		catch (InvalidOperationException)
+		{
+			// the other export signalled the last count first
+		}
 	}
 
 	private int _seenTimeouts;
@@ -481,7 +530,6 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 					// read the comments in InBoundBuffer.WaitToReadAsync() to understand more.
 					// https://github.com/dotnet/runtime/issues/761
 					InChannel.Writer.TryWrite(null);
-					Interlocked.Exchange(ref _inflightEvents, 0);
 					continue;
 				}
 			}

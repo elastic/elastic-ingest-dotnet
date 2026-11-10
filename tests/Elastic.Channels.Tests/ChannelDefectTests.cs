@@ -43,14 +43,41 @@ public class ChannelDefectTests
 			channel.TryWrite(new Item(i)).Should().BeTrue();
 	}
 
-	// 1. an export that throws is retried
-	[Test, Skip("BUG 1: an ExportAsync exception before the last attempt leaves the response null, so the batch is dropped and never retried")]
-	public async Task AnExportThatThrowsOnAnEarlyAttemptIsRetried()
+	// 1. an export that throws is not retried by default, and its items are reported instead of dropped silently
+	[Test]
+	public async Task AnExportThatThrowsGivesUpOnItsItemsAndReportsThem()
 	{
 		var exhausted = new List<int>();
-		var options = ScriptedChannel.Opts(configure: o => o.ExportMaxRetriesCallback = items => exhausted.AddRange(items.Select(i => i.Id)));
+		var thrown = new List<Exception>();
+		var options = ScriptedChannel.Opts(configure: o =>
+		{
+			o.ExportMaxRetriesCallback = items => exhausted.AddRange(items.Select(i => i.Id));
+			o.ExportExceptionCallback = thrown.Add;
+		});
 		using var channel = new ScriptedChannel(options, (call, _, _) =>
 			call == 1 ? throw new InvalidOperationException("connection reset") : Task.FromResult(new Response()));
+
+		Write(channel, 5);
+		var drained = await Drain(channel).ConfigureAwait(false);
+
+		drained.Should().BeTrue();
+		exhausted.OrderBy(i => i).Should().BeEquivalentTo([0, 1, 2, 3, 4], o => o.WithStrictOrdering(), "the caller learns which items were given up on");
+		thrown.Should().ContainSingle().Which.Message.Should().Be("connection reset");
+		channel.Calls.Should().ContainSingle("without a response to pick from, and with unknown idempotence, nothing is sent again");
+	}
+
+	// 1b. the caller can say which exceptions are safe to retry
+	[Test]
+	public async Task AnExportThatThrowsIsRetriedWhenTheCallerSaysItIsSafe()
+	{
+		var exhausted = new List<int>();
+		var options = ScriptedChannel.Opts(configure: o =>
+		{
+			o.ExportMaxRetriesCallback = items => exhausted.AddRange(items.Select(i => i.Id));
+			o.BufferOptions.ExportRetryOnException = e => e is TimeoutException;
+		});
+		using var channel = new ScriptedChannel(options, (call, _, _) =>
+			call == 1 ? throw new TimeoutException("timed out") : Task.FromResult(new Response()));
 
 		Write(channel, 5);
 		var drained = await Drain(channel).ConfigureAwait(false);
@@ -60,18 +87,22 @@ public class ChannelDefectTests
 		exhausted.Should().BeEmpty();
 	}
 
-	// 1b. when every attempt throws, the items are reported as exhausted
-	[Test, Skip("BUG 1: items whose export threw are never reported to ExportMaxRetriesCallback")]
-	public async Task AnExportThatAlwaysThrowsReportsItsItemsAsExhausted()
+	// 1c. an exception the predicate does not accept ends the export, and one it accepts is retried up to the budget
+	[Test]
+	public async Task OnlyTheExceptionsTheCallerAcceptsAreRetriedAndTheBudgetStillApplies()
 	{
 		var exhausted = new List<int>();
-		var options = ScriptedChannel.Opts(maxRetries: 2, configure: o => o.ExportMaxRetriesCallback = items => exhausted.AddRange(items.Select(i => i.Id)));
-		using var channel = new ScriptedChannel(options, (_, _, _) => throw new InvalidOperationException("down"));
+		var options = ScriptedChannel.Opts(maxRetries: 2, configure: o =>
+		{
+			o.ExportMaxRetriesCallback = items => exhausted.AddRange(items.Select(i => i.Id));
+			o.BufferOptions.ExportRetryOnException = e => e is TimeoutException;
+		});
+		using var channel = new ScriptedChannel(options, (_, _, _) => throw new TimeoutException("down"));
 
 		Write(channel, 3);
-		await Drain(channel).ConfigureAwait(false);
+		_ = await Drain(channel).ConfigureAwait(false);
 
-		exhausted.OrderBy(i => i).Should().Equal(0, 1, 2);
+		exhausted.OrderBy(i => i).Should().BeEquivalentTo([0, 1, 2], o => o.WithStrictOrdering());
 		channel.Calls.Count.Should().Be(3, "the first try and two retries");
 	}
 
@@ -88,6 +119,25 @@ public class ChannelDefectTests
 
 		drained.Should().BeTrue();
 		channel.SeenByCompletedExports().Distinct().Count().Should().Be(450);
+	}
+
+	// 2b. batches waiting behind a running export are not "drained"
+	[Test]
+	public async Task DrainDoesNotReturnTrueWhileBatchesAreStillQueued()
+	{
+		for (var round = 0; round < 10; round++)
+		{
+			// one item per batch and one worker: between two exports nothing is "in flight" for an instant
+			using var channel = new ScriptedChannel(
+				ScriptedChannel.Opts(inbound: 20, outbound: 1, concurrency: 1, lifetime: TimeSpan.FromHours(1)),
+				async (_, _, ct) => { await Task.Delay(10, ct).ConfigureAwait(false); return new Response(); });
+
+			Write(channel, 8);
+			var drained = await Drain(channel, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+
+			drained.Should().BeTrue();
+			channel.Calls.Count.Should().Be(8, $"all eight batches were exported by the time drain returned (round {round})");
+		}
 	}
 
 	// 4. two exports ending together with a user handle that has one count left
@@ -119,7 +169,7 @@ public class ChannelDefectTests
 	}
 
 	// 5. completing the channel with an error ends it
-	[Test, Skip("BUG 5: TryComplete(error) faults the inbound reader, the read loop treats the fault as Read and spins forever")]
+	[Test]
 	public async Task CompletingWithAnErrorEndsTheChannel()
 	{
 		using var channel = new ScriptedChannel(ScriptedChannel.Opts());
@@ -132,7 +182,7 @@ public class ChannelDefectTests
 	}
 
 	// 6. a throwing retry callback does not leave the export counted as running
-	[Test, Skip("BUG 6: the retry callback runs outside any finally, so a throw skips the in-flight export decrement and the count stays at 1")]
+	[Test]
 	public async Task AThrowingRetryCallbackDoesNotLeaveAnExportRunning()
 	{
 		var options = ScriptedChannel.Opts(configure: o => o.ExportRetryCallback = _ => throw new InvalidOperationException("listener bug"));
@@ -160,7 +210,7 @@ public class ChannelDefectTests
 	}
 
 	// 13. an inbound buffer smaller than the export concurrency still exports
-	[Test, Skip("BUG 13: InboundBufferMaxSize below the concurrency makes BatchExportSize 0 and WaitForDrainAsync divides by zero")]
+	[Test]
 	public async Task AnInboundBufferSmallerThanTheConcurrencyStillExports()
 	{
 		using var channel = new ScriptedChannel(ScriptedChannel.Opts(inbound: 1, outbound: 10, concurrency: 4));
@@ -173,7 +223,7 @@ public class ChannelDefectTests
 	}
 
 	// 10. the count of events in flight never goes negative, and ends at zero
-	[Test, Skip("BUG 10: every tenth read timeout resets the in-flight counter to 0 while writers still increment it after TryWrite")]
+	[Test]
 	public async Task InflightEventsNeverGoNegative()
 	{
 		using var channel = new ScriptedChannel(ScriptedChannel.Opts(inbound: 200, outbound: 10, concurrency: 2, lifetime: TimeSpan.FromMilliseconds(5)));

@@ -68,21 +68,25 @@ public class ChannelModelProperties
 	public enum Outcome { Ok, RetryWhole, Throw }
 
 	/// <summary>
-	/// Whole batches that succeed, ask to be retried, or throw. With one worker and no time based flush the batches are
+	/// Whole batches that succeed, ask to be retried, or throw (and the caller says whether a throw is retried). With one worker and no time based flush the batches are
 	/// chunks of <see cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.BatchExportSize"/> in write order, so the
-	/// model can replay them: each call takes the next outcome of the script, an exception counts as an attempt like a retry does,
-	/// and a batch that is still pending after the last attempt is reported as exhausted.
+	/// model can replay them: each call takes the next outcome of the script, an exception counts as an attempt like a retry does
+	/// when the caller allows it and ends the batch when not, and a batch that is still pending after the last attempt is reported as exhausted.
 	/// </summary>
-	[Test, Skip("BUG 1: an ExportAsync exception before the last attempt drops the batch instead of retrying it")]
-	public async Task ABatchThatThrowsIsRetriedLikeAnyOtherFailure()
+	[Test]
+	public async Task ABatchEndsOrRetriesAfterAThrowAsTheCallerDecided()
 	{
-		var scenarios = Gen.Select(Gen.Int[1, 40], Gen.Int[5, 60], Gen.Int[1, 12], Gen.Int[0, 3], Gen.Enum<Outcome>().Array[60]);
+		var scenarios = Gen.Select(Gen.Int[1, 40], Gen.Int[5, 60], Gen.Int[1, 12], Gen.Int[0, 3], Gen.Enum<Outcome>().Array[60], Gen.Bool);
 		await scenarios.SampleAsync(async x =>
 		{
-			var (n, inbound, outbound, maxRetries, script) = x;
+			var (n, inbound, outbound, maxRetries, script, retryOnException) = x;
 			var exhausted = new ConcurrentBag<int>();
 			var options = ScriptedChannel.Opts(inbound, outbound, concurrency: 1, maxRetries, lifetime: TimeSpan.FromHours(1),
-				configure: o => o.ExportMaxRetriesCallback = items => { foreach (var i in items) exhausted.Add(i.Id); });
+				configure: o =>
+				{
+					o.ExportMaxRetriesCallback = items => { foreach (var i in items) exhausted.Add(i.Id); };
+					o.BufferOptions.ExportRetryOnException = _ => retryOnException;
+				});
 			using var channel = new ScriptedChannel(options, (call, _, _) => script[(call - 1) % script.Length] switch
 			{
 				Outcome.Throw => throw new InvalidOperationException("scripted"),
@@ -108,6 +112,8 @@ public class ChannelModelProperties
 				{
 					var outcome = script[call++ % script.Length];
 					if (outcome == Outcome.Ok) { expectedDelivered.AddRange(ids); done = true; }
+					// a throw ends the batch unless the caller said it is safe to try again
+					else if (outcome == Outcome.Throw && !retryOnException) break;
 				}
 				if (!done) expectedExhausted.AddRange(ids);
 			}
