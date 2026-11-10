@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -138,6 +139,84 @@ public class ChannelDefectTests
 			drained.Should().BeTrue();
 			channel.Calls.Count.Should().Be(8, $"all eight batches were exported by the time drain returned (round {round})");
 		}
+	}
+
+	// 14. WaitForDrainAsync is asynchronous: it hands back its task at once instead of blocking the caller until the wait is over
+	[Test]
+	public async Task WaitForDrainAsyncDoesNotBlockTheCaller()
+	{
+		var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		using var channel = new ScriptedChannel(
+			ScriptedChannel.Opts(inbound: 100, outbound: 10, concurrency: 1),
+			async (_, _, _) => { await release.Task.ConfigureAwait(false); return new Response(); });
+		for (var i = 0; i < 60; i++)
+			(await channel.WaitToWriteAsync(new Item(i)).ConfigureAwait(false)).Should().BeTrue();
+
+		var stopwatch = Stopwatch.StartNew();
+		var pending = channel.WaitForDrainAsync(TimeSpan.FromSeconds(3));
+		var handedBack = stopwatch.Elapsed;
+		var completedAtOnce = pending.IsCompleted;
+		release.TrySetResult();
+		var drained = await pending.ConfigureAwait(false);
+
+		handedBack.Should().BeLessThan(TimeSpan.FromMilliseconds(500), "the call must not block its thread for the length of the wait");
+		completedAtOnce.Should().BeFalse();
+		drained.Should().BeTrue();
+	}
+
+	// 15. the drain wait ends at the limit the caller gave
+	[Test]
+	public async Task WaitForDrainAsyncReturnsFalseAtTheLimitWhenAnExportIsStuck()
+	{
+		var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		using var channel = new ScriptedChannel(
+			ScriptedChannel.Opts(),
+			async (_, _, _) => { await release.Task.ConfigureAwait(false); return new Response(); });
+		Write(channel, 5);
+
+		var stopwatch = Stopwatch.StartNew();
+		var drained = await Drain(channel, TimeSpan.FromMilliseconds(400)).ConfigureAwait(false);
+		var elapsed = stopwatch.Elapsed;
+		release.TrySetResult();
+
+		drained.Should().BeFalse();
+		elapsed.Should().BeGreaterThan(TimeSpan.FromMilliseconds(350)).And.BeLessThan(TimeSpan.FromSeconds(3));
+	}
+
+	// 16. a drain that was cancelled by the caller says so
+	[Test]
+	public async Task WaitForDrainAsyncHonoursItsCancellationToken()
+	{
+		var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		using var channel = new ScriptedChannel(
+			ScriptedChannel.Opts(),
+			async (_, _, _) => { await release.Task.ConfigureAwait(false); return new Response(); });
+		Write(channel, 5);
+		using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+
+		var wait = async () => await channel.WaitForDrainAsync(TimeSpan.FromSeconds(30), cts.Token).ConfigureAwait(false);
+
+		await wait.Should().ThrowAsync<OperationCanceledException>();
+		release.TrySetResult();
+	}
+
+	// 17. a waiter for the drain is released, with false, when the channel is disposed under it
+	[Test]
+	public async Task DisposingTheChannelWhileWaitingForTheDrainAnswersFalse()
+	{
+		var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var channel = new ScriptedChannel(
+			ScriptedChannel.Opts(),
+			async (_, _, _) => { await release.Task.ConfigureAwait(false); return new Response(); });
+		Write(channel, 5);
+		var waiting = channel.WaitForDrainAsync(TimeSpan.FromSeconds(30)).AsTask();
+		await Task.Delay(100).ConfigureAwait(false);
+
+		await Task.Run(channel.Dispose).ConfigureAwait(false);
+		var drained = await Within(() => waiting, "the waiter must be released by the dispose").ConfigureAwait(false);
+		release.TrySetResult();
+
+		drained.Should().BeFalse("the items were not exported");
 	}
 
 	// 4. two exports ending together with a user handle that has one count left
