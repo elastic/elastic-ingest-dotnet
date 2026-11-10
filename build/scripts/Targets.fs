@@ -48,6 +48,9 @@ let private test (arguments:ParseResults<Arguments>) =
     let testProjects = [
         "tests/Elastic.Channels.Tests"
         "tests/Elastic.Ingest.Elasticsearch.Tests"
+        // unit tests that did not run in CI: the mapping source generator and the Agent Builder client
+        "tests/Elastic.Mapping.Tests"
+        "tests/Elastic.Clients.AgentBuilder.Tests"
     ]
     for project in testProjects do
         // A multi-targeted test project needs the full path of its project file: with a relative path the SDK
