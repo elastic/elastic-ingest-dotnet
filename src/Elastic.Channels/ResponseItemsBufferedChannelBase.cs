@@ -47,6 +47,12 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 	protected abstract bool RetryAllItems(TResponse response);
 
 	/// <summary>
+	/// Whether the response says every item succeeded, which makes matching items to events pointless: nothing is retried or rejected.
+	/// <para>Defaults to <c>false</c>, which matches every item. Override it when the response carries a summary you can trust.</para>
+	/// </summary>
+	protected virtual bool AllItemsSucceeded(TResponse response) => false;
+
+	/// <summary>
 	/// Implementers have to implement this to align sent <typeparamref name="TEvent"/> to received <typeparamref name="TBulkResponseItem"/>'s
 	/// </summary>
 	protected abstract List<(TEvent, TBulkResponseItem)> Zip(TResponse response, IReadOnlyCollection<TEvent> page);
@@ -76,23 +82,29 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 		// if we are not retrying the whole request find out if individual items need retrying
 		if (backOffWholeRequest) return currentBuffer;
 
+		// the usual case, and nothing to match
+		if (AllItemsSucceeded(response))
+			return EmptyArraySegments<TEvent>.Empty;
+
 		var zipped = Zip(response, currentBuffer);
 		if (zipped.Count == 0)
 			return EmptyArraySegments<TEvent>.Empty;
 
-		var retryEvents = zipped
-			.Where(t => RetryEvent(t))
-			.Select(t => t.Item1)
-			.ToArray();
-
-		// report any currentBuffer that are going to be dropped
-		if (Options.ServerRejectionCallback != null)
+		// One pass: an item is retried, or else rejected when the caller wants to hear about rejections.
+		List<TEvent>? retryEvents = null;
+		List<(TEvent, TBulkResponseItem)>? rejected = Options.ServerRejectionCallback != null ? new() : null;
+		foreach (var pair in zipped)
 		{
-			var rejected = zipped
-				.Where(t => RejectEvent(t) && !RetryEvent(t))
-				.ToList();
-			if (rejected.Count > 0) Options.ServerRejectionCallback(rejected);
+			if (RetryEvent(pair))
+				(retryEvents ??= new List<TEvent>()).Add(pair.Item1);
+			else if (rejected != null && RejectEvent(pair))
+				rejected.Add(pair);
 		}
-		return new ArraySegment<TEvent>(retryEvents);
+
+		// report any events that are going to be dropped
+		if (rejected is { Count: > 0 })
+			Options.ServerRejectionCallback!(rejected);
+
+		return retryEvents == null ? EmptyArraySegments<TEvent>.Empty : new ArraySegment<TEvent>(retryEvents.ToArray());
 	}
 }

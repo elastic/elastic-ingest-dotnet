@@ -5,14 +5,12 @@
 using System;
 using System.Buffers;
 using System.Threading;
-using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace Elastic.Channels.Buffers;
 
 /// <summary>
-/// <see cref="InboundBuffer{TEvent}"/> is a buffer that will block <see cref="WaitToReadAsync"/> until
-/// sufficient items have been added to it or <see cref="DurationSinceFirstWrite"/> exceeds the buffer's maximum lifespan.
+/// <see cref="InboundBuffer{TEvent}"/> collects the items read from the inbound channel until sufficient items have been added to it
+/// or <see cref="DurationSinceFirstWaitToRead"/> exceeds the buffer's maximum lifespan.
 /// </summary>
 internal class InboundBuffer<TEvent>(int maxBufferSize, TimeSpan forceFlushAfter) : IWriteTrackingBuffer, IDisposable
 {
@@ -58,74 +56,22 @@ internal class InboundBuffer<TEvent>(int maxBufferSize, TimeSpan forceFlushAfter
 		return bufferRef;
 	}
 
-	private TimeSpan Wait
+	/// <summary>Starts the clock of the next buffer: it counts from when the loop first waited for data after the last flush.</summary>
+	public void MarkWaiting() => TimeOfFirstWaitToRead ??= DateTimeOffset.UtcNow;
+
+	// the longest due time a Timer accepts is just under 49.7 days
+	private static readonly TimeSpan LongestTimer = TimeSpan.FromMilliseconds(uint.MaxValue - 2);
+
+	/// <summary>How long until a buffer that is not full has to be flushed, never more than a timer can wait.</summary>
+	public TimeSpan TimeUntilFlush
 	{
 		get
 		{
-			if (!DurationSinceFirstWaitToRead.HasValue) return forceFlushAfter;
-
-			var d = DurationSinceFirstWaitToRead.Value;
-			return d < forceFlushAfter ? forceFlushAfter - d : forceFlushAfter;
-		}
-	}
-
-	private Task<bool>? _cachedWaitToRead;
-	/// Call <see cref="ChannelReader{T}.WaitToReadAsync"/> with a timeout to force a flush to happen every <see cref="Wait"/>.
-	public async Task<WaitToReadResult> WaitToReadAsync(ChannelReader<TEvent?> reader, CancellationToken ctx)
-	{
-		TimeOfFirstWaitToRead ??= DateTimeOffset.UtcNow;
-
-		try
-		{
-			// https://github.com/dotnet/runtime/issues/761
-			// cancellation tokens may not be unrooted properly by design if cancellation occurs.
-			// by checking explicitly which task ends up being completed, we can uncover when
-
-			// We accept the possibility of several pending tasks blocking on WaitToReadAsync()
-			// These will all unblock and free up when a new message gets pushed.
-			// To aid with cleaning these tasks up, we write `default` to the channel when this task returns TimeOut
-
-			var readTask = _cachedWaitToRead ?? reader.WaitToReadAsync(ctx).AsTask();
-			_cachedWaitToRead = null;
-			var delayTask = Task.Delay(Wait, ctx);
-			var completedTask = await Task.WhenAny(readTask, delayTask).ConfigureAwait(false);
-
-			if (completedTask == delayTask)
-			{
-				_cachedWaitToRead = readTask;
-				return WaitToReadResult.Timeout;
-			}
-
-			return await readTask.ConfigureAwait(false) ? WaitToReadResult.Read : WaitToReadResult.Completed;
-		}
-		catch (OperationCanceledException)
-		{
-			return WaitToReadResult.Timeout;
-		}
-		catch (Exception) when (ctx.IsCancellationRequested)
-		{
-			return WaitToReadResult.Timeout;
-		}
-		catch (Exception)
-		{
-			// The reader was completed with an error (TryComplete(error)): nothing more will ever arrive. Reporting "Read" here
-			// sent the consumer round its loop again with a reader that throws at once, forever.
-			return WaitToReadResult.Completed;
+			var waited = DurationSinceFirstWaitToRead;
+			var left = waited is null ? forceFlushAfter : waited.Value >= forceFlushAfter ? TimeSpan.Zero : forceFlushAfter - waited.Value;
+			return left > LongestTimer ? LongestTimer : left;
 		}
 	}
 
 	public void Dispose() {}
-}
-
-/// <summary>
-/// Signals to consumer the result of a call to <see cref="ChannelReader{T}.WaitToReadAsync"/> that may have been cancelled.
-/// </summary>
-public enum WaitToReadResult
-{
-	/// the wait resulted in data
-	Read,
-	/// the wait can no longer receive any data ever
-	Completed,
-	///
-	Timeout
 }

@@ -540,45 +540,74 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		}
 	}
 
-	private int _seenTimeouts;
+	private static readonly TimeSpan MinimumWake = TimeSpan.FromMilliseconds(1);
+
+	/// <summary>Wakes the inbound reader so a partial buffer is flushed on time. Nothing to do when items are waiting: the reader is awake.</summary>
+	private void WakeInboundReader()
+	{
+		if (InChannel.Reader.CanCount && InChannel.Reader.Count > 0) return;
+		_ = InChannel.Writer.TryWrite(null);
+	}
 
 	private async Task ConsumeInboundEventsAsync(int maxQueuedMessages, TimeSpan maxInterval)
 	{
 		_callbacks.InboundChannelStartedCallback?.Invoke();
 
-		WaitToReadResult result;
-		while ((result = await InboundBuffer.WaitToReadAsync(InChannel.Reader, TokenSource.Token).ConfigureAwait(false)) != WaitToReadResult.Completed)
-		{
-			if (TokenSource.Token.IsCancellationRequested) break;
-			if (_signal is { IsSet: true }) break;
+		var reader = InChannel.Reader;
 
-			if (result == WaitToReadResult.Timeout)
+		// A buffer that is not full is flushed once it has waited for maxInterval. The reader sleeps in WaitToReadAsync, so a timer
+		// wakes it: armed when a buffer gets its first item, disarmed when the buffer is flushed. One timer for the life of the loop,
+		// where each read used to create a Task.Delay and a WhenAny and left the losing timer running until it expired.
+		using var flushTimer = new Timer(static state => ((BufferedChannelBase<TChannelOptions, TEvent, TResponse>)state!).WakeInboundReader(),
+			this, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+
+		try
+		{
+			while (true)
 			{
-				var timeouts = Interlocked.Increment(ref _seenTimeouts);
-				if (timeouts % 10 == 0)
+				InboundBuffer.MarkWaiting();
+				if (!await reader.WaitToReadAsync(TokenSource.Token).ConfigureAwait(false))
+					break;
+
+				if (TokenSource.Token.IsCancellationRequested) break;
+				if (_signal is { IsSet: true }) break;
+
+				while (InboundBuffer.Count < maxQueuedMessages && reader.TryRead(out var item))
 				{
-					// this should free up tasks blocking on WaitToReadAsync() within InBoundBuffer.WaitToReadAsync()
-					// read the comments in InBoundBuffer.WaitToReadAsync() to understand more.
-					// https://github.com/dotnet/runtime/issues/761
-					InChannel.Writer.TryWrite(null);
-					continue;
+					// the wake-up marker the timer writes
+					if (item is null)
+						continue;
+
+					InboundBuffer.Add(item);
+					Interlocked.Decrement(ref _inflightEvents);
+
+					if (InboundBuffer.DurationSinceFirstWaitToRead >= maxInterval)
+						break;
+				}
+
+				if (InboundBuffer.ThresholdsHit)
+				{
+					_ = flushTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+					await FlushBufferAsync().ConfigureAwait(false);
+				}
+				else if (InboundBuffer.Count > 0)
+				{
+					// Not due yet: wake for the rest of its lifetime. Armed after every pass that leaves items behind, and not only
+					// for the first item, because the timer can fire a hair before the buffer is strictly older than its lifetime,
+					// and a timer that is spent then would leave the buffer waiting for the next write.
+					var rest = InboundBuffer.TimeUntilFlush;
+					_ = flushTimer.Change(rest < MinimumWake ? MinimumWake : rest, Timeout.InfiniteTimeSpan);
 				}
 			}
-
-			while (InboundBuffer.Count < maxQueuedMessages && InChannel.Reader.TryRead(out var item))
-			{
-				if (item is null)
-					continue;
-
-				InboundBuffer.Add(item);
-				Interlocked.Decrement(ref _inflightEvents);
-
-				if (InboundBuffer.DurationSinceFirstWaitToRead >= maxInterval)
-					break;
-			}
-
-			if (InboundBuffer.ThresholdsHit)
-				await FlushBufferAsync().ConfigureAwait(false);
+		}
+		catch (OperationCanceledException)
+		{
+			// the channel was cancelled: what is in the buffer is flushed below, as when the loop ends any other way
+		}
+		catch (Exception)
+		{
+			// The inbound channel was completed with an error (TryComplete(error)): nothing more will ever arrive, which ends the loop
+			// like a plain completion. Reading on from a reader that throws at once would spin forever.
 		}
 
 		// It's possible to break out of the above while loop before a threshold was met to flush the buffer.

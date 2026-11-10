@@ -222,6 +222,57 @@ public class ChannelDefectTests
 		drained.Should().BeFalse("the items were not exported");
 	}
 
+	private static async Task<bool> UntilAsync(Func<bool> condition, TimeSpan limit)
+	{
+		var stop = Stopwatch.StartNew();
+		while (stop.Elapsed < limit)
+		{
+			if (condition()) return true;
+			await Task.Delay(10).ConfigureAwait(false);
+		}
+		return condition();
+	}
+
+	// 18. a buffer that is not full is flushed when its lifetime ends, again and again
+	[Test]
+	public async Task APartialBufferIsFlushedWhenItsLifetimeEndsAndTheTimerIsArmedAgain()
+	{
+		using var channel = new ScriptedChannel(ScriptedChannel.Opts(inbound: 100, outbound: 50, concurrency: 1, lifetime: TimeSpan.FromMilliseconds(150)));
+
+		Write(channel, 3);
+		(await UntilAsync(() => channel.Calls.Count == 1, TimeSpan.FromSeconds(30)).ConfigureAwait(false)).Should().BeTrue("the first partial buffer flushes on its own");
+
+		Write(channel, 2, from: 3);
+		(await UntilAsync(() => channel.Calls.Count == 2, TimeSpan.FromSeconds(30)).ConfigureAwait(false)).Should().BeTrue("so does the next one");
+
+		channel.Calls.Select(c => c.Ids.Length).Should().BeEquivalentTo([3, 2], o => o.WithStrictOrdering());
+	}
+
+	// 19. ... and not before
+	[Test]
+	public async Task APartialBufferIsNotFlushedBeforeItsLifetimeEnds()
+	{
+		// the lifetime is long next to the look, so a test thread that a busy runner stalls cannot miss the window
+		using var channel = new ScriptedChannel(ScriptedChannel.Opts(inbound: 100, outbound: 50, concurrency: 1, lifetime: TimeSpan.FromSeconds(3)));
+
+		Write(channel, 3);
+		await Task.Delay(200).ConfigureAwait(false);
+		channel.Calls.Should().BeEmpty();
+
+		(await UntilAsync(() => channel.Calls.Count == 1, TimeSpan.FromSeconds(30)).ConfigureAwait(false)).Should().BeTrue();
+	}
+
+	// 20. a full buffer goes at once, and does not wait for the timer
+	[Test]
+	public async Task AFullBufferIsFlushedWithoutWaitingForItsLifetime()
+	{
+		using var channel = new ScriptedChannel(ScriptedChannel.Opts(inbound: 100, outbound: 10, concurrency: 1, lifetime: TimeSpan.FromHours(1)));
+
+		Write(channel, 10);
+
+		(await UntilAsync(() => channel.Calls.Count == 1, TimeSpan.FromSeconds(30)).ConfigureAwait(false)).Should().BeTrue();
+	}
+
 	// 4. two exports ending together with a user handle that has one count left
 	[Test]
 	public async Task TwoExportsEndingTogetherDoNotBreakTheChannel()

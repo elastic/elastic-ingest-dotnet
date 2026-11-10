@@ -83,6 +83,32 @@ public class IngestChannelDefectTests
 		exhausted.Should().BeEmpty();
 	}
 
+	// 11d. a sub-batch that reports item errors is not hidden by the sub-batch that happens to carry the merged response
+	[Test]
+	public async Task AnItemErrorInAnEarlierSubBatchIsStillSeenWhenTheLastSubBatchSucceeded()
+	{
+		var rejected = new ConcurrentBag<int>();
+		// sub-batch 0: its document is rejected (400, and the server says errors: true); sub-batch 1 succeeds (errors: false)
+		var t = new ScriptedTransport((attempt, r) => attempt == 0
+			? ScriptedResponse.Items(400)
+			: ScriptedResponse.Items(Enumerable.Repeat(201, ScriptedTransport.CountOperations(r)).ToArray()));
+		var options = new IndexChannelOptions<TestDocument>(t.Transport)
+		{
+			IndexFormat = "my-index",
+			ServerRejectionCallback = items => { foreach (var (d, _) in items) rejected.Add((int)(d.Timestamp - DateTimeOffset.UnixEpoch).TotalSeconds); },
+			BufferOptions = new BufferOptions
+			{
+				OutboundBufferMaxSize = 10, OutboundBufferMaxBytes = 1, ExportMaxConcurrency = 1, ExportMaxRetries = 0,
+				ExportBackoffPeriod = _ => TimeSpan.FromMilliseconds(1), OutboundBufferMaxLifetime = TimeSpan.FromHours(1)
+			}
+		};
+		using var channel = new IndexChannel<TestDocument>(options);
+
+		_ = await WriteAndDrain(channel, 2);
+
+		rejected.Should().BeEquivalentTo([0]);
+	}
+
 	// 11c. a sub-batch that got no answer is reported for its documents only, and is not sent again
 	[Test]
 	public async Task ASubBatchWithoutAnAnswerIsReportedAsRejectedForItsDocumentsOnly()

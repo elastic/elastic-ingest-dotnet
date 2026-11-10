@@ -9,7 +9,7 @@ namespace Performance.Common;
 
 public sealed class StockData
 {
-	private static readonly byte[] FilterPathStartResponseBytes = Encoding.UTF8.GetBytes("{\"items\":[");
+	private static readonly byte[] FilterPathStartResponseBytes = Encoding.UTF8.GetBytes("{\"errors\":false,\"items\":[");
 	private static readonly byte[] FilterPathItemResponseBytes = Encoding.UTF8.GetBytes("{\"create\":{\"status\":201}}");
 	private static readonly byte Comma = (byte)',';
 	private static readonly byte[] EndResponseBytes = Encoding.UTF8.GetBytes("]}");
