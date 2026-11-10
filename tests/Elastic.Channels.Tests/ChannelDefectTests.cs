@@ -16,9 +16,12 @@ namespace Elastic.Channels.Tests;
 /// One spec per defect found by reading BufferedChannelBase. A spec that fails on the current code is skipped with a BUG tag
 /// and enabled by the change that fixes it.
 /// </summary>
+// These specs wait on real timers and a busy runner (two cores, the other tests running beside them) stretches them: they run alone.
+[NotInParallel]
 public class ChannelDefectTests
 {
-	private static readonly TimeSpan Wait = TimeSpan.FromSeconds(5);
+	// A hang detector, not a performance bound: a slow runner takes a few times longer than a laptop.
+	private static readonly TimeSpan Wait = TimeSpan.FromSeconds(30);
 
 	// WaitForDrainAsync blocks its caller before the first await, so the call itself runs on a pool thread: a hang then fails
 	// the test after a few seconds instead of hanging it. The hung thread stays behind, which is what a bug does.
