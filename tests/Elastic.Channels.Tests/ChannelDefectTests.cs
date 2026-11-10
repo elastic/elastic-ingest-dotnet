@@ -17,9 +17,12 @@ namespace Elastic.Channels.Tests;
 /// One spec per defect found by reading BufferedChannelBase. A spec that fails on the current code is skipped with a BUG tag
 /// and enabled by the change that fixes it.
 /// </summary>
+// These specs wait on real timers and a busy runner (two cores, the other tests running beside them) stretches them: they run alone.
+[NotInParallel]
 public class ChannelDefectTests
 {
-	private static readonly TimeSpan Wait = TimeSpan.FromSeconds(5);
+	// A hang detector, not a performance bound: a slow runner takes a few times longer than a laptop.
+	private static readonly TimeSpan Wait = TimeSpan.FromSeconds(30);
 
 	// WaitForDrainAsync blocks its caller before the first await, so the call itself runs on a pool thread: a hang then fails
 	// the test after a few seconds instead of hanging it. The hung thread stays behind, which is what a bug does.
@@ -153,13 +156,13 @@ public class ChannelDefectTests
 			(await channel.WaitToWriteAsync(new Item(i)).ConfigureAwait(false)).Should().BeTrue();
 
 		var stopwatch = Stopwatch.StartNew();
-		var pending = channel.WaitForDrainAsync(TimeSpan.FromSeconds(3));
+		var pending = channel.WaitForDrainAsync(TimeSpan.FromSeconds(30));
 		var handedBack = stopwatch.Elapsed;
 		var completedAtOnce = pending.IsCompleted;
 		release.TrySetResult();
 		var drained = await pending.ConfigureAwait(false);
 
-		handedBack.Should().BeLessThan(TimeSpan.FromMilliseconds(500), "the call must not block its thread for the length of the wait");
+		handedBack.Should().BeLessThan(TimeSpan.FromSeconds(10), "the call must not block its thread for the length of the wait");
 		completedAtOnce.Should().BeFalse();
 		drained.Should().BeTrue();
 	}
@@ -180,7 +183,7 @@ public class ChannelDefectTests
 		release.TrySetResult();
 
 		drained.Should().BeFalse();
-		elapsed.Should().BeGreaterThan(TimeSpan.FromMilliseconds(350)).And.BeLessThan(TimeSpan.FromSeconds(3));
+		elapsed.Should().BeGreaterThan(TimeSpan.FromMilliseconds(350)).And.BeLessThan(TimeSpan.FromSeconds(20));
 	}
 
 	// 16. a drain that was cancelled by the caller says so

@@ -19,6 +19,7 @@ namespace Elastic.Channels.Tests;
 /// The model is written from the behaviour the options describe (ExportMaxRetries, the retry predicate, the exhausted
 /// callback), not from the code, and each property was mutation-checked.
 /// </summary>
+[NotInParallel]
 public class ChannelModelProperties
 {
 	/// <summary>
