@@ -45,6 +45,7 @@ public class DeltaSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	private readonly Action<TEvent, DateTimeOffset>? _setBatchIndexDate;
 	private readonly Action<TEvent, DateTimeOffset>? _setLastUpdated;
 
+	private readonly OrchestratorLifecycle _lifecycle = new();
 	private IngestChannel<TEvent>? _primaryChannel;
 	private IngestChannel<TEvent>? _secondaryChannel;
 	private IngestSyncStrategy _strategy = IngestSyncStrategy.Multiplex;
@@ -173,7 +174,28 @@ public class DeltaSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	/// completed (via <see cref="BackfillRolledOverIndicesAsync"/>) before calling
 	/// <see cref="TryWrite"/>.
 	/// </summary>
-	public async Task<ISyncOrchestratorContext> StartAsync(
+		public async Task<ISyncOrchestratorContext> StartAsync(BootstrapMethod method, CancellationToken ctx = default)
+	{
+		_lifecycle.BeginStart();
+		try
+		{
+			var context = await StartCoreAsync(method, ctx).ConfigureAwait(false);
+			_lifecycle.MarkStarted();
+			return context;
+		}
+		catch
+		{
+			// a start that failed halfway must not leave channels behind, or a half built orchestrator that looks started
+			_primaryChannel?.Dispose();
+			_secondaryChannel?.Dispose();
+			_primaryChannel = null;
+			_secondaryChannel = null;
+			_lifecycle.MarkFailed();
+			throw;
+		}
+	}
+
+private async Task<ISyncOrchestratorContext> StartCoreAsync(
 		BootstrapMethod method, CancellationToken ctx = default)
 	{
 		foreach (var task in _preBootstrapTasks)
@@ -495,11 +517,7 @@ public class DeltaSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 				paramName);
 	}
 
-	private void EnsureStarted()
-	{
-		if (_primaryChannel == null)
-			throw new InvalidOperationException("Call StartAsync before writing or completing.");
-	}
+	private void EnsureStarted() => _lifecycle.EnsureStarted();
 
 	private void EnsureNoBackfillPending()
 	{

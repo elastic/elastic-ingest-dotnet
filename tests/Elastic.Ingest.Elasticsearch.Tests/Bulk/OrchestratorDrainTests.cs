@@ -76,4 +76,54 @@ public class OrchestratorDrainTests
 		completed.Should().BeFalse("the documents were still being written");
 		t.Requests.Skip(requestsBefore).Where(ChangesTheCluster).Should().BeEmpty("no alias may point at an index that is still being filled");
 	}
+
+	// 12. starting twice, and a start that failed halfway
+	[Test]
+	public async Task StartingTwiceThrowsInsteadOfLeakingTheFirstChannels()
+	{
+		var t = new ScriptedTransport((_, r) => ScriptedResponse.Raw("{}"));
+		using var orchestrator = new IncrementalSyncOrchestrator<TestDocument>(t.Transport,
+			Context("primary-docs", "primary-search", "primary-docs-*"), Context("secondary-docs", "secondary-search", "secondary-docs-*"));
+		_ = await orchestrator.StartAsync(BootstrapMethod.Silent);
+
+		var second = async () => await orchestrator.StartAsync(BootstrapMethod.Silent);
+
+		await second.Should().ThrowAsync<InvalidOperationException>().WithMessage("*already*");
+	}
+
+	[Test]
+	public async Task AStartThatFailedHalfwayLeavesAnOrchestratorThatSaysItIsNotStarted()
+	{
+		// the primary channel gets created and bootstrapped, then looking for the secondary fails
+		var t = new ScriptedTransport((_, r) => r.Path.Contains("secondary", StringComparison.Ordinal)
+			? new ScriptedResponse(0, null, new InvalidOperationException("network down"))
+			: ScriptedResponse.Raw("{}"));
+		using var orchestrator = new IncrementalSyncOrchestrator<TestDocument>(t.Transport,
+			Context("primary-docs", "primary-search", "primary-docs-*"), Context("secondary-docs", "secondary-search", "secondary-docs-*"));
+
+		var start = async () => await orchestrator.StartAsync(BootstrapMethod.Silent);
+		await start.Should().ThrowAsync<Exception>();
+
+		var write = () => orchestrator.TryWrite(new TestDocument { Timestamp = DateTimeOffset.UnixEpoch });
+		write.Should().Throw<InvalidOperationException>().WithMessage("*StartAsync failed*", "not a NullReferenceException from a half built orchestrator");
+	}
+
+	[Test]
+	public async Task TheDeltaOrchestratorIsStartedOnceAndAFailedStartIsFinalToo()
+	{
+		var ok = new ScriptedTransport((_, _) => ScriptedResponse.Raw("{}"));
+		using var started = new DeltaSyncOrchestrator<TestDocument>(ok.Transport,
+			Context("primary-docs", "primary-search", "primary-docs-*"), Context("secondary-docs", "secondary-search", "secondary-docs-*"));
+		_ = await started.StartAsync(BootstrapMethod.Silent);
+		var again = async () => await started.StartAsync(BootstrapMethod.Silent);
+		await again.Should().ThrowAsync<InvalidOperationException>().WithMessage("*already*");
+
+		var down = new ScriptedTransport((_, _) => new ScriptedResponse(0, null, new InvalidOperationException("network down")));
+		using var failed = new DeltaSyncOrchestrator<TestDocument>(down.Transport,
+			Context("primary-docs", "primary-search", "primary-docs-*"), Context("secondary-docs", "secondary-search", "secondary-docs-*"));
+		var start = async () => await failed.StartAsync(BootstrapMethod.Silent);
+		await start.Should().ThrowAsync<Exception>();
+		var write = () => failed.TryWrite(new TestDocument { Timestamp = DateTimeOffset.UnixEpoch });
+		write.Should().Throw<InvalidOperationException>().WithMessage("*StartAsync failed*");
+	}
 }
