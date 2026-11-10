@@ -55,6 +55,12 @@ else if (args.Contains("--bulk-ingestion"))
 	// 100,000 documents through an index channel: dotnet run -c Release -- --bulk-ingestion
 	BenchmarkRunner.Run<BulkIngestionBenchmarks>(config);
 }
+else if (args.Contains("--retry-buffer"))
+{
+	// the step that decides which documents of a response are retried: dotnet run -c Release -- --retry-buffer [--short]
+	if (args.Contains("--short")) config.AddJob(BenchmarkDotNet.Jobs.Job.ShortRun);
+	BenchmarkRunner.Run<RetryBufferBenchmarks>(config);
+}
 else if (args.Contains("--bulk-sender"))
 {
 	// quick comparison run: dotnet run -c Release -- --bulk-sender [--short]
