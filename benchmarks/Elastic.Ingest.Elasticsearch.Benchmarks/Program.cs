@@ -50,6 +50,11 @@ else if (args.Contains("--channel"))
 	if (args.Contains("--short")) config.AddJob(BenchmarkDotNet.Jobs.Job.ShortRun);
 	BenchmarkRunner.Run<ChannelBenchmarks>(config);
 }
+else if (args.Contains("--bulk-ingestion"))
+{
+	// 100,000 documents through an index channel: dotnet run -c Release -- --bulk-ingestion
+	BenchmarkRunner.Run<BulkIngestionBenchmarks>(config);
+}
 else if (args.Contains("--bulk-sender"))
 {
 	// quick comparison run: dotnet run -c Release -- --bulk-sender [--short]
