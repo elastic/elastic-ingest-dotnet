@@ -67,11 +67,24 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 	protected override bool RetryAllItems(BulkResponse response) => response.ApiCallDetails.HttpStatusCode == 429;
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.Zip"/>
-	protected override List<(TDocument, BulkResponseItem)> Zip(BulkResponse response, IReadOnlyCollection<TDocument> page) =>
+	protected override List<(TDocument, BulkResponseItem)> Zip(BulkResponse response, IReadOnlyCollection<TDocument> page)
+	{
 		// ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
-		response.Items == null
-		? new List<(TDocument, BulkResponseItem)>()
-		: page.Zip(response.Items, (doc, item) => (doc, item)).ToList();
+		if (response.Items == null) return new List<(TDocument, BulkResponseItem)>();
+
+		var zipped = new List<(TDocument, BulkResponseItem)>(Math.Min(page.Count, response.Items.Count));
+		using var documents = page.GetEnumerator();
+		using var items = response.Items.GetEnumerator();
+		while (documents.MoveNext() && items.MoveNext())
+			zipped.Add((documents.Current, items.Current));
+		return zipped;
+	}
+
+	/// <summary>
+	/// The request asks for the <c>errors</c> flag, and the server answers <c>false</c> when every item succeeded, so there is nothing to match.
+	/// A response without the flag is matched item by item.
+	/// </summary>
+	protected override bool AllItemsSucceeded(BulkResponse response) => response.Errors == false;
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryEvent"/>
 	protected override bool RetryEvent((TDocument, BulkResponseItem) item) =>
@@ -204,6 +217,8 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 
 			var carrierOfSuccess = responses.First(r => r.ApiCallDetails.HasSuccessfulStatusCode);
 			carrierOfSuccess.Items = merged;
+			// the carrier's own flag says nothing about the sub-batches that failed
+			carrierOfSuccess.Errors = true;
 			return carrierOfSuccess;
 		}
 
@@ -221,6 +236,9 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 
 		// BulkResponse.Items has a public setter — replace with the combined list.
 		carrier.Items = combined;
+		// The carrier is one sub-batch's response, so its flag must not hide the items of the others: "no errors" only
+		// when every sub-batch said so, "errors" when any did, and unknown otherwise.
+		carrier.Errors = responses.All(r => r.Errors == false) ? false : responses.Any(r => r.Errors == true) ? true : null;
 		return carrier;
 	}
 #endif
