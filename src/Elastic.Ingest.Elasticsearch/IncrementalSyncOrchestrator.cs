@@ -76,6 +76,7 @@ public class IncrementalSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	private readonly Action<TEvent, DateTimeOffset>? _setBatchIndexDate;
 	private readonly Action<TEvent, DateTimeOffset>? _setLastUpdated;
 
+	private readonly OrchestratorLifecycle _lifecycle = new();
 	private IngestChannel<TEvent>? _primaryChannel;
 	private IngestChannel<TEvent>? _secondaryChannel;
 	private IngestSyncStrategy _strategy = IngestSyncStrategy.Multiplex;
@@ -204,7 +205,28 @@ public class IncrementalSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	/// hash changed, a new backing index is created and all data is reindexed from primary.
 	/// Multiplex (write to both) is only used when creating entirely new backing indices.
 	/// </summary>
-	public async Task<ISyncOrchestratorContext> StartAsync(BootstrapMethod method, CancellationToken ctx = default)
+		public async Task<ISyncOrchestratorContext> StartAsync(BootstrapMethod method, CancellationToken ctx = default)
+	{
+		_lifecycle.BeginStart();
+		try
+		{
+			var context = await StartCoreAsync(method, ctx).ConfigureAwait(false);
+			_lifecycle.MarkStarted();
+			return context;
+		}
+		catch
+		{
+			// a start that failed halfway must not leave channels behind, or a half built orchestrator that looks started
+			_primaryChannel?.Dispose();
+			_secondaryChannel?.Dispose();
+			_primaryChannel = null;
+			_secondaryChannel = null;
+			_lifecycle.MarkFailed();
+			throw;
+		}
+	}
+
+private async Task<ISyncOrchestratorContext> StartCoreAsync(BootstrapMethod method, CancellationToken ctx = default)
 	{
 		// 1. Run pre-bootstrap tasks
 		foreach (var task in _preBootstrapTasks)
@@ -631,9 +653,5 @@ public class IncrementalSyncOrchestrator<TEvent> : ISyncOrchestrator<TEvent>
 	private string BuildRangeQuery(string field, string op, DateTimeOffset? timestamp = null) =>
 		$$"""{ "range": { "{{field}}": { "{{op}}": "{{timestamp ?? _batchTimestamp:o}}" } } }""";
 
-	private void EnsureStarted()
-	{
-		if (_primaryChannel == null)
-			throw new InvalidOperationException("Call StartAsync before writing or completing.");
-	}
+	private void EnsureStarted() => _lifecycle.EnsureStarted();
 }

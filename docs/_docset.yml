@@ -4,6 +4,7 @@ cross_links:
 toc:
   - file: index.md
   - file: ai-enrichment.md
+  - file: migration.md
   - toc: getting-started
   - toc: mapping
   - toc: channels

@@ -26,7 +26,7 @@ public class ChannelModelProperties
 	/// Items asked to be retried a number of times each. The model: an item that is retried <c>p</c> times is delivered on its
 	/// attempt <c>p + 1</c> when that is within the budget (<c>ExportMaxRetries + 1</c> attempts), and is reported as exhausted otherwise.
 	/// </summary>
-	[Test, Skip("BUG 2: the drain estimates how long the exports take and gives up, which a slow runner reaches while exports are still running")]
+	[Test]
 	public async Task EveryItemIsDeliveredOnceOrReportedExhaustedWhateverTheServerAsksToRetry()
 	{
 		var scenarios = Gen.Select(Gen.Int[0, 40], Gen.Int[5, 60], Gen.Int[1, 12], Gen.Int[1, 3], Gen.Int[0, 3], Gen.Int[0, 5].Array[40]);
@@ -74,7 +74,7 @@ public class ChannelModelProperties
 	/// model can replay them: each call takes the next outcome of the script, an exception counts as an attempt like a retry does
 	/// when the caller allows it and ends the batch when not, and a batch that is still pending after the last attempt is reported as exhausted.
 	/// </summary>
-	[Test, Skip("BUG 2: the drain of this branch estimates how long the exports take and gives up, which a slow runner reaches while exports are still running")]
+	[Test]
 	public async Task ABatchEndsOrRetriesAfterAThrowAsTheCallerDecided()
 	{
 		var scenarios = Gen.Select(Gen.Int[1, 40], Gen.Int[5, 60], Gen.Int[1, 12], Gen.Int[0, 3], Gen.Enum<Outcome>().Array[60], Gen.Bool);

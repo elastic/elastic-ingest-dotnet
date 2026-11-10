@@ -2,4 +2,5 @@ toc:
   - file: index.md
   - file: push-model.md
   - file: channel-hierarchy.md
+  - file: channel-lifecycle.md
   - file: transport-layer.md

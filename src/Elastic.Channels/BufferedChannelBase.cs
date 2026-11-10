@@ -95,6 +95,27 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	private long _pendingItems;
 	private bool IsIdle => Interlocked.Read(ref _pendingItems) == 0;
 
+	// Where the channel is in its life. Running until TryComplete (or WaitForDrainAsync, which completes) closes the inbound channel,
+	// Completing until the last accepted item reached an end, then Drained. Dispose ends it from any state.
+	private int _phase = (int)ChannelPhase.Running;
+	private readonly TaskCompletionSource<bool> _drained = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+	private bool TryTransition(ChannelPhase from, ChannelPhase to) =>
+		Interlocked.CompareExchange(ref _phase, (int)to, (int)from) == (int)from;
+
+	/// <summary>An accepted item reached an end. When it was the last one of a completing channel, the channel is drained.</summary>
+	private void ReleasePending(long count)
+	{
+		if (Interlocked.Add(ref _pendingItems, -count) == 0)
+			SettleDrain();
+	}
+
+	private void SettleDrain()
+	{
+		if (IsIdle && TryTransition(ChannelPhase.Completing, ChannelPhase.Drained))
+			_drained.TrySetResult(true);
+	}
+
 	/// <summary> Current number of tasks handling exporting the events </summary>
 	public int ExportTasks => _taskList.Count;
 
@@ -188,7 +209,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			if (e is null) return;
 			// a dropped item was counted when it was written, and it will never be read
 			Interlocked.Decrement(ref _inflightEvents);
-			Interlocked.Decrement(ref _pendingItems);
+			ReleasePending(1);
 			options.BufferItemDropped?.Invoke(e);
 		};
 		InChannel = Channel.CreateBounded<TEvent?>(new BoundedChannelOptions(maxIn)
@@ -243,55 +264,74 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		return await InChannel.Writer.WaitToWriteAsync(cancellationToken).ConfigureAwait(false);
 	}
 
-	private CountdownEvent? _waitForDrain;
-
+	/// <summary>
 	/// Educated guess for how long we should wait for an outgoing export.
 	/// Defaults to 1s
+	/// </summary>
 	protected virtual TimeSpan DrainRequestTimeout => TimeSpan.FromSeconds(1);
 
-	/// Tries to complete and wait for all inflight buffers to be handled
+	/// <summary>
+	/// Completes the channel and waits until every item accepted so far reached an end: exported, reported as exhausted or dropped.
+	/// <para>Asynchronous: no thread is blocked while waiting, whatever the wait.</para>
+	/// </summary>
+	/// <param name="maxWait">
+	/// The longest to wait. When not given, an estimate from <see cref="DrainRequestTimeout"/> and the number of exports still
+	/// to run, so an export that never finishes does not hold the caller forever.
+	/// </param>
+	/// <param name="ctx">Cancels the wait with an <see cref="OperationCanceledException"/>.</param>
+	/// <returns><c>true</c> when the channel drained, <c>false</c> when <paramref name="maxWait"/> passed, or the channel was disposed, first.</returns>
+#pragma warning disable VSTHRD003 // the task awaited is the TaskCompletionSource this channel completes itself
 	public async ValueTask<bool> WaitForDrainAsync(TimeSpan? maxWait = null, CancellationToken ctx = default)
 	{
-		var startWaitTime = DateTime.UtcNow;
-		// calculate how many more exports we are expecting
-		var pendingExports = (int)(_inflightEvents / BatchExportSize);
-		// create a countdown event minus some safety for concurrency already decreasing _inflightEvents
-		// We are doing an additional wait after
-		var errorMargin = Math.Min(MaxConcurrency, 4);
-		var ticksWithErrorMargin = Math.Max(pendingExports - errorMargin, 0);
-		var ticks = pendingExports < MaxConcurrency ? pendingExports : ticksWithErrorMargin;
-
-		_waitForDrain ??= new CountdownEvent(ticks);
-		var waitForSignalsMs = maxWait is null
-			? DrainRequestTimeout.TotalMilliseconds * ticks
-			: Math.Min(DrainRequestTimeout.TotalMilliseconds * ticks, maxWait.Value.TotalMilliseconds);
-		var waitForSignals = TimeSpan.FromMilliseconds(waitForSignalsMs);
 		_ = TryComplete();
+		SettleDrain();
 
-		if (IsIdle)
-			return true;
-
-		_waitForDrain.Wait(waitForSignals, ctx);
-
-		if (IsIdle)
-			return true;
-
-		// recalculate pendingExports
-		pendingExports = (int)(_inflightEvents / BatchExportSize) + errorMargin;
-		var waitForFullDrain = maxWait is null
-			? DrainRequestTimeout.TotalMilliseconds * pendingExports
-			: Math.Min(DrainRequestTimeout.TotalMilliseconds * pendingExports, maxWait.Value.TotalMilliseconds);
-		//if we are not fully drained, wait up to MaxConcurrency seconds additional seconds.
-		var maxSanityWait = TimeSpan.FromMilliseconds(waitForFullDrain);
-		var start = maxWait.HasValue ? startWaitTime : DateTimeOffset.UtcNow;
-		do
-			await Task.Delay(TimeSpan.FromMilliseconds(100), ctx).ConfigureAwait(false);
-		while (!IsIdle && (DateTimeOffset.UtcNow - start) < maxSanityWait);
-		return IsIdle;
+		var limit = maxWait ?? ExpectedDrainTime();
+		try
+		{
+			return await WaitAsync(_drained.Task, limit, ctx).ConfigureAwait(false);
+		}
+		catch (TimeoutException)
+		{
+			return false;
+		}
 	}
 
+	private TimeSpan ExpectedDrainTime()
+	{
+		var exportsToRun = (long)Math.Ceiling(Math.Max(0, Interlocked.Read(ref _pendingItems)) / (double)BatchExportSize) + MaxConcurrency;
+		return TimeSpan.FromTicks(DrainRequestTimeout.Ticks * exportsToRun);
+	}
+
+	private static async Task<bool> WaitAsync(Task<bool> task, TimeSpan limit, CancellationToken ctx)
+	{
+#if NET6_0_OR_GREATER
+		return await task.WaitAsync(limit, ctx).ConfigureAwait(false);
+#else
+		using var stop = CancellationTokenSource.CreateLinkedTokenSource(ctx);
+		var timeout = Task.Delay(limit, stop.Token);
+		var finished = await Task.WhenAny(task, timeout).ConfigureAwait(false);
+		stop.Cancel();
+		if (finished == task)
+			return await task.ConfigureAwait(false);
+		ctx.ThrowIfCancellationRequested();
+		throw new TimeoutException();
+#endif
+	}
+
+#pragma warning restore VSTHRD003
+
 	/// <inheritdoc cref="ChannelWriter{T}.TryComplete"/>
-	public override bool TryComplete(Exception? error = null) => InChannel.Writer.TryComplete(error);
+	public override bool TryComplete(Exception? error = null)
+	{
+		var completed = InChannel.Writer.TryComplete(error);
+		if (completed)
+		{
+			_ = TryTransition(ChannelPhase.Running, ChannelPhase.Completing);
+			SettleDrain();
+		}
+		return completed;
+	}
 
 	/// <inheritdoc cref="ChannelWriter{T}.TryWrite"/>
 	public override bool TryWrite(TEvent item)
@@ -305,7 +345,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			return true;
 		}
 		Interlocked.Decrement(ref _inflightEvents);
-		Interlocked.Decrement(ref _pendingItems);
+		ReleasePending(1);
 		_callbacks.PublishToInboundChannelFailureCallback?.Invoke();
 		return false;
 	}
@@ -353,7 +393,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 				return true;
 			}
 			Interlocked.Decrement(ref _inflightEvents);
-			Interlocked.Decrement(ref _pendingItems);
+			ReleasePending(1);
 		}
 
 		_callbacks.PublishToInboundChannelFailureCallback?.Invoke();
@@ -367,7 +407,6 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	protected virtual ArraySegment<TEvent> RetryBuffer(TResponse response, ArraySegment<TEvent> currentBuffer, IWriteTrackingBuffer statistics) =>
 		EmptyArraySegments<TEvent>.Empty;
 
-	private bool _outBoundChannelConsumed;
 	private async Task ConsumeOutboundEventsAsync()
 	{
 		_callbacks.OutboundChannelStartedCallback?.Invoke();
@@ -383,7 +422,6 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 			while (OutChannel.Reader.TryRead(out var buffer))
 			{
-				_outBoundChannelConsumed = true;
 				var items = buffer.GetArraySegment();
 				await _throttleExportTasks.WaitAsync(TokenSource.Token).ConfigureAwait(false);
 				var t = ExportBufferAsync(items, buffer);
@@ -398,12 +436,6 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			}
 		}
 		await Task.WhenAll(_taskList).ConfigureAwait(false);
-
-		// Empty outbound completion: if TryComplete ran with nothing ever written, OutChannel completes
-		// with no buffers — the inner TryRead loop never runs, so _outBoundChannelConsumed stays false
-		// and WaitForDrainAsync spins until RequestTimeout-scaled max wait with no elastic traffic.
-		if (!_outBoundChannelConsumed && InflightEvents == 0 && InflightExportOperations == 0)
-			_outBoundChannelConsumed = true;
 
 #if NET8_0_OR_GREATER
 		await _exitCancelSource.CancelAsync().ConfigureAwait(false);
@@ -484,10 +516,9 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		{
 			// however the export ends (a cancelled backoff, a callback that throws) it stops being in flight and signals the waiters
 			Interlocked.Decrement(ref _inflightExportOperations);
-			Interlocked.Add(ref _pendingItems, -itemsInBuffer);
+			ReleasePending(itemsInBuffer);
 			_callbacks.ExportBufferCallback?.Invoke();
 			TrySignal(_signal);
-			TrySignal(_waitForDrain);
 		}
 		return exhausted;
 	}
@@ -784,6 +815,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// <inheritdoc cref="IDisposable.Dispose"/>
 	public virtual void Dispose()
 	{
+		// once: a second call, or a call from a finalizer, finds the channel disposed already
+		var before = (ChannelPhase)Interlocked.Exchange(ref _phase, (int)ChannelPhase.Disposed);
+		if (before == ChannelPhase.Disposed) return;
+		// a waiter for the drain is told it did not happen, unless it did
+		_ = _drained.TrySetResult(before == ChannelPhase.Drained);
+
 		try
 		{
 			// Mark inchannel completed to flush buffer and end task, signaling the end to the out channel
@@ -821,4 +858,17 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			// ignored
 		}
 	}
+}
+
+/// <summary>The life of a buffered channel: it accepts items until completed, finishes the ones it accepted, then is done.</summary>
+internal enum ChannelPhase
+{
+	/// <summary>Accepting items.</summary>
+	Running,
+	/// <summary>No more items are accepted; the ones that were are still on their way through the buffers and exports.</summary>
+	Completing,
+	/// <summary>Every accepted item reached an end.</summary>
+	Drained,
+	/// <summary>Disposed. Terminal.</summary>
+	Disposed
 }
