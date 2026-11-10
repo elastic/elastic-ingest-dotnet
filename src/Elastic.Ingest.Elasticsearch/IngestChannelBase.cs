@@ -45,7 +45,9 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 		var details = response.ApiCallDetails;
 		if (!details.HasSuccessfulStatusCode)
 			Options.ExportExceptionCallback?.Invoke(new Exception(details.ToString(), details.OriginalException));
-		return details.HasSuccessfulStatusCode;
+		// A 429 for the whole request is still a response to retry, with the whole request: RetryAllItems decides on it.
+		// Answering false here ended the export before RetryAllItems was asked, and dropped the batch.
+		return details.HasSuccessfulStatusCode || details.HttpStatusCode == 429;
 	}
 
 	/// Returns the request timeout as the maximum time <see cref="BufferedChannelBase{TChannelOptions, TEvent, TResponse}.WaitForDrainAsync"/>
@@ -113,6 +115,9 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 		ITransport transport, ArraySegment<TDocument> page, long maxBytes, CancellationToken ctx)
 	{
 		var responses = new List<BulkResponse>(capacity: 4);
+		// documents per sub-batch, so a sub-batch that failed as a whole can stand in for its documents
+		var counts = new List<int>(capacity: 4);
+		var inSubBatch = 0;
 
 		// eventStream: holds one event's NDJSON at a time — reused across events, bounded by max single-event size.
 		// subBatchStream: accumulates one sub-batch body — bounded by maxBytes.
@@ -139,18 +144,24 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 			if (subBatchStream.Length > 0 && subBatchStream.Length + eventBytes > maxBytes)
 			{
 				responses.Add(await SendSubBatchAsync(transport, subBatchStream, ctx).ConfigureAwait(false));
+				counts.Add(inSubBatch);
+				inSubBatch = 0;
 				subBatchStream.SetLength(0);
 			}
 
 			// Append this event's bytes to the sub-batch accumulator.
 			eventStream.Position = 0;
 			await eventStream.CopyToAsync(subBatchStream, ctx).ConfigureAwait(false);
+			inSubBatch++;
 		}
 
 		if (subBatchStream.Length > 0)
+		{
 			responses.Add(await SendSubBatchAsync(transport, subBatchStream, ctx).ConfigureAwait(false));
+			counts.Add(inSubBatch);
+		}
 
-		return MergeSubBatchResponses(responses);
+		return MergeSubBatchResponses(responses, counts);
 	}
 
 	private Task<BulkResponse> SendSubBatchAsync(ITransport transport, MemoryStream buffer, CancellationToken ctx)
@@ -161,16 +172,47 @@ public abstract partial class IngestChannelBase<TDocument, TChannelOptions>
 			PostData.ReadOnlyMemory(bytes), ctx);
 	}
 
-	private static BulkResponse MergeSubBatchResponses(List<BulkResponse> responses)
+	private static BulkResponse MergeSubBatchResponses(List<BulkResponse> responses, List<int> counts)
 	{
 		if (responses.Count == 1) return responses[0];
+
+		var rejectedAsAWhole = responses.Count(r => !r.ApiCallDetails.HasSuccessfulStatusCode);
+		var anySucceeded = rejectedAsAWhole < responses.Count;
+
+		// Some sub-batches got through and some did not. The page's items line up with its documents by position, so
+		// every sub-batch that failed as a whole stands in for its documents with an item of its status code: a 429, 502, 503 or 504
+		// is retried for those documents only, anything else (an unretryable status, no answer at all) is rejected for them only. The merged response is carried by a
+		// sub-batch that succeeded, which keeps the channel from retrying (or dropping) the documents that did go through.
+		if (anySucceeded && rejectedAsAWhole > 0)
+		{
+			var merged = new List<BulkResponseItem>(counts.Sum());
+			for (var i = 0; i < responses.Count; i++)
+			{
+				var r = responses[i];
+				if (r.ApiCallDetails.HasSuccessfulStatusCode)
+				{
+					if (r.Items != null) merged.AddRange(r.Items);
+					continue;
+				}
+
+				// No status at all means the request got no answer, so it may or may not have reached the server. That is not a status
+				// to retry on (the documents could be indexed twice): status 0 makes them rejected, which reports them to the caller.
+				var status = r.ApiCallDetails.HttpStatusCode ?? 0;
+				for (var n = 0; n < counts[i]; n++)
+					merged.Add(new BulkResponseItem { Action = "index", Status = status });
+			}
+
+			var carrierOfSuccess = responses.First(r => r.ApiCallDetails.HasSuccessfulStatusCode);
+			carrierOfSuccess.Items = merged;
+			return carrierOfSuccess;
+		}
 
 		// Concatenate items in page order — preserves the positional Zip / RetryBuffer contract.
 		var combined = new List<BulkResponseItem>(responses.Sum(r => r.Items?.Count ?? 0));
 		foreach (var r in responses)
 			if (r.Items != null) combined.AddRange(r.Items);
 
-		// Reuse the "worst" real ApiCallDetails as the merged carrier:
+		// Every sub-batch succeeded, or every one failed. Reuse the "worst" real ApiCallDetails as the merged carrier:
 		//   429 (retryAll) > any other error > last response.
 		// This preserves the Retry / RetryAllItems behaviour for the full item set.
 		var carrier = responses.Find(r => r.ApiCallDetails.HttpStatusCode == 429)
