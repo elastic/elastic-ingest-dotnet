@@ -95,7 +95,11 @@ public sealed partial class BulkSender<TItem, TBody>
 		{
 			DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault
 		};
+		#if NET11_0_OR_GREATER
+		return copy.GetTypeInfo<TBody>();
+#else
 		return (JsonTypeInfo<TBody>)copy.GetTypeInfo(typeof(TBody));
+#endif
 	}
 
 	/// <summary>

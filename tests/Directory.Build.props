@@ -8,7 +8,8 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <NoWarn>ca1816</NoWarn>
+    <!-- CA2026: a test that parses a literal and keeps the element is not worth a disposable around every call -->
+    <NoWarn>ca1816;CA2026</NoWarn>
     <SignAssembly>false</SignAssembly>
     <UserSecretsId>elastic-ingest-dotnet-tests</UserSecretsId>
   </PropertyGroup>

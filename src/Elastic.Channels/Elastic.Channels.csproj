@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;netstandard2.1</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;netstandard2.1;net8.0;net10.0;net11.0</TargetFrameworks>
     <Description>Provides components to build a buffer-backed channel that flushes batches of data in a controlled (Max N || Max Duration) manner.</Description>
     <PackageTags>elastic, channels, buffer</PackageTags>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>preview</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>True</IsPackable>
   </PropertyGroup>
@@ -21,6 +21,10 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Elastic.Channels.Tests" Key="$(TestAssemblyPublicKey)" />
     <InternalsVisibleTo Include="Elastic.Ingest.Elasticsearch.Tests" Key="$(TestAssemblyPublicKey)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Polyfills\Unions.cs" Link="Polyfills\Unions.cs" />
   </ItemGroup>
 
 </Project>

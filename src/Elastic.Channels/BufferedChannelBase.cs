@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information
 
 using System;
+using System.Globalization;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
@@ -225,12 +226,12 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 #endif
 
 	/// <inheritdoc cref="ChannelWriter{T}.WaitToWriteAsync"/>
-	public override async ValueTask<bool> WaitToWriteAsync(CancellationToken ctx = default)
+	public override async ValueTask<bool> WaitToWriteAsync(CancellationToken cancellationToken = default)
 	{
 		if (BufferOptions.BoundedChannelFullMode == BoundedChannelFullMode.Wait && _inflightEvents >= BufferOptions.InboundBufferMaxSize - DrainSize)
 			for (var i = 0; i < 10 && _inflightEvents >= BufferOptions.InboundBufferMaxSize - DrainSize; i++)
-				await Task.Delay(TimeSpan.FromMilliseconds(100), ctx).ConfigureAwait(false);
-		return await InChannel.Writer.WaitToWriteAsync(ctx).ConfigureAwait(false);
+				await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
+		return await InChannel.Writer.WaitToWriteAsync(cancellationToken).ConfigureAwait(false);
 	}
 
 	private CountdownEvent? _waitForDrain;
@@ -386,7 +387,11 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		if (!_outBoundChannelConsumed && InflightEvents == 0 && InflightExportOperations == 0)
 			_outBoundChannelConsumed = true;
 
+#if NET8_0_OR_GREATER
+		await _exitCancelSource.CancelAsync().ConfigureAwait(false);
+#else
 		_exitCancelSource.Cancel();
+#endif
 		_callbacks.OutboundChannelExitedCallback?.Invoke();
 	}
 
@@ -587,7 +592,14 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 						using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx);
 						var delay = Task.Delay(remaining, cts.Token);
 						var winner = await Task.WhenAny(moveNext, delay).ConfigureAwait(false);
-						if (winner == moveNext) cts.Cancel();
+						if (winner == moveNext)
+						{
+#if NET8_0_OR_GREATER
+							await cts.CancelAsync().ConfigureAwait(false);
+#else
+							cts.Cancel();
+#endif
+						}
 						else await run.FlushAsync().ConfigureAwait(false);
 					}
 					else
@@ -708,16 +720,16 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// <inheritdoc cref="object.ToString"/>>
 	public override string ToString()
 	{
-		if (DiagnosticsListener == null) return base.ToString();
+		if (DiagnosticsListener == null) return base.ToString() ?? string.Empty;
 		var sb = new StringBuilder();
 		sb.AppendLine(DiagnosticsListener.ToString());
-		sb.AppendLine($"{nameof(InflightEvents)}: {InflightEvents:N0}");
-		sb.AppendLine($"{nameof(BufferOptions.InboundBufferMaxSize)}: {BufferOptions.InboundBufferMaxSize:N0}");
-		sb.AppendLine($"{nameof(InflightExportOperations)}: {InflightExportOperations:N0}");
-		sb.AppendLine($"{nameof(BatchExportSize)}: {BatchExportSize:N0}");
-		sb.AppendLine($"{nameof(DrainSize)}: {DrainSize:N0}");
-		sb.AppendLine($"{nameof(MaxConcurrency)}: {MaxConcurrency:N0}");
-		sb.AppendLine($"{nameof(ExportTasks)}: {ExportTasks:N0}");
+		sb.AppendLine(((FormattableString)$"{nameof(InflightEvents)}: {InflightEvents:N0}").ToString(CultureInfo.CurrentCulture));
+		sb.AppendLine(((FormattableString)$"{nameof(BufferOptions.InboundBufferMaxSize)}: {BufferOptions.InboundBufferMaxSize:N0}").ToString(CultureInfo.CurrentCulture));
+		sb.AppendLine(((FormattableString)$"{nameof(InflightExportOperations)}: {InflightExportOperations:N0}").ToString(CultureInfo.CurrentCulture));
+		sb.AppendLine(((FormattableString)$"{nameof(BatchExportSize)}: {BatchExportSize:N0}").ToString(CultureInfo.CurrentCulture));
+		sb.AppendLine(((FormattableString)$"{nameof(DrainSize)}: {DrainSize:N0}").ToString(CultureInfo.CurrentCulture));
+		sb.AppendLine(((FormattableString)$"{nameof(MaxConcurrency)}: {MaxConcurrency:N0}").ToString(CultureInfo.CurrentCulture));
+		sb.AppendLine(((FormattableString)$"{nameof(ExportTasks)}: {ExportTasks:N0}").ToString(CultureInfo.CurrentCulture));
 		return sb.ToString();
 	}
 

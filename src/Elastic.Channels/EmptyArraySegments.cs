@@ -8,6 +8,6 @@ namespace Elastic.Channels;
 
 internal static class EmptyArraySegments<TEvent>
 {
-	public static readonly ArraySegment<TEvent> Empty = new ArraySegment<TEvent>(new TEvent[] { });
+	public static readonly ArraySegment<TEvent> Empty = new ArraySegment<TEvent>(Array.Empty<TEvent>());
 
 }

@@ -50,7 +50,10 @@ let private test (arguments:ParseResults<Arguments>) =
         "tests/Elastic.Ingest.Elasticsearch.Tests"
     ]
     for project in testProjects do
-        exec "dotnet" ["test"; "--project"; project; "-c"; "Release"; "--report-github"] |> ignore
+        // A multi-targeted test project needs the full path of its project file: with a relative path the SDK
+        // looks for it a second time below the project directory, once per target framework.
+        let projectFile = System.IO.Path.GetFullPath (System.IO.Path.Combine (project, System.IO.Path.GetFileName project + ".csproj"))
+        exec "dotnet" ["test"; "--project"; projectFile; "-c"; "Release"; "--report-github"] |> ignore
 
 let private generatePackages (arguments:ParseResults<Arguments>) =
     let output = Paths.RootRelative Paths.Output.FullName

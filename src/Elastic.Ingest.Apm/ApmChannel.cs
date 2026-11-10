@@ -40,10 +40,10 @@ public class ApmChannel : TransportChannelBase<ApmChannelOptions, IIntakeObject,
 	private readonly List<(IIntakeObject, IntakeErrorItem)> _emptyZip = new();
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RetryEvent"/>
-	protected override bool RetryEvent((IIntakeObject, IntakeErrorItem) @event) => false;
+	protected override bool RetryEvent((IIntakeObject, IntakeErrorItem) item) => false;
 
 	/// <inheritdoc cref="ResponseItemsBufferedChannelBase{TChannelOptions,TEvent,TResponse,TBulkResponseItem}.RejectEvent"/>
-	protected override bool RejectEvent((IIntakeObject, IntakeErrorItem) @event) => false;
+	protected override bool RejectEvent((IIntakeObject, IntakeErrorItem) item) => false;
 
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.ExportAsync"/>
 	protected override Task<EventIntakeResponse> ExportAsync(ITransport transport, ArraySegment<IIntakeObject> page, CancellationToken ctx = default) =>

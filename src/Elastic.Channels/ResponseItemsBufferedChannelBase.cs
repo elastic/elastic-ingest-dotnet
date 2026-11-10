@@ -52,31 +52,31 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 	protected abstract List<(TEvent, TBulkResponseItem)> Zip(TResponse response, IReadOnlyCollection<TEvent> page);
 
 	/// <summary> A predicate indicating if a certain event needs to be retried </summary>
-	protected abstract bool RetryEvent((TEvent, TBulkResponseItem) @event);
+	protected abstract bool RetryEvent((TEvent, TBulkResponseItem) item);
 
 	/// <summary>
 	/// A predicate indicating an event was fully rejected and should be reported to
 	/// <see cref="ResponseItemsChannelOptionsBase{TEvent,TResponse,TBulkResponseItem}.ServerRejectionCallback"/>
 	/// </summary>
-	protected abstract bool RejectEvent((TEvent, TBulkResponseItem) @event);
+	protected abstract bool RejectEvent((TEvent, TBulkResponseItem) item);
 
 	/// <inheritdoc cref="BufferedChannelBase{TChannelOptions,TEvent,TResponse}.RetryBuffer"/>>
-	protected override ArraySegment<TEvent> RetryBuffer(TResponse response, ArraySegment<TEvent> events,
-		IWriteTrackingBuffer consumedBufferStatistics
+	protected override ArraySegment<TEvent> RetryBuffer(TResponse response, ArraySegment<TEvent> currentBuffer,
+		IWriteTrackingBuffer statistics
 	)
 	{
 		if (!Retry(response))
 		{
-			Options.ExportMaxRetriesCallback?.Invoke(events);
+			Options.ExportMaxRetriesCallback?.Invoke(currentBuffer);
 			return EmptyArraySegments<TEvent>.Empty;
 		}
 
 		var backOffWholeRequest = RetryAllItems(response);
 
 		// if we are not retrying the whole request find out if individual items need retrying
-		if (backOffWholeRequest) return events;
+		if (backOffWholeRequest) return currentBuffer;
 
-		var zipped = Zip(response, events);
+		var zipped = Zip(response, currentBuffer);
 		if (zipped.Count == 0)
 			return EmptyArraySegments<TEvent>.Empty;
 
@@ -85,7 +85,7 @@ public abstract class ResponseItemsBufferedChannelBase<TChannelOptions, TEvent, 
 			.Select(t => t.Item1)
 			.ToArray();
 
-		// report any events that are going to be dropped
+		// report any currentBuffer that are going to be dropped
 		if (Options.ServerRejectionCallback != null)
 		{
 			var rejected = zipped
