@@ -13,7 +13,7 @@
     <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.2.1" />
     <PackageVersion Include="Elastic.Elasticsearch.Ephemeral" Version="0.12.0" />
     <PackageVersion Include="Elastic.Transport" Version="0.17.3" />
-    <PackageVersion Include="Elastic.Transport.VirtualizedCluster" Version="0.15.1" />
+    <PackageVersion Include="Elastic.Transport.VirtualizedCluster" Version="0.17.3" />
     <PackageVersion Include="Elastic.TUnit.Elasticsearch.Core" Version="0.13.0" />
     <PackageVersion Include="Fake.Tools.Git" Version="5.20.3" />
     <PackageVersion Include="FluentAssertions" Version="7.2.0" />
@@ -27,8 +27,8 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.4.1" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.0-preview.1.25080.5" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0-preview.1.25080.5" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.3.0" />
     <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies.net461" Version="1.0.3" />
     <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.14.15" />
