@@ -44,6 +44,12 @@ if (args.Contains("--item-identity"))
 	if (args.Contains("--short")) config.AddJob(BenchmarkDotNet.Jobs.Job.ShortRun);
 	BenchmarkRunner.Run<BulkItemIdentityBenchmarks>(config);
 }
+else if (args.Contains("--channel"))
+{
+	// the channel machinery on its own: dotnet run -c Release -- --channel [--short]
+	if (args.Contains("--short")) config.AddJob(BenchmarkDotNet.Jobs.Job.ShortRun);
+	BenchmarkRunner.Run<ChannelBenchmarks>(config);
+}
 else if (args.Contains("--bulk-sender"))
 {
 	// quick comparison run: dotnet run -c Release -- --bulk-sender [--short]
