@@ -96,6 +96,13 @@ public class BufferOptions
 	public Func<Exception, bool> ExportRetryOnException { get; set; } = static _ => false;
 
 	/// <summary>
+	/// The clock the channel runs on: how long a buffer has waited, the timer that flushes a partial buffer, the backoff between retries
+	/// and the waits of <c>WaitToWriteAsync</c> and <c>WaitForDrainAsync</c>. Defaults to <see cref="System.TimeProvider.System"/>.
+	/// <para>Pass a <c>FakeTimeProvider</c> in a test and time moves when the test says so.</para>
+	/// </summary>
+	public TimeProvider TimeProvider { get; set; } = TimeProvider.System;
+
+	/// <summary>
 	/// Allows you to inject a <see cref="CountdownEvent"/> to wait for N number of buffers to flush.
 	/// </summary>
 	public CountdownEvent? WaitHandle { get; set; }

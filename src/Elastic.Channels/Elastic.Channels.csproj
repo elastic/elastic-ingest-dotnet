@@ -13,6 +13,11 @@
     <PackageReference Include="System.Threading.Channels" />
   </ItemGroup>
 
+  <!-- TimeProvider is part of net8.0 and later; the netstandard targets get it from a package -->
+  <ItemGroup Condition="!$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">
+    <PackageReference Include="Microsoft.Bcl.TimeProvider" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)'=='netstandard2.0'">
     <PackageReference Include="System.Buffers" />
   </ItemGroup>

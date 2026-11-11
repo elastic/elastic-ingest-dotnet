@@ -12,15 +12,16 @@ namespace Elastic.Channels.Buffers;
 /// <see cref="InboundBuffer{TEvent}"/> collects the items read from the inbound channel until sufficient items have been added to it
 /// or <see cref="DurationSinceFirstWaitToRead"/> exceeds the buffer's maximum lifespan.
 /// </summary>
-internal class InboundBuffer<TEvent>(int maxBufferSize, TimeSpan forceFlushAfter) : IWriteTrackingBuffer, IDisposable
+internal class InboundBuffer<TEvent>(int maxBufferSize, TimeSpan forceFlushAfter, TimeProvider timeProvider) : IWriteTrackingBuffer, IDisposable
 {
 	private TEvent[] Buffer { get; set; } = ArrayPool<TEvent>.Shared.Rent(maxBufferSize);
 
 	/// <summary>The point in time that the first event is read from the channel and added to the buffer,
 	/// from the first read or after the buffer is reset.</summary>
-	private DateTimeOffset? TimeOfFirstWrite { get; set; }
+	// Timestamps of the time provider's monotonic clock, not wall clock times: a clock that is set back (an NTP step, say) does not age a buffer.
+	private long? TimestampOfFirstWrite { get; set; }
 
-	private DateTimeOffset? TimeOfFirstWaitToRead { get; set; }
+	private long? TimestampOfFirstWaitToRead { get; set; }
 
 	private int _count;
 
@@ -30,18 +31,18 @@ internal class InboundBuffer<TEvent>(int maxBufferSize, TimeSpan forceFlushAfter
 	/// <remarks>Always 0 on the inbound buffer; populated at export time by the channel implementation.</remarks>
 	public long EstimatedBytes => 0;
 
-	public TimeSpan? DurationSinceFirstWrite => DateTimeOffset.UtcNow - TimeOfFirstWrite;
-	public TimeSpan? DurationSinceFirstWaitToRead => DateTimeOffset.UtcNow - TimeOfFirstWaitToRead;
+	public TimeSpan? DurationSinceFirstWrite => TimestampOfFirstWrite is { } start ? timeProvider.GetElapsedTime(start) : null;
+	public TimeSpan? DurationSinceFirstWaitToRead => TimestampOfFirstWaitToRead is { } start ? timeProvider.GetElapsedTime(start) : null;
 
 	public bool NoThresholdsHit => Count == 0
-		|| (Count < maxBufferSize && DurationSinceFirstWaitToRead <= forceFlushAfter);
+		|| (Count < maxBufferSize && DurationSinceFirstWaitToRead < forceFlushAfter);
 
 	public bool ThresholdsHit => !NoThresholdsHit;
 
 	// not thread safe, buffer is guarded by a single consumer on the inbound channel
 	public void Add(TEvent item)
 	{
-		TimeOfFirstWrite ??= DateTimeOffset.UtcNow;
+		TimestampOfFirstWrite ??= timeProvider.GetTimestamp();
 		Buffer[_count] = item;
 		Interlocked.Increment(ref _count);
 	}
@@ -50,14 +51,14 @@ internal class InboundBuffer<TEvent>(int maxBufferSize, TimeSpan forceFlushAfter
 	{
 		var bufferRef = Buffer;
 		_count = 0;
-		TimeOfFirstWrite = null;
-		TimeOfFirstWaitToRead = null;
+		TimestampOfFirstWrite = null;
+		TimestampOfFirstWaitToRead = null;
 		Buffer = ArrayPool<TEvent>.Shared.Rent(maxBufferSize);
 		return bufferRef;
 	}
 
 	/// <summary>Starts the clock of the next buffer: it counts from when the loop first waited for data after the last flush.</summary>
-	public void MarkWaiting() => TimeOfFirstWaitToRead ??= DateTimeOffset.UtcNow;
+	public void MarkWaiting() => TimestampOfFirstWaitToRead ??= timeProvider.GetTimestamp();
 
 	// the longest due time a Timer accepts is just under 49.7 days
 	private static readonly TimeSpan LongestTimer = TimeSpan.FromMilliseconds(uint.MaxValue - 2);

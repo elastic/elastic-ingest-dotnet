@@ -29,7 +29,7 @@ public class PooledBufferRetentionTests
 	[Test]
 	public void DisposingAnOutboundBufferClearsTheArrayItReturnsToThePool()
 	{
-		var inbound = new InboundBuffer<Payload>(maxBufferSize: 8, TimeSpan.FromSeconds(5));
+		var inbound = new InboundBuffer<Payload>(maxBufferSize: 8, TimeSpan.FromSeconds(5), TimeProvider.System);
 		for (var i = 0; i < 5; i++) inbound.Add(new Payload(16));
 
 		var outbound = new OutboundBuffer<Payload>(inbound);
@@ -47,7 +47,7 @@ public class PooledBufferRetentionTests
 	public void ClearingOnlyCoversTheBatchAndNeverTouchesTheRestOfTheArray()
 	{
 		// a pooled array is usually larger than the batch, the clear is bounded by the batch size
-		var inbound = new InboundBuffer<Payload>(maxBufferSize: 100, TimeSpan.FromSeconds(5));
+		var inbound = new InboundBuffer<Payload>(maxBufferSize: 100, TimeSpan.FromSeconds(5), TimeProvider.System);
 		inbound.Add(new Payload(1));
 		inbound.Add(new Payload(1));
 
@@ -98,7 +98,7 @@ public class PooledBufferRetentionTests
 		{
 			var (maxSize, fill) = x;
 			var count = (int)(maxSize * fill);
-			var inbound = new InboundBuffer<Payload>(maxSize, TimeSpan.FromSeconds(5));
+			var inbound = new InboundBuffer<Payload>(maxSize, TimeSpan.FromSeconds(5), TimeProvider.System);
 			for (var i = 0; i < count; i++) inbound.Add(new Payload(1));
 
 			var outbound = new OutboundBuffer<Payload>(inbound);
@@ -121,7 +121,7 @@ public class PooledBufferRetentionTests
 		{
 			var (maxSize, fill) = x;
 			var count = Math.Min(maxSize - 1, (int)(maxSize * fill));
-			var inbound = new InboundBuffer<Payload>(maxSize, TimeSpan.FromSeconds(5));
+			var inbound = new InboundBuffer<Payload>(maxSize, TimeSpan.FromSeconds(5), TimeProvider.System);
 			for (var i = 0; i < count; i++) inbound.Add(new Payload(1));
 
 			var outbound = new OutboundBuffer<Payload>(inbound);
@@ -150,7 +150,7 @@ public class PooledBufferRetentionTests
 			foreach (var (maxSize, fill) in batches)
 			{
 				var count = (int)(maxSize * fill);
-				var inbound = new InboundBuffer<Payload>(maxSize, TimeSpan.FromSeconds(5));
+				var inbound = new InboundBuffer<Payload>(maxSize, TimeSpan.FromSeconds(5), TimeProvider.System);
 				for (var i = 0; i < count; i++) inbound.Add(new Payload(1));
 
 				var outbound = new OutboundBuffer<Payload>(inbound);
