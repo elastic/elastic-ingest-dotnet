@@ -185,6 +185,8 @@ public class IngestChannel<TEvent> : IngestChannelBase<TEvent, IngestChannelOpti
 			BootstrapMethod = bootstrapMethod,
 			TemplateName = _strategy.TemplateName,
 			TemplateWildcard = _strategy.TemplateWildcard,
+			// Only a single concrete index can be patched; a wildcard target would touch every historical index.
+			IndexName = _strategy.DocumentIngest.RefreshTargets.IndexOf('*') < 0 ? _strategy.DocumentIngest.RefreshTargets : null,
 			GetMappingsJson = _strategy.GetMappingsJson,
 			GetMappingSettings = _strategy.GetMappingSettings,
 			DataStreamType = _strategy.DataStreamType,

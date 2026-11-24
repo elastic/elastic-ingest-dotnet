@@ -32,6 +32,18 @@ public class BootstrapContext
 	/// <summary> The template name for bootstrap. </summary>
 	public required string TemplateName { get; init; }
 
+	/// <summary>
+	/// The concrete name of the index the channel writes to, when it is a single fixed name.
+	/// <see langword="null"/> for wildcard targets. Used by <c>IndexMappingPatchStep</c> to patch an existing index.
+	/// </summary>
+	public string? IndexName { get; init; }
+
+	/// <summary>
+	/// Fields that exist in the index with a different type than the mapping wants. Set by
+	/// <c>IndexMappingPatchStep</c>; a mapping update cannot change these, only reindexing can.
+	/// </summary>
+	public IReadOnlyList<string> MappingConflicts { get; internal set; } = Array.Empty<string>();
+
 	/// <summary> The template wildcard pattern for bootstrap. </summary>
 	public required string TemplateWildcard { get; init; }
 

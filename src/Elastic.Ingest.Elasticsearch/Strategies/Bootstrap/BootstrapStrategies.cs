@@ -39,17 +39,35 @@ public static class BootstrapStrategies
 	/// <summary>
 	/// Creates an index bootstrap strategy with component template and index template steps.
 	/// </summary>
-	public static IBootstrapStrategy Index() =>
-		new DefaultBootstrapStrategy(new ComponentTemplateStep(), new IndexTemplateStep());
+	/// <param name="patchExistingMappings">
+	/// When true (the default) an <see cref="IndexMappingPatchStep"/> adds fields the existing index is
+	/// missing to its mapping, because templates only apply to newly created indices. Pass false to
+	/// leave existing indices untouched.
+	/// </param>
+	public static IBootstrapStrategy Index(bool patchExistingMappings = true) =>
+		patchExistingMappings
+			? new DefaultBootstrapStrategy(new ComponentTemplateStep(), new IndexTemplateStep(), new IndexMappingPatchStep())
+			: new DefaultBootstrapStrategy(new ComponentTemplateStep(), new IndexTemplateStep());
 
 	/// <summary>
 	/// Creates an index bootstrap strategy with ILM policy.
 	/// </summary>
-	public static IBootstrapStrategy IndexWithIlm(string ilmPolicyName, string? hotMaxAge = null, string? deleteMinAge = null) =>
+	/// <inheritdoc cref="Index(bool)" path="/param[@name='patchExistingMappings']"/>
+	public static IBootstrapStrategy IndexWithIlm(
+		string ilmPolicyName, string? hotMaxAge = null, string? deleteMinAge = null, bool patchExistingMappings = true) =>
 		new DefaultBootstrapStrategy(
-			new IlmPolicyStep(ilmPolicyName, hotMaxAge, deleteMinAge),
-			new ComponentTemplateStep(ilmPolicyName),
-			new IndexTemplateStep());
+			patchExistingMappings
+				? new IBootstrapStep[] {
+					new IlmPolicyStep(ilmPolicyName, hotMaxAge, deleteMinAge),
+					new ComponentTemplateStep(ilmPolicyName),
+					new IndexTemplateStep(),
+					new IndexMappingPatchStep()
+				}
+				: new IBootstrapStep[] {
+					new IlmPolicyStep(ilmPolicyName, hotMaxAge, deleteMinAge),
+					new ComponentTemplateStep(ilmPolicyName),
+					new IndexTemplateStep()
+				});
 
 	/// <summary>
 	/// Creates a no-op bootstrap strategy (e.g., for WiredStreams where bootstrap is managed by Elasticsearch).
