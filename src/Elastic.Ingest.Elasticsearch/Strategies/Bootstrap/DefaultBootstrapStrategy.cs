@@ -24,6 +24,7 @@ public class DefaultBootstrapStrategy : IBootstrapStrategy
 	/// <item><see cref="IlmPolicyStep"/> must precede <see cref="ComponentTemplateStep"/></item>
 	/// <item><see cref="ComponentTemplateStep"/> must precede <see cref="IndexTemplateStep"/> / <see cref="DataStreamTemplateStep"/></item>
 	/// <item><see cref="DataStreamLifecycleStep"/> must precede <see cref="DataStreamTemplateStep"/></item>
+	/// <item><see cref="ComponentTemplateStep"/> must precede <see cref="IndexMappingPatchStep"/></item>
 	/// </list>
 	/// </summary>
 	public DefaultBootstrapStrategy(params IBootstrapStep[] steps)
@@ -83,6 +84,10 @@ public class DefaultBootstrapStrategy : IBootstrapStrategy
 
 		if (componentIndex.HasValue && indexTemplateIndex.HasValue && componentIndex.Value > indexTemplateIndex.Value)
 			throw new ArgumentException("ComponentTemplateStep must precede IndexTemplateStep/DataStreamTemplateStep.");
+
+		var patchIndex = IndexOf<IndexMappingPatchStep>();
+		if (componentIndex.HasValue && patchIndex.HasValue && componentIndex.Value > patchIndex.Value)
+			throw new ArgumentException("ComponentTemplateStep must precede IndexMappingPatchStep.");
 
 		if (lifecycleIndex.HasValue && dataStreamTemplateIndex.HasValue && lifecycleIndex.Value > dataStreamTemplateIndex.Value)
 			throw new ArgumentException("DataStreamLifecycleStep must precede DataStreamTemplateStep.");

@@ -287,9 +287,10 @@ public class StrategyFactoryTests
 		var bootstrap = BootstrapStrategies.Index();
 		var strategy = bootstrap.Should().BeOfType<DefaultBootstrapStrategy>().Subject;
 
-		strategy.Steps.Should().HaveCount(2);
+		strategy.Steps.Should().HaveCount(3);
 		strategy.Steps[0].Should().BeOfType<ComponentTemplateStep>();
 		strategy.Steps[1].Should().BeOfType<IndexTemplateStep>();
+		strategy.Steps[2].Should().BeOfType<IndexMappingPatchStep>();
 	}
 
 	[Test]
@@ -298,10 +299,11 @@ public class StrategyFactoryTests
 		var bootstrap = BootstrapStrategies.IndexWithIlm("7-days");
 		var strategy = bootstrap.Should().BeOfType<DefaultBootstrapStrategy>().Subject;
 
-		strategy.Steps.Should().HaveCount(3);
+		strategy.Steps.Should().HaveCount(4);
 		strategy.Steps[0].Should().BeOfType<IlmPolicyStep>();
 		strategy.Steps[1].Should().BeOfType<ComponentTemplateStep>();
 		strategy.Steps[2].Should().BeOfType<IndexTemplateStep>();
+		strategy.Steps[3].Should().BeOfType<IndexMappingPatchStep>();
 	}
 
 	[Test]

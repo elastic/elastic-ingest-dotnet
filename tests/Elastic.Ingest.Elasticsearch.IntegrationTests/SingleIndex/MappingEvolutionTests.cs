@@ -28,16 +28,19 @@ namespace Elastic.Ingest.Elasticsearch.IntegrationTests.SingleIndex;
  *   │     → edge_ngram min=3/max=20, discount_eligible runtime field       │
  *   │     → hash₂ ≠ hash₁ → templates are updated                         │
  *   │                                                                      │
- *   │  4. Existing idx-products index STILL has V1 mappings                │
- *   │     (templates only apply when indices are first created)            │
+ *   │  4. Existing idx-products index STILL has V1 analysis settings       │
+ *   │     (templates only apply when indices are first created; new        │
+ *   │     *fields* are patched in by IndexMappingPatchStep, see            │
+ *   │     MappingPatchTests, but analysis cannot be changed on a live one) │
  *   │                                                                      │
  *   │  5. Delete the index + write "EVO-002"                               │
  *   │     → idx-products re-created with V2 template → V2 analysis active  │
  *   └──────────────────────────────────────────────────────────────────────┘
  *
  * Key insight for single-index users:
- *   Template changes are NOT applied retroactively. You must recreate the
- *   index (delete + re-ingest) or use the Update Mapping API.
+ *   Template changes are NOT applied retroactively. Fields the type gained are added to the
+ *   existing index by IndexMappingPatchStep; analysis and field type changes need the index
+ *   recreated (delete + re-ingest).
  *   For zero-downtime updates, use manual alias management instead.
  */
 [NotInParallel("single-index")]
