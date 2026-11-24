@@ -28,6 +28,11 @@ options.BufferOptions.ExportRetryOnException = e => e is TimeoutException;
 
 - Parameter names changed to match what they override: `ctx` is `cancellationToken` on `WaitToWriteAsync(CancellationToken)`, `events` is `currentBuffer` and `consumedBufferStatistics` is `statistics` on `RetryBuffer`, and the `@event` of `RetryEvent` and `RejectEvent` is `item`. Positional calls are not affected; a call that names the parameter is.
 - `IncrementalSyncOrchestrator.DrainAllAsync` returns `Task<bool>` instead of `Task`.
+- `BufferOptions.TimeProvider` is new (default `TimeProvider.System`). It is the clock of the channel: the age of a buffer, the flush timer, the retry backoff, the wait of `WaitToWriteAsync` and the limit of `WaitForDrainAsync`. A test passes a `FakeTimeProvider`. The `netstandard` targets of `Elastic.Channels` now depend on `Microsoft.Bcl.TimeProvider`.
 - `WaitToReadResult` is removed: the inbound loop no longer reads through a delay and a result, it is woken by a timer.
 - `ResponseItemsBufferedChannelBase` has a new protected virtual `AllItemsSucceeded(TResponse)`, `false` by default. Override it when your response carries a summary you can trust, and the channel skips matching items to events when nothing failed. `IngestChannelBase` does, from the `errors` flag of the bulk response.
 - `Elastic.Channels` also targets `net8.0`, `net10.0` and `net11.0`, and the three libraries target `net11.0`. The minimum version of the build is the .NET 11 RC SDK.
+
+## Timing
+
+A buffer that is not full is flushed once its lifetime has elapsed (its age is at least `OutboundBufferMaxLifetime`), where it used to need to be strictly older. Its age is measured on the monotonic clock of the time provider, so a wall clock that is set back no longer delays a flush.

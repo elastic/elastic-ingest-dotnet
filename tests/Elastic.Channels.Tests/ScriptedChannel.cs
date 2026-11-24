@@ -75,7 +75,7 @@ public sealed class ScriptedChannel : BufferedChannelBase<ScriptedOptions, Item,
 
 	public static ScriptedOptions Opts(
 		int inbound = 100, int outbound = 10, int? concurrency = 1, int maxRetries = 3,
-		TimeSpan? lifetime = null, Action<ScriptedOptions>? configure = null)
+		TimeSpan? lifetime = null, Action<ScriptedOptions>? configure = null, TimeProvider? time = null)
 	{
 		var o = new ScriptedOptions
 		{
@@ -87,7 +87,8 @@ public sealed class ScriptedChannel : BufferedChannelBase<ScriptedOptions, Item,
 				ExportMaxConcurrency = concurrency,
 				ExportMaxRetries = maxRetries,
 				ExportBackoffPeriod = _ => TimeSpan.FromMilliseconds(1),
-				OutboundBufferMaxLifetime = lifetime ?? TimeSpan.FromMilliseconds(50)
+				OutboundBufferMaxLifetime = lifetime ?? TimeSpan.FromMilliseconds(50),
+				TimeProvider = time ?? TimeProvider.System
 			}
 		};
 		configure?.Invoke(o);

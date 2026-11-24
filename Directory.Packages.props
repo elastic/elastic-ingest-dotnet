@@ -24,6 +24,7 @@
     <PackageVersion Include="IsExternalInit" Version="1.0.3" />
     <PackageVersion Include="JetBrains.Profiler.Api" Version="1.4.10" />
     <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.5" />
+    <PackageVersion Include="Microsoft.Bcl.TimeProvider" Version="10.0.15" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.4.1" />

@@ -75,6 +75,9 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	/// <summary>The channel options currently in use</summary>
 	public TChannelOptions Options { get; }
 
+	/// <summary>The clock of this channel, <see cref="BufferOptions.TimeProvider"/>.</summary>
+	internal TimeProvider TimeProvider => Options.BufferOptions.TimeProvider;
+
 	/// <summary> An overall cancellation token that may be externally provided </summary>
 	protected CancellationTokenSource TokenSource { get; }
 
@@ -224,7 +227,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 			FullMode = options.BufferOptions.BoundedChannelFullMode
 		}, itemDropped);
 
-		InboundBuffer = new InboundBuffer<TEvent>(BatchExportSize, BufferOptions.OutboundBufferMaxLifetime);
+		InboundBuffer = new InboundBuffer<TEvent>(BatchExportSize, BufferOptions.OutboundBufferMaxLifetime, TimeProvider);
 
 		_outTask = Task.Factory.StartNew(async () =>
 				await ConsumeOutboundEventsAsync().ConfigureAwait(false),
@@ -260,7 +263,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		if (BufferOptions.BoundedChannelFullMode == BoundedChannelFullMode.Wait && _inflightEvents >= BufferOptions.InboundBufferMaxSize - DrainSize)
 			for (var i = 0; i < 10 && _inflightEvents >= BufferOptions.InboundBufferMaxSize - DrainSize; i++)
-				await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
+				await TimeProvider.DelayAsync(TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
 		return await InChannel.Writer.WaitToWriteAsync(cancellationToken).ConfigureAwait(false);
 	}
 
@@ -289,7 +292,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		var limit = maxWait ?? ExpectedDrainTime();
 		try
 		{
-			return await WaitAsync(_drained.Task, limit, ctx).ConfigureAwait(false);
+			return await TimeProvider.WaitAsync(_drained.Task, limit, ctx).ConfigureAwait(false);
 		}
 		catch (TimeoutException)
 		{
@@ -301,22 +304,6 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 	{
 		var exportsToRun = (long)Math.Ceiling(Math.Max(0, Interlocked.Read(ref _pendingItems)) / (double)BatchExportSize) + MaxConcurrency;
 		return TimeSpan.FromTicks(DrainRequestTimeout.Ticks * exportsToRun);
-	}
-
-	private static async Task<bool> WaitAsync(Task<bool> task, TimeSpan limit, CancellationToken ctx)
-	{
-#if NET6_0_OR_GREATER
-		return await task.WaitAsync(limit, ctx).ConfigureAwait(false);
-#else
-		using var stop = CancellationTokenSource.CreateLinkedTokenSource(ctx);
-		var timeout = Task.Delay(limit, stop.Token);
-		var finished = await Task.WhenAny(task, timeout).ConfigureAwait(false);
-		stop.Cancel();
-		if (finished == task)
-			return await task.ConfigureAwait(false);
-		ctx.ThrowIfCancellationRequested();
-		throw new TimeoutException();
-#endif
 	}
 
 #pragma warning restore VSTHRD003
@@ -501,7 +488,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 				if (items.Count > 0 && !atEndOfRetries)
 				{
-					await Task.Delay(Options.BufferOptions.ExportBackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
+					await TimeProvider.DelayAsync(Options.BufferOptions.ExportBackoffPeriod(i), TokenSource.Token).ConfigureAwait(false);
 					_callbacks.ExportRetryCallback?.Invoke(items);
 				}
 				// otherwise if retryable items still exist and the user wants to be notified
@@ -558,7 +545,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 		// A buffer that is not full is flushed once it has waited for maxInterval. The reader sleeps in WaitToReadAsync, so a timer
 		// wakes it: armed when a buffer gets its first item, disarmed when the buffer is flushed. One timer for the life of the loop,
 		// where each read used to create a Task.Delay and a WhenAny and left the losing timer running until it expired.
-		using var flushTimer = new Timer(static state => ((BufferedChannelBase<TChannelOptions, TEvent, TResponse>)state!).WakeInboundReader(),
+		using var flushTimer = TimeProvider.CreateTimer(static state => ((BufferedChannelBase<TChannelOptions, TEvent, TResponse>)state!).WakeInboundReader(),
 			this, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
 		try
@@ -698,7 +685,7 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 					if (remaining > TimeSpan.Zero)
 					{
 						using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx);
-						var delay = Task.Delay(remaining, cts.Token);
+						var delay = TimeProvider.DelayAsync(remaining, cts.Token);
 						var winner = await Task.WhenAny(moveNext, delay).ConfigureAwait(false);
 						if (winner == moveNext)
 						{
@@ -759,14 +746,14 @@ public abstract class BufferedChannelBase<TChannelOptions, TEvent, TResponse>
 
 		public int PendingCount => _count;
 
-		public TimeSpan BatchAge => _count == 0 ? TimeSpan.Zero : TimeSpan.FromTicks((System.Diagnostics.Stopwatch.GetTimestamp() - _batchStart) * TimeSpan.TicksPerSecond / System.Diagnostics.Stopwatch.Frequency);
+		public TimeSpan BatchAge => _count == 0 ? TimeSpan.Zero : _channel.TimeProvider.GetElapsedTime(_batchStart);
 
 		public ValueTask AddAsync(TEvent item)
 		{
 			if (_batch is null)
 			{
 				_batch = _channel.PullPool.Rent(_batchSize);
-				_batchStart = System.Diagnostics.Stopwatch.GetTimestamp();
+				_batchStart = _channel.TimeProvider.GetTimestamp();
 			}
 			_batch[_count++] = item;
 			_read++;

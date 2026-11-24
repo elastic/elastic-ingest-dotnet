@@ -39,6 +39,12 @@ An item is counted when it is accepted, and stops being counted at exactly one o
 
 The channel is drained when the count reaches zero after completion. Nothing estimates how many exports are left, and nothing polls.
 
+## The flush timer
+
+A buffer that is not full waits for its lifetime (`OutboundBufferMaxLifetime`). The consumer sleeps in `WaitToReadAsync`, so one timer wakes it. The timer only taps the consumer on the shoulder: on every wake the consumer compares the age of the buffer with its lifetime and decides, so a timer that fires late only delays a flush, and one that fires early or twice only costs a comparison and arms it again. It is armed after every pass that leaves items in the buffer and disarmed when the buffer is flushed.
+
+The clock is `BufferOptions.TimeProvider`, and the age is a timestamp of its monotonic clock. A test passes a `FakeTimeProvider` and moves time itself.
+
 ## One export
 
 ```mermaid
